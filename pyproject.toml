@@ -1,0 +1,31 @@
+[tool.poetry]
+name = "vars-gridview"
+version = "0.1.0"
+description = "VARS GridView is a tool for reviewing and correcting VARS localizations in bulk."
+authors = [
+    "Kevin Barnard <kbarnard@mbari.org>",
+    "Paul Roberts <proberts@mbari.org>"
+]
+readme = "README.md"
+repository = "https://github.com/mbari-org/vars-gridview"
+keywords = ["VARS", "localization", "annotation"]
+license = "MIT"
+include = ["LICENSE"]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+pyqt6 = "^6.4.0"
+pymssql = "^2.2.4"
+requests = "^2.27.1"
+pyqtgraph = "^0.13.0"
+opencv-python-headless = "^4.5.5.62"
+qdarkstyle = "^3.0.3"
+
+[tool.poetry.dev-dependencies]
+
+[tool.poetry.scripts]
+vars-gridview = "vars_gridview.scripts.run:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

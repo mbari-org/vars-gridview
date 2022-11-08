@@ -6,20 +6,19 @@ Distributed under MIT license. See license.txt for more information.
 
 """
 import json
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 
-import libs.vars
+from vars_gridview.lib.m3.operations import delete_bounding_box, update_bounding_box_data, update_bounding_box_part, update_observation_concept
 
 
 class VARSLocalization:
-    """ Representation of VARS localizations (bounding boxes) """
+    """Representation of VARS localizations (bounding boxes)"""
 
-    def __init__(self, x: int, y: int,
-                 width: int, height: int,
-                 image_reference_uuid: str,
-                 **meta):
+    def __init__(
+        self, x: int, y: int, width: int, height: int, image_reference_uuid: Optional[str] = None, **meta
+    ):
         self._x = x
         self._y = y
         self._width = width
@@ -27,6 +26,7 @@ class VARSLocalization:
         self.image_reference_uuid = image_reference_uuid
         self.observation_uuid = None
         self.association_uuid = None
+        self.imaged_moment_uuid = None
         self.meta = meta
         self._concept = None
         self._part = None
@@ -58,7 +58,7 @@ class VARSLocalization:
             'width': self._width,
             'height': self._height,
             'image_reference_uuid': self.image_reference_uuid,
-            **self.meta
+            **self.meta,
         }
 
     @property
@@ -141,31 +141,34 @@ class VARSLocalization:
         self._dirty_verifier = True
 
     def get_roi(self, image: np.ndarray):
-        return image[self._y:self.yf, self._x:self.xf]
+        return image[self._y : self.yf, self._x : self.xf]
 
     @property
     def valid_box(self):
         return self.xf > self.x and self.yf > self.y
 
     def in_bounds(self, min_x, min_y, max_x, max_y):
-        return self.x >= min_x and self.y >= min_y and self.xf <= max_x and self.yf <= max_y
+        return (
+            self.x >= min_x
+            and self.y >= min_y
+            and self.xf <= max_x
+            and self.yf <= max_y
+        )
 
     def delete(self):
-        libs.vars.delete_box(self.association_uuid)
+        delete_bounding_box(self.association_uuid)
         self._deleted = True
 
     def push_changes(self, verifier: str):
         do_modify_box = False
 
         if self._dirty_concept:
-            # print('Changing concept for observation', self.observation_uuid, 'to', self._concept)
-            libs.vars.change_concept(self.observation_uuid, self._concept, verifier)
+            update_observation_concept(self.observation_uuid, self._concept, verifier)
             self._dirty_concept = False
             do_modify_box = True
 
         if self._dirty_part:
-            # print('Changing part for association', self.association_uuid, 'to', self._part)
-            libs.vars.change_part(self.association_uuid, self._part)
+            update_bounding_box_part(self.association_uuid, self._part)
             self._dirty_part = False
             do_modify_box = True
 
@@ -180,5 +183,4 @@ class VARSLocalization:
             self._dirty_verifier = False
 
         if do_modify_box:
-            # print('Modifying box:', self.json)
-            libs.vars.modify_box(self.json, self.observation_uuid, self.association_uuid)
+            update_bounding_box_data(self.association_uuid, self.json)

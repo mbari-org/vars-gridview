@@ -8,19 +8,33 @@ Distributed under MIT license. See license.txt for more information.
 
 import numpy as np
 import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore
+from PyQt6 import QtCore
 
-from libs.logger import LOG
-from libs.widgets import RectWidget
+from vars_gridview.lib.log import LOGGER
 
 
 class BoundingBox(pg.RectROI):
-    def __init__(self, view, pos, size, rect, localization, verifier, color=(255, 0, 0), label='ROI'):
-        pg.RectROI.__init__(self, pos, size, pen=pg.mkPen(color, width=3, style=QtCore.Qt.DashLine),
-                            invertible=True,
-                            rotatable=False,
-                            removable=False,
-                            sideScalers=True)
+    def __init__(
+        self,
+        view,
+        pos,
+        size,
+        rect,
+        localization,
+        verifier,
+        color=(255, 0, 0),
+        label='ROI',
+    ):
+        pg.RectROI.__init__(
+            self,
+            pos,
+            size,
+            pen=pg.mkPen(color, width=3, style=QtCore.Qt.PenStyle.DashLine),
+            invertible=True,
+            rotatable=False,
+            removable=False,
+            sideScalers=True,
+        )
         # GUI things
         self.addScaleHandle([1, 0], [0, 1])
         self.addScaleHandle([0, 1], [1, 0])
@@ -111,7 +125,9 @@ class BoundingBox(pg.RectROI):
 
         if self.textItem is None:
 
-            self.textItem = pg.TextItem(text=self.label, color=np.array(self.color) / 2, fill=(200, 200, 200))
+            self.textItem = pg.TextItem(
+                text=self.label, color=np.array(self.color) / 2, fill=(200, 200, 200)
+            )
             self.textItem.setPos(x, y)
             self.view.addItem(self.textItem)
         else:
@@ -119,12 +135,19 @@ class BoundingBox(pg.RectROI):
             self.textItem.setPos(x, y)
 
     def mouseClickEvent(self, ev):
-        if ev.button() == QtCore.Qt.RightButton:  # Capture and ignore right clicks
+        if ev.button() == QtCore.Qt.MouseButton.RightButton:  # Capture and ignore right clicks
             pass
 
 
 class BoxHandler:
-    def __init__(self, graphics_view, image_mosaic, localization=None, all_labels=[], verifier=None):
+    def __init__(
+        self,
+        graphics_view,
+        image_mosaic,
+        localization=None,
+        all_labels=[],
+        verifier=None,
+    ):
         self.boxes = []
         self.dragging = False
 
@@ -160,14 +183,22 @@ class BoxHandler:
             # Grab the bounds
             xmin, ymin, xmax, ymax = localization.box
             if xmax - xmin <= 0 or ymax - ymin <= 0:  # Bad box bounds check
-                LOG.warn('Bad box bounds, not adding to the view')
+                LOGGER.warn('Bad box bounds, not adding to the view')
             else:
                 label = localization.text_label
                 height = rect.image_height
 
                 # Create the bounding box
-                bb = BoundingBox(self.vb, [xmin, height - ymin], [xmax - xmin, -1 * (ymax - ymin)], rect, localization,
-                                 self.verifier, color=color, label=label)
+                bb = BoundingBox(
+                    self.vb,
+                    [xmin, height - ymin],
+                    [xmax - xmin, -1 * (ymax - ymin)],
+                    rect,
+                    localization,
+                    self.verifier,
+                    color=color,
+                    label=label,
+                )
 
                 # Add it to the list
                 self.boxes.append(bb)

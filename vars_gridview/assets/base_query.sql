@@ -3,6 +3,12 @@ SELECT DISTINCT
     image_reference_uuid,
     anno.observation_uuid AS observation_uuid,
     video_reference_uuid,
+    anno.index_elapsed_time_millis,
+    anno.index_recorded_timestamp,
+    anno.index_timecode,
+    anno.video_start_timestamp,
+    anno.video_uri,
+    anno.video_container,
     assoc.uuid AS association_uuid,
     image_url, image_format,
     observer, concept,
@@ -11,10 +17,16 @@ SELECT DISTINCT
     assoc.link_value AS link_value,
     chief_scientist,
     dive_number,
-    camera_platform
+    camera_platform,
+    depth_meters,
+    latitude,
+    longitude,
+    oxygen_ml_per_l,
+    pressure_dbar,
+    salinity,
+    temperature_celsius,
+    light_transmission
 FROM
     annotations anno INNER JOIN associations assoc ON anno.observation_uuid = assoc.observation_uuid
 WHERE
-    image_reference_uuid IS NOT NULL AND
-    image_url IS NOT NULL AND
     {filters}

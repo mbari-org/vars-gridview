@@ -1,4 +1,5 @@
-*__pycache__*
-cache
-logs
-config/gui.ini
+*__pycache__/
+vars_gridview/assets/gui.ini
+vars_gridview/logs/
+logs/
+dist/

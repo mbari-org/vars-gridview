@@ -7,11 +7,14 @@ Distributed under MIT license. See license.txt for more information.
 """
 
 import logging
-import os
-import time
+from datetime import datetime
+
+from vars_gridview.lib.constants import LOG_DIR
 
 
-def get_logger(filepath, file_level=logging.DEBUG, console_level=logging.WARN, logger_name=''):
+def get_logger(
+    filepath, file_level=logging.DEBUG, console_level=logging.WARN, logger_name=''
+):
     """Get a logger object initialized with console and file output
 
     Parameters:
@@ -42,7 +45,8 @@ def get_logger(filepath, file_level=logging.DEBUG, console_level=logging.WARN, l
 
     # create formatter
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
 
     # add formatter to ch
     ch.setFormatter(formatter)
@@ -55,11 +59,12 @@ def get_logger(filepath, file_level=logging.DEBUG, console_level=logging.WARN, l
     return lgr
 
 
-# create a logs dir if it does not exist
-if not os.path.exists('logs'):
-    os.makedirs('logs')
+# Create a logs dir if it does not exist
+LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-LOG = get_logger(os.path.join('logs', str(int(time.time())) + '.log'),
-                 file_level=logging.DEBUG,
-                 console_level=logging.WARN,
-                 logger_name='GridView')
+LOGGER = get_logger(
+    str(LOG_DIR / (datetime.now().strftime('%Y-%m-%d') + '.txt')),
+    file_level=logging.DEBUG,
+    console_level=logging.WARN,
+    logger_name='vars-gridview',
+)

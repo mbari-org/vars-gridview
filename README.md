@@ -1,76 +1,44 @@
 # vars-gridview
 
-Tool for finding, verifying, and deleting localizations in VARS.
+**VARS GridView** is a tool for reviewing and correcting VARS localizations in bulk.
 
-Authors: Paul Roberts ([pldr@mbari.org](mailto:pldr@mbari.org)), Kevin Barnard ([kbarnard@mbari.org](mailto:kbarnard@mbari.org))
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/language-Python-blue.svg)](https://www.python.org/downloads/)
 
-## Setup
-
-### 1. Install required Python packages
-
-The required Python packages can be installed via either Anaconda (recommended) or pip.
-
-#### via [Anaconda](https://www.anaconda.com/) __(recommended)__
-
-```bash
-$ conda env create -f environment.yml
-```
-
-and activate
-
-```bash
-$ conda activate vars-gridview
-```
-
-#### via pip
-
-```bash
-$ pip install -r requirements.txt
-```
-
-### 2. Configure
-
-After installation, set the Annosaurus API key in `.env` in order to be able to write to VARS:
-
-```
-API_KEY=foo
-```
-
-Then, configure the SQL host/login and M3 endpoints in `config/sources.ini` and can redefined for development or testing.
+Authors: Kevin Barnard ([kbarnard@mbari.org](mailto:kbarnard@mbari.org)), Paul Roberts ([proberts@mbari.org](mailto:proberts@mbari.org))
 
 ---
 
-## Usage
+## Install
 
-### Load the application
+### From PyPI
+
+VARS GridView is available on PyPI as `vars-gridview`. To install, run:
+
 ```bash
-python gridview.py
+pip install vars-gridview
 ```
 
-### Select/Unselect Images
-- Left-click on the image
-- Hold down Ctrl key and drag the mouse over images to be selected
+### From source
 
-### Zoom in on selected image
-- Move mouse over the image detail view
-- Scroll up to zoom in
-- Scroll down to zoom out
-- Press scroll wheel and drag to move around
+This project is built with [Poetry](https://python-poetry.org/). To install from source, run (in the project root):
 
-### Apply label to all selected images
-- Choose the label you want to apply from the Class Label dropdown
-- Click the "LABEL SELECTED" button
-- Labeled images with have new label applied and the underlying localization file updated
-- If the "Hide Labeled" box is checked, the images will be removed from the grid
+```bash
+poetry install
+```
 
-### Delete localizations
-- Click the "DELETE" button
-- Underlying localizations will be immediately deleted in VARS
-The selected images will be removed from the grid
+## Run
 
-### Resize windows (grid view, image view, and JSON view)
-- Mouse over the bar between the views and when the pointer changes to arrows left-click and drag to change size
-- The app should remember the state when relaunched
+Once VARS GridView is installed, you can run it from the command line:
 
-### Resize a box
-- Left-click on one of the box handles (diamond shapes) and drag while holding the mouse button down
+```bash
+vars-gridview
+```
+
+You will first be prompted to log in. Enter your VARS username and password. 
+
+*Note: If you are not using MBARI production VARS, change the "Config server" field to point to your instance of Raziel. This setting is persisted.*
+
+---
+
+Copyright &copy; 2020&ndash;2022 [Monterey Bay Aquarium Research Institute](https://www.mbari.org)
