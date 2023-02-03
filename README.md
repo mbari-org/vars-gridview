@@ -41,4 +41,4 @@ You will first be prompted to log in. Enter your VARS username and password.
 
 ---
 
-Copyright &copy; 2020&ndash;2022 [Monterey Bay Aquarium Research Institute](https://www.mbari.org)
+Copyright &copy; 2020&ndash;2023 [Monterey Bay Aquarium Research Institute](https://www.mbari.org)
