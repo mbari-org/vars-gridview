@@ -33,7 +33,7 @@ class ImageReferenceUUIDSort(SortMethod):
 
     @staticmethod
     def key(rect: RectWidget) -> str:
-        return rect.localization.image_reference_uuid or 0
+        return rect.localization.image_reference_uuid or ''
 
 
 class LabelSort(SortMethod):
