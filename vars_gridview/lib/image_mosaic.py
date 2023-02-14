@@ -20,37 +20,39 @@ from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.sort_methods import SortMethod
 from vars_gridview.lib.widgets import RectWidget
+from vars_gridview.lib.constants import IMAGE_TYPE
 
-IMAGE_TYPE = "image/png"
 
-
-class ImageMosaic:
+class ImageMosaic(QtCore.QObject):
+    """
+    Manager of the image mosaic widget
+    """
+    
     def __init__(
         self,
-        graphicsView,
-        query_data,
-        query_headers,
-        rect_slot,
-        verifier,
-        beholder_url,
-        beholder_api_key,
-        zoom=1.0,
+        graphics_view: QtWidgets.QGraphicsView,
+        query_data: List[List],
+        query_headers: List[str],
+        rect_slot: callable,
+        verifier: str,
+        beholder_url: str,
+        beholder_api_key: str,
+        zoom: float = 1.0,
     ):
-        self.graphicsView = graphicsView
-        self.layout = None
-        self.scene = None
-        self.panel = None
-        self.thumbs = []
+        super().__init__()
+        
+        self._rect_widgets = []
         self.roi_map = {}
-        self.hide_labeled = True
+        self._hide_labeled = True
         self.hide_discarded = True
         self.hide_to_review = True
         self.layouts = []
-        # The scene and view for image mosaic
-        self.scene = QtWidgets.QGraphicsScene()
-        self.graphicsView.setScene(self.scene)
-        self.panel = QtWidgets.QGraphicsWidget()
-        self.scene.addItem(self.panel)
+        
+        # Initialize the graphics
+        self._graphics_view: QtWidgets.QGraphicsView = graphics_view
+        self._graphics_scene: QtWidgets.QGraphicsScene = None
+        self._graphics_widget: QtWidgets.QGraphicsWidget = None
+        self._init_graphics()
 
         self.verifier = verifier
 
@@ -182,7 +184,7 @@ class ImageMosaic:
         ) as dlg:
             for imaged_moment_uuid, url in worklist.items():
                 if dlg.wasCanceled():
-                    raise Exception("Image loading cancelled by user")
+                    LOGGER.info("Image loading cancelled by user")
 
                 if (
                     imaged_moment_uuid in self.moment_image_map
@@ -193,7 +195,7 @@ class ImageMosaic:
                     elapsed_time_millis = None
                     mp4_data = self.moment_mp4_data.get(imaged_moment_uuid, None)
                     if mp4_data is None:
-                        LOGGER.warn(
+                        LOGGER.warning(
                             "No web video available for capture for moment: {}, skipping".format(
                                 imaged_moment_uuid
                             )
@@ -314,7 +316,7 @@ class ImageMosaic:
                     rw.text_label = localization.text_label
                     rw.update_zoom(zoom)
                     rw.rectHover.connect(rect_slot)
-                    self.thumbs.append(rw)
+                    self._rect_widgets.append(rw)
 
                     localization.rect = rw  # Back reference
 
@@ -323,71 +325,91 @@ class ImageMosaic:
                     # update progress bar
                     roi_pd += 1
 
+    def sort_rect_widgets(self, sort_method: SortMethod):
+        """
+        Sort the rect widgets
+        
+        Args:
+            sort_method: The sort method to use
+        """
+        sort_method.sort(self._rect_widgets)
+
+    def _init_graphics(self):
+        """
+        Initialize the graphics scene, widget, and layout
+        """
+        if self._graphics_view is None:
+            raise ValueError("Graphics view must be set before calling this method")
+        elif self._graphics_scene is not None:
+            raise ValueError("Graphics already initialized")
+        
+        # Create and assign the QGraphicsScene
+        self._graphics_scene = QtWidgets.QGraphicsScene()
+        self._graphics_view.setScene(self._graphics_scene)
+        
+        # Create the single QGraphicsWidget and add it to the scene
+        self._graphics_widget = QtWidgets.QGraphicsWidget()
+        self._graphics_scene.addItem(self._graphics_widget)
+        
+        # Create the QGraphicsLayout
+        layout = QtWidgets.QGraphicsGridLayout()
+        
+        # Set layout properties
+        layout.setContentsMargins(50, 50, 50, 50)
+        
+        self._graphics_view.installEventFilter(self)
+        
+        # Assign the layout to the widget
+        self._graphics_widget.setLayout(layout)
+        
+    def _clear_graphics_layout(self):
+        """
+        Clear the graphics layout
+        """
+        while self._graphics_widget.layout().count() > 0:
+            self._graphics_widget.layout().removeAt(0)
+
     def render_mosaic(self, sort_method: Optional[SortMethod] = None):
         """
         Load images + annotations and populate the mosaic
         """
-        add_thumbs = False
-        if self.layout is None:
-            add_thumbs = True
-            self.panel.setLayout(None)
-            self.layout = QtWidgets.QGraphicsLinearLayout(
-                QtCore.Qt.Orientation.Vertical
-            )
-            self.layout.setContentsMargins(50, 100, 50, 50)
-            self.panel.setLayout(self.layout)
+        if self._graphics_scene is None:
+            raise ValueError("Graphics not initialized; call _init_graphics() first")
+        
+        # Get the viewport width (without margins) and compute the number of columns
+        left, top, right, bottom = self._graphics_widget.layout().getContentsMargins()
+        width = self._graphics_view.viewport().width() - left - right - 50
+        if self._rect_widgets:
+            rect_widget_width = self._rect_widgets[0].boundingRect().width()
+            rect_widget_height = self._rect_widgets[0].boundingRect().height()
+            columns = max(int(width / rect_widget_width), 1)
+        else:
+            columns = 1  # No widgets, so just one column
 
-        if sort_method is not None:
-            # Sort the thumbnails
-            sort_method.sort(self.thumbs)
-            add_thumbs = True
+        # Clear the graphics layout
+        self._clear_graphics_layout()
 
-        if add_thumbs:
-            # Clear the layouts
-            for l in self.layouts:
-                while l.count():
-                    l.removeItem(l.itemAt(0))
-                self.layout.removeItem(l)
-            self.layouts = []
+        # Get the subset of rect widgets to render
+        rect_widgets_to_render = [
+            rw for rw in self._rect_widgets
+            if not (self._hide_labeled and rw.is_verified)
+        ]
 
-        columns = 8
-        rows = int(len(self.thumbs) / columns)
-
-        i = 0
-        while i < len(self.thumbs):
-            row_layout = QtWidgets.QGraphicsLinearLayout(
-                QtCore.Qt.Orientation.Horizontal
-            )
-            j = 0
-            while j < columns and i < len(self.thumbs):
-                hide_thumb = False
-                if self.hide_to_review:
-                    hide_thumb = hide_thumb | self.thumbs[i].forReview
-                if self.hide_discarded:
-                    hide_thumb = hide_thumb | self.thumbs[i].toDiscard
-                if self.hide_labeled:
-                    hide_thumb = hide_thumb | self.thumbs[i].isAnnotated
-
-                hide_thumb |= self.thumbs[i].deleted
-
-                if hide_thumb:
-                    self.thumbs[i].hide()
-                else:
-                    self.thumbs[i].show()
-
-                if add_thumbs:
-                    row_layout.addItem(self.thumbs[i])
-                    self.thumbs[i].show()
-                    j += 1
-
-                i += 1
-            if add_thumbs:
-                self.layout.addItem(row_layout)
-                self.layouts.append(row_layout)
+        # Add the rect widgets to the layout
+        for idx, rect_widget in enumerate(rect_widgets_to_render):
+            row = int(idx / columns)
+            col = idx % columns
+            self._graphics_widget.layout().addItem(rect_widget, row, col)
+        
+        # Resize the widget to fit the rect widget grid
+        self._graphics_widget.resize(
+            columns * rect_widget_width, rect_widget_height * len(self._rect_widgets)
+        )
+        self._graphics_scene.setSceneRect(self._graphics_widget.boundingRect())
 
     def apply_label(self, concept, part):
         """
-        Apply a label to the selected thumbnails.
+        Apply a label to the selected rect widgets.
         """
         for rect in self.get_selected():
             # Handle empty concept/part
@@ -411,31 +433,64 @@ class ImageMosaic:
 
     def get_selected(self) -> List[RectWidget]:
         """
-        Get selected thumbs (list of RectWidget).
+        Get a list of the selected rect widgets
+        
+        Returns:
+            List of selected widgets
         """
-        return [rect for rect in self.thumbs if rect.isSelected]
+        return [rw for rw in self._rect_widgets if rw.isSelected]
 
     def delete_selected(self):
         """
-        Delete all selected thumbs and re-render.
+        Delete all selected rect widgets and re-render.
         """
-        for rect in self.get_selected():
-            rect.localization.delete()
-            rect.deleted = True
+        for rw in self.get_selected():
+            rw.localization.delete()
+            rw.deleted = True
+            self._rect_widgets.remove(rw)
 
+        # De-select the deleted widgets
         self.clear_selected()
 
+        # Re-render to ensure the deleted widgetss are removed from the view
         self.render_mosaic()
+    
+    def select_range(self, first: RectWidget, last: RectWidget):
+        """
+        Select a range of rect widgets.
+        """
+        if first not in self._rect_widgets:
+            raise ValueError("First widget not in rect widget list")
+        elif last not in self._rect_widgets:
+            raise ValueError("Last widget not in rect widget list")
+        
+        # Get the indices of the first and last widgets
+        first_idx = self._rect_widgets.index(first)
+        last_idx = self._rect_widgets.index(last)
+        
+        begin_idx = min(first_idx, last_idx)
+        end_idx = max(first_idx, last_idx)
+        
+        # Select all widgets in the range
+        self.clear_selected()
+        for idx in range(begin_idx, end_idx + 1):
+            self._rect_widgets[idx].isSelected = True
+            self._rect_widgets[idx].update()
 
     def clear_selected(self):
         """
-        Clear the selection of thumbs.
+        Clear the selection of rect widgets.
         """
-        for ind in range(0, len(self.thumbs)):
-            self.thumbs[ind].isSelected = False
-            self.thumbs[ind].update()
-        # self.render_mosaic()
+        for ind in range(0, len(self._rect_widgets)):
+            self._rect_widgets[ind].isSelected = False
+            self._rect_widgets[ind].update()
 
     def update_zoom(self, zoom):
-        for rect in self.thumbs:
+        for rect in self._rect_widgets:
             rect.update_zoom(zoom)
+        self.render_mosaic()
+    
+    def eventFilter(self, source, event):
+        if source is self._graphics_view and event.type() == QtCore.QEvent.Type.Resize:
+            self.render_mosaic()  # Re-render when the view is resized
+        return super().eventFilter(source, event)

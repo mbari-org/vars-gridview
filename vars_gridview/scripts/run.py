@@ -303,7 +303,7 @@ class MainWindow(TemplateBaseClass):
 
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
-        self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
+        self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
 
         # Render
         sort_method = self.ui.sortMethod.currentData()
@@ -433,7 +433,7 @@ class MainWindow(TemplateBaseClass):
         method = self.ui.sortMethod.currentData()
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
-        self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
+        self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic.render_mosaic(sort_method=method)
 
     @pyqtSlot(int)

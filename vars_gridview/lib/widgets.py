@@ -63,7 +63,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.update()
 
     @property
-    def isAnnotated(self) -> bool:
+    def is_verified(self) -> bool:
         return self.localizations[self.index].verified
 
     @property
@@ -171,7 +171,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         # very simple selection and annotation logic
         if self.isSelected:
             fill_color = QtCore.Qt.GlobalColor.green
-        elif self.isAnnotated:
+        elif self.is_verified:
             fill_color = QtCore.Qt.GlobalColor.yellow
         else:
             fill_color = QtCore.Qt.GlobalColor.darkGray

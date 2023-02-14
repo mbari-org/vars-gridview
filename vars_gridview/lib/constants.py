@@ -21,3 +21,6 @@ STYLE_DIR = ASSETS_DIR / "style"
 GUI_SETTINGS_FILE = ASSETS_DIR / "gui.ini"
 BASE_QUERY_FILE = ASSETS_DIR / "base_query.sql"
 LOG_DIR = ROOT_DIR / "logs"
+
+# Preferred image type
+IMAGE_TYPE = "image/png"
