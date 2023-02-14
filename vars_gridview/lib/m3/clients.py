@@ -132,7 +132,7 @@ class VampireSquidClient(M3Client):
     """
 
     def url_to(self, path: str) -> str:
-        return super().url_to("/v1" + path)
+        return super().url_to(path)
 
     def get_videos_at_timestamp(self, timestamp: str) -> requests.Response:
         return self.get(f"/videos/timestamp/{timestamp}")
