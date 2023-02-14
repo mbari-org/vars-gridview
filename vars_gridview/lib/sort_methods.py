@@ -10,8 +10,9 @@ class SortMethod(ABC):
     """
     Abstract class for named sorting methods of RectWidgets.
     """
+
     NAME = None
-    
+
     @staticmethod
     @abstractmethod
     def key(rect: RectWidget) -> Any:
@@ -19,7 +20,7 @@ class SortMethod(ABC):
         Returns the key used for sorting.
         """
         raise NotImplementedError
-    
+
     @classmethod
     def sort(cls, rect_widgets: List[RectWidget], **kwargs):
         """
@@ -29,15 +30,15 @@ class SortMethod(ABC):
 
 
 class ImageReferenceUUIDSort(SortMethod):
-    NAME = 'Image reference UUID'
+    NAME = "Image reference UUID"
 
     @staticmethod
     def key(rect: RectWidget) -> str:
-        return rect.localization.image_reference_uuid or ''
+        return rect.localization.image_reference_uuid or ""
 
 
 class LabelSort(SortMethod):
-    NAME = 'Label'
+    NAME = "Label"
 
     @staticmethod
     def key(rect: RectWidget) -> str:
@@ -45,23 +46,23 @@ class LabelSort(SortMethod):
 
 
 class WidthSort(SortMethod):
-    NAME = 'Width'
-    
+    NAME = "Width"
+
     @staticmethod
     def key(rect: RectWidget) -> int:
         return rect.localization.width
 
 
 class HeightSort(SortMethod):
-    NAME = 'Height'
-    
+    NAME = "Height"
+
     @staticmethod
     def key(rect: RectWidget) -> int:
         return rect.localization.height
 
 
 class AreaSort(SortMethod):
-    NAME = 'Area'
+    NAME = "Area"
 
     @staticmethod
     def key(rect: RectWidget) -> int:
@@ -69,16 +70,16 @@ class AreaSort(SortMethod):
 
 
 class MeanIntensitySort(SortMethod):
-    NAME = 'Mean intensity'
-    
+    NAME = "Mean intensity"
+
     @staticmethod
     def key(rect: RectWidget) -> float:
         return np.mean(rect.roi, axis=(0, 1, 2))
 
 
 class MeanHueSort(SortMethod):
-    NAME = 'Mean hue'
-    
+    NAME = "Mean hue"
+
     @staticmethod
     def key(rect: RectWidget) -> float:
         # RGB -> Hue from https://stackoverflow.com/a/23094494
@@ -87,7 +88,7 @@ class MeanHueSort(SortMethod):
         r, g, b = means
         min_idx, min_val = min(enumerate(means), key=lambda x: x[1])
         max_val = max(means)
-        
+
         if min_idx == 0:
             return (g - b) / (max_val - min_val)
         elif min_idx == 1:
@@ -97,22 +98,22 @@ class MeanHueSort(SortMethod):
 
 
 class RegionMeanHueSort(SortMethod):
-    NAME = 'Region mean hue (center 1/3)'
-    
+    NAME = "Region mean hue (center 1/3)"
+
     @staticmethod
     def key(rect: RectWidget) -> float:
         sub_roi = rect.roi[
-            rect.localization.height // 3:rect.localization.height * 2 // 3,
-            rect.localization.width // 3:rect.localization.width * 2 // 3
+            rect.localization.height // 3 : rect.localization.height * 2 // 3,
+            rect.localization.width // 3 : rect.localization.width * 2 // 3,
         ]
-        
+
         # RGB -> Hue from https://stackoverflow.com/a/23094494
         means = np.mean(sub_roi, axis=(0, 1))
         means = means / 255
         r, g, b = means
         min_idx, min_val = min(enumerate(means), key=lambda x: x[1])
         max_val = max(means)
-        
+
         if min_idx == 0:
             return (g - b) / (max_val - min_val)
         elif min_idx == 1:
@@ -122,13 +123,13 @@ class RegionMeanHueSort(SortMethod):
 
 
 class DepthSort(SortMethod):
-    NAME = 'Depth'
-    
+    NAME = "Depth"
+
     @staticmethod
     def key(rect: RectWidget) -> float:
-        depth = rect.ancillary_data.get('depth_meters', 0.0)
-        
+        depth = rect.ancillary_data.get("depth_meters", 0.0)
+
         if depth is None:
             depth = 0.0
-        
+
         return depth

@@ -6,8 +6,8 @@ Distributed under MIT license. See license.txt for more information.
 
 """
 
-from typing import List, Optional
 import datetime
+from typing import List, Optional
 
 import cv2
 import numpy as np
@@ -27,7 +27,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         video_data: dict,
         index: int,
         parent=None,
-        text_label='rect widget',
+        text_label="rect widget",
     ):
         QtWidgets.QGraphicsWidget.__init__(self, parent)
 
@@ -79,24 +79,28 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         return self.image.shape[0]
 
     def annotation_datetime(self) -> Optional[datetime.datetime]:
-        video_start_datetime = self.video_data['video_start_timestamp']
-        
-        elapsed_time_millis = self.video_data.get('index_elapsed_time_millis', None)
-        timecode = self.video_data.get('index_timecode', None)
-        recorded_timestamp = self.video_data.get('index_recorded_timestamp', None)
-        
+        video_start_datetime = self.video_data["video_start_timestamp"]
+
+        elapsed_time_millis = self.video_data.get("index_elapsed_time_millis", None)
+        timecode = self.video_data.get("index_timecode", None)
+        recorded_timestamp = self.video_data.get("index_recorded_timestamp", None)
+
         # Get annotation video time index
         annotation_datetime = None
         if recorded_timestamp is not None:
             annotation_datetime = recorded_timestamp
         elif elapsed_time_millis is not None:
-            annotation_datetime = video_start_datetime + datetime.timedelta(milliseconds=int(elapsed_time_millis))
+            annotation_datetime = video_start_datetime + datetime.timedelta(
+                milliseconds=int(elapsed_time_millis)
+            )
         elif timecode is not None:
-            hours, minutes, seconds, frames = map(int, timecode.split(':'))
-            annotation_datetime = video_start_datetime + datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+            hours, minutes, seconds, frames = map(int, timecode.split(":"))
+            annotation_datetime = video_start_datetime + datetime.timedelta(
+                hours=hours, minutes=minutes, seconds=seconds
+            )
         else:
-            raise ValueError('No video time index found')
-        
+            raise ValueError("No video time index found")
+
         return annotation_datetime
 
     def toqimage(self, img):
@@ -220,7 +224,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             int(self.zoom * self.labelheight),
         )
 
-        painter.drawText(text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, self.text_label)
+        painter.drawText(
+            text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, self.text_label
+        )
 
         if self.toDiscard:
             painter.fillRect(
@@ -239,7 +245,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
                 int(self.zoom * self.labelheight),
             )
             painter.setPen(QtCore.Qt.GlobalColor.red)
-            painter.drawText(text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "To Remove")
+            painter.drawText(
+                text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "To Remove"
+            )
 
         if self.forReview:
             painter.fillRect(
@@ -258,7 +266,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
                 int(self.zoom * self.labelheight),
             )
             painter.setPen(QtCore.Qt.GlobalColor.blue)
-            painter.drawText(text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "For Review")
+            painter.drawText(
+                text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "For Review"
+            )
 
     def mousePressEvent(self, event):
         self.isSelected = not self.isSelected

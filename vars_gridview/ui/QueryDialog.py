@@ -17,7 +17,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_descendants, get_users
+from vars_gridview.lib.m3.operations import (
+    get_kb_concepts,
+    get_kb_descendants,
+    get_users,
+)
 
 
 class Constraint:
@@ -50,14 +54,14 @@ class ConceptFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('concept', self.concept)
+            yield Constraint("concept", self.concept)
 
         def __str__(self) -> str:
-            return 'Concept: {}'.format(self.concept)
+            return "Concept: {}".format(self.concept)
 
     def __call__(self) -> Optional[Result]:
         concept, ok = QInputDialog.getItem(
-            self.parent, 'Concept', 'Concept', get_kb_concepts(), 0, True
+            self.parent, "Concept", "Concept", get_kb_concepts(), 0, True
         )
         if ok:
             return ConceptFilter.Result(concept)
@@ -73,16 +77,16 @@ class ConceptDescFilter(Filter):
         def constraints(self) -> Iterable[Constraint]:
             yield from super().constraints
             for descendant in self.descendants:
-                yield Constraint('concept', descendant)
+                yield Constraint("concept", descendant)
 
         def __str__(self) -> str:
-            return 'Concept (+ descendants): {} ({})'.format(
-                self.concept, ', '.join(self.descendants)
+            return "Concept (+ descendants): {} ({})".format(
+                self.concept, ", ".join(self.descendants)
             )
 
     def __call__(self) -> Optional[Result]:
         concept, ok = QInputDialog.getItem(
-            self.parent, 'Concept', 'Concept', get_kb_concepts(), 0, True
+            self.parent, "Concept", "Concept", get_kb_concepts(), 0, True
         )
         if ok:
             return ConceptDescFilter.Result(concept)
@@ -95,14 +99,14 @@ class DiveNumberFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('dive_number', self.dive_number)
+            yield Constraint("dive_number", self.dive_number)
 
         def __str__(self) -> str:
-            return 'Dive number: {}'.format(self.dive_number)
+            return "Dive number: {}".format(self.dive_number)
 
     def __call__(self) -> Optional[Result]:
         dive_number, ok = QInputDialog.getText(
-            self.parent, 'Dive number', 'Dive number', QLineEdit.EchoMode.Normal, ''
+            self.parent, "Dive number", "Dive number", QLineEdit.EchoMode.Normal, ""
         )
         if ok:
             return DiveNumberFilter.Result(dive_number)
@@ -115,14 +119,18 @@ class ChiefScientistFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('chief_scientist', self.chief_scientist)
+            yield Constraint("chief_scientist", self.chief_scientist)
 
         def __str__(self) -> str:
-            return 'Chief scientist: {}'.format(self.chief_scientist)
+            return "Chief scientist: {}".format(self.chief_scientist)
 
     def __call__(self) -> Optional[Result]:
         chief_scientist, ok = QInputDialog.getText(
-            self.parent, 'Chief scientist', 'Chief scientist', QLineEdit.EchoMode.Normal, ''
+            self.parent,
+            "Chief scientist",
+            "Chief scientist",
+            QLineEdit.EchoMode.Normal,
+            "",
         )
         if ok:
             return ChiefScientistFilter.Result(chief_scientist)
@@ -135,14 +143,14 @@ class PlatformFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('platform', self.platform)
+            yield Constraint("platform", self.platform)
 
         def __str__(self) -> str:
-            return 'Platform: {}'.format(self.platform)
+            return "Platform: {}".format(self.platform)
 
     def __call__(self) -> Optional[Result]:
         platform, ok = QInputDialog.getText(
-            self.parent, 'Platform', 'Platform', QLineEdit.EchoMode.Normal, ''
+            self.parent, "Platform", "Platform", QLineEdit.EchoMode.Normal, ""
         )
         if ok:
             return PlatformFilter.Result(platform)
@@ -155,15 +163,15 @@ class ObserverFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('observer', self.observer)
+            yield Constraint("observer", self.observer)
 
         def __str__(self) -> str:
-            return 'Observer: {}'.format(self.observer)
+            return "Observer: {}".format(self.observer)
 
     def __call__(self) -> Optional[Result]:
-        usernames = sorted([user['username'] for user in get_users()])
+        usernames = sorted([user["username"] for user in get_users()])
         observer, ok = QInputDialog.getItem(
-            self.parent, 'Observer', 'Observer', usernames, 0, True
+            self.parent, "Observer", "Observer", usernames, 0, True
         )
         if ok:
             return ObserverFilter.Result(observer)
@@ -176,25 +184,25 @@ class ImagedMomentUUIDFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('imaged_moment_uuid', self.imaged_moment_uuid)
+            yield Constraint("imaged_moment_uuid", self.imaged_moment_uuid)
 
         def __str__(self) -> str:
-            return 'Imaged moment UUID: {}'.format(self.imaged_moment_uuid)
+            return "Imaged moment UUID: {}".format(self.imaged_moment_uuid)
 
     def __call__(self) -> Optional[Result]:
         imaged_moment_uuid, ok = QInputDialog.getText(
             self.parent,
-            'Imaged moment UUID',
-            'Imaged moment UUID',
+            "Imaged moment UUID",
+            "Imaged moment UUID",
             QLineEdit.EchoMode.Normal,
-            '',
+            "",
         )
         if ok:
             # Ensure that the UUID is valid
             try:
                 UUID(imaged_moment_uuid)
             except ValueError:
-                QMessageBox.warning(self.parent, 'Invalid UUID', 'The UUID is invalid.')
+                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
                 return None
             return ImagedMomentUUIDFilter.Result(imaged_moment_uuid.lower())
 
@@ -206,21 +214,25 @@ class ObservationUUIDFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('observation_uuid', self.observation_uuid)
+            yield Constraint("observation_uuid", self.observation_uuid)
 
         def __str__(self) -> str:
-            return 'Observation UUID: {}'.format(self.observation_uuid)
+            return "Observation UUID: {}".format(self.observation_uuid)
 
     def __call__(self) -> Optional[Result]:
         observation_uuid, ok = QInputDialog.getText(
-            self.parent, 'Observation UUID', 'Observation UUID', QLineEdit.EchoMode.Normal, ''
+            self.parent,
+            "Observation UUID",
+            "Observation UUID",
+            QLineEdit.EchoMode.Normal,
+            "",
         )
         if ok:
             # Ensure that the UUID is valid
             try:
                 UUID(observation_uuid)
             except ValueError:
-                QMessageBox.warning(self.parent, 'Invalid UUID', 'The UUID is invalid.')
+                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
                 return None
             return ObservationUUIDFilter.Result(observation_uuid.lower())
 
@@ -232,21 +244,25 @@ class AssociationUUIDFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('assoc.uuid', self.association_uuid)
+            yield Constraint("assoc.uuid", self.association_uuid)
 
         def __str__(self) -> str:
-            return 'Association UUID: {}'.format(self.association_uuid)
+            return "Association UUID: {}".format(self.association_uuid)
 
     def __call__(self) -> Optional[Result]:
         association_uuid, ok = QInputDialog.getText(
-            self.parent, 'Association UUID', 'Association UUID', QLineEdit.EchoMode.Normal, ''
+            self.parent,
+            "Association UUID",
+            "Association UUID",
+            QLineEdit.EchoMode.Normal,
+            "",
         )
         if ok:
             # Ensure that the UUID is valid
             try:
                 UUID(association_uuid)
             except ValueError:
-                QMessageBox.warning(self.parent, 'Invalid UUID', 'The UUID is invalid.')
+                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
                 return None
             return AssociationUUIDFilter.Result(association_uuid.lower())
 
@@ -258,25 +274,25 @@ class ImageReferenceUUIDFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('image_reference_uuid', self.image_reference_uuid)
+            yield Constraint("image_reference_uuid", self.image_reference_uuid)
 
         def __str__(self) -> str:
-            return 'Image reference UUID: {}'.format(self.image_reference_uuid)
+            return "Image reference UUID: {}".format(self.image_reference_uuid)
 
     def __call__(self) -> Optional[Result]:
         image_reference_uuid, ok = QInputDialog.getText(
             self.parent,
-            'Image reference UUID',
-            'Image reference UUID',
+            "Image reference UUID",
+            "Image reference UUID",
             QLineEdit.EchoMode.Normal,
-            '',
+            "",
         )
         if ok:
             # Ensure that the UUID is valid
             try:
                 UUID(image_reference_uuid)
             except ValueError:
-                QMessageBox.warning(self.parent, 'Invalid UUID', 'The UUID is invalid.')
+                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
                 return None
             return ImageReferenceUUIDFilter.Result(image_reference_uuid.lower())
 
@@ -288,25 +304,25 @@ class VideoReferenceUUIDFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint('video_reference_uuid', self.video_reference_uuid)
+            yield Constraint("video_reference_uuid", self.video_reference_uuid)
 
         def __str__(self) -> str:
-            return 'Video reference UUID: {}'.format(self.video_reference_uuid)
+            return "Video reference UUID: {}".format(self.video_reference_uuid)
 
     def __call__(self) -> Optional[Result]:
         video_reference_uuid, ok = QInputDialog.getText(
             self.parent,
-            'Video reference UUID',
-            'Video reference UUID',
+            "Video reference UUID",
+            "Video reference UUID",
             QLineEdit.EchoMode.Normal,
-            '',
+            "",
         )
         if ok:
             # Ensure that the UUID is valid
             try:
                 UUID(video_reference_uuid)
             except ValueError:
-                QMessageBox.warning(self.parent, 'Invalid UUID', 'The UUID is invalid.')
+                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
                 return None
             return VideoReferenceUUIDFilter.Result(video_reference_uuid.lower())
 
@@ -359,36 +375,36 @@ class QueryDialog(QDialog):
     def __init__(self, parent):
         super().__init__(parent=parent)
 
-        self.setWindowTitle('Query')
+        self.setWindowTitle("Query")
         self.setLayout(QVBoxLayout())
 
         # Create filters
         self.filters = [
-            ConceptFilter(self, 'Concept'),
-            ConceptDescFilter(self, 'Concept (+ descendants)'),
-            DiveNumberFilter(self, 'Dive number'),
-            ChiefScientistFilter(self, 'Chief scientist'),
-            PlatformFilter(self, 'Platform'),
-            ObserverFilter(self, 'Observer'),
-            ImagedMomentUUIDFilter(self, 'Imaged moment UUID'),
-            ObservationUUIDFilter(self, 'Observation UUID'),
-            AssociationUUIDFilter(self, 'Association UUID'),
-            ImageReferenceUUIDFilter(self, 'Image reference UUID'),
-            VideoReferenceUUIDFilter(self, 'Video reference UUID'),
+            ConceptFilter(self, "Concept"),
+            ConceptDescFilter(self, "Concept (+ descendants)"),
+            DiveNumberFilter(self, "Dive number"),
+            ChiefScientistFilter(self, "Chief scientist"),
+            PlatformFilter(self, "Platform"),
+            ObserverFilter(self, "Observer"),
+            ImagedMomentUUIDFilter(self, "Imaged moment UUID"),
+            ObservationUUIDFilter(self, "Observation UUID"),
+            AssociationUUIDFilter(self, "Association UUID"),
+            ImageReferenceUUIDFilter(self, "Image reference UUID"),
+            VideoReferenceUUIDFilter(self, "Video reference UUID"),
         ]
 
         # Create button bar (add, remove, clear constraints)
         self.button_bar = QWidget()
         self.button_bar.setLayout(QHBoxLayout())
-        self.add_constraint_button = QPushButton('Add Constraint')
+        self.add_constraint_button = QPushButton("Add Constraint")
         self.add_constraint_button.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_DialogYesButton)
         )
-        self.remove_constraint_button = QPushButton('Remove Selected')
+        self.remove_constraint_button = QPushButton("Remove Selected")
         self.remove_constraint_button.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_DialogNoButton)
         )
-        self.clear_filters_button = QPushButton('Clear')
+        self.clear_filters_button = QPushButton("Clear")
         self.clear_filters_button.setIcon(
             self.style().standardIcon(QStyle.StandardPixmap.SP_DialogDiscardButton)
         )
@@ -397,7 +413,9 @@ class QueryDialog(QDialog):
         self.result_list_model = ResultListModel(parent=self)
         self.result_list_view = QListView()
         self.result_list_view.setModel(self.result_list_model)
-        self.result_list_view.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.result_list_view.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
 
         # Create dialog button box (just Ok button)
         self.dialog_buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
@@ -420,7 +438,7 @@ class QueryDialog(QDialog):
     def add_filter(self):
         filter_names = [f.name for f in self.filters]
         filter_name, ok = QInputDialog.getItem(
-            self, 'Filter', 'Filter', filter_names, 0, False
+            self, "Filter", "Filter", filter_names, 0, False
         )
         if not ok:
             return

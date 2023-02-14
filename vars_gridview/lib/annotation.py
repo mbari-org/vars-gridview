@@ -1,23 +1,33 @@
-# -*- coding: utf-8 -*-
 """
 rectlabel.py -- Tools to implement a labeling UI for bounding boxes in images
 Copyright 2020  Monterey Bay Aquarium Research Institute
 Distributed under MIT license. See license.txt for more information.
-
 """
+
 import json
 from typing import Optional, Union
 
 import numpy as np
 
-from vars_gridview.lib.m3.operations import delete_bounding_box, update_bounding_box_data, update_bounding_box_part, update_observation_concept
+from vars_gridview.lib.m3.operations import (
+    delete_bounding_box,
+    update_bounding_box_data,
+    update_bounding_box_part,
+    update_observation_concept,
+)
 
 
 class VARSLocalization:
     """Representation of VARS localizations (bounding boxes)"""
 
     def __init__(
-        self, x: int, y: int, width: int, height: int, image_reference_uuid: Optional[str] = None, **meta
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        image_reference_uuid: Optional[str] = None,
+        **meta
     ):
         self._x = x
         self._y = y
@@ -53,11 +63,11 @@ class VARSLocalization:
     @property
     def json(self):
         return {
-            'x': self._x,
-            'y': self._y,
-            'width': self._width,
-            'height': self._height,
-            'image_reference_uuid': self.image_reference_uuid,
+            "x": self._x,
+            "y": self._y,
+            "width": self._width,
+            "height": self._height,
+            "image_reference_uuid": self.image_reference_uuid,
             **self.meta,
         }
 
@@ -91,10 +101,10 @@ class VARSLocalization:
 
     @property
     def text_label(self):
-        if self._part == 'self':
+        if self._part == "self":
             return self._concept
 
-        return '{} {}'.format(self._concept, self._part)
+        return "{} {}".format(self._concept, self._part)
 
     @property
     def xf(self):
@@ -110,7 +120,7 @@ class VARSLocalization:
 
     @property
     def verified(self):
-        return 'verifier' in self.meta
+        return "verifier" in self.meta
 
     @property
     def deleted(self):
@@ -137,7 +147,7 @@ class VARSLocalization:
 
     def set_verified_concept(self, concept, part, verifier):
         self.set_concept(concept, part)
-        self.meta['verifier'] = verifier
+        self.meta["verifier"] = verifier
         self._dirty_verifier = True
 
     def get_roi(self, image: np.ndarray):
@@ -173,8 +183,8 @@ class VARSLocalization:
             do_modify_box = True
 
         if self._dirty_box:
-            self.meta['generator'] = 'gridview'  # Only changes when box moved/resized
-            self.meta['observer'] = verifier
+            self.meta["generator"] = "gridview"  # Only changes when box moved/resized
+            self.meta["observer"] = verifier
             self._dirty_box = False
             do_modify_box = True
 

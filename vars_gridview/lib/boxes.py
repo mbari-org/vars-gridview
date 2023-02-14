@@ -23,7 +23,7 @@ class BoundingBox(pg.RectROI):
         localization,
         verifier,
         color=(255, 0, 0),
-        label='ROI',
+        label="ROI",
     ):
         pg.RectROI.__init__(
             self,
@@ -135,7 +135,9 @@ class BoundingBox(pg.RectROI):
             self.textItem.setPos(x, y)
 
     def mouseClickEvent(self, ev):
-        if ev.button() == QtCore.Qt.MouseButton.RightButton:  # Capture and ignore right clicks
+        if (
+            ev.button() == QtCore.Qt.MouseButton.RightButton
+        ):  # Capture and ignore right clicks
             pass
 
 
@@ -183,7 +185,7 @@ class BoxHandler:
             # Grab the bounds
             xmin, ymin, xmax, ymax = localization.box
             if xmax - xmin <= 0 or ymax - ymin <= 0:  # Bad box bounds check
-                LOGGER.warn('Bad box bounds, not adding to the view')
+                LOGGER.warn("Bad box bounds, not adding to the view")
             else:
                 label = localization.text_label
                 height = rect.image_height

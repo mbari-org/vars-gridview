@@ -14,19 +14,27 @@ import cv2
 import numpy as np
 import pyqtgraph as pg
 import requests
-from PyQt6 import QtWidgets, QtCore
+from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.sort_methods import SortMethod
 from vars_gridview.lib.widgets import RectWidget
 
-IMAGE_TYPE = 'image/png'
+IMAGE_TYPE = "image/png"
 
 
 class ImageMosaic:
     def __init__(
-        self, graphicsView, query_data, query_headers, rect_slot, verifier, beholder_url, beholder_api_key, zoom=1.0
+        self,
+        graphicsView,
+        query_data,
+        query_headers,
+        rect_slot,
+        verifier,
+        beholder_url,
+        beholder_api_key,
+        zoom=1.0,
     ):
         self.graphicsView = graphicsView
         self.layout = None
@@ -55,7 +63,7 @@ class ImageMosaic:
 
         self.moment_localizations = {}
         self.moment_ancillary_data = {}
-        
+
         self.beholder_url = beholder_url
         self.beholder_api_key = beholder_api_key
 
@@ -72,25 +80,28 @@ class ImageMosaic:
                     query_item[k] = str(v)
 
             # Extract fields
-            imaged_moment_uuid = query_item['imaged_moment_uuid']
-            image_reference_uuid = query_item['image_reference_uuid']
-            observation_uuid = query_item['observation_uuid']
-            association_uuid = query_item['association_uuid']
-            
-            image_format = query_item['image_format']
-            image_url = query_item['image_url']
-            
-            concept = query_item['concept']
-            
-            link_name = query_item['link_name']
-            to_concept = query_item['to_concept']
-            link_value = query_item['link_value']
-            
+            imaged_moment_uuid = query_item["imaged_moment_uuid"]
+            image_reference_uuid = query_item["image_reference_uuid"]
+            observation_uuid = query_item["observation_uuid"]
+            association_uuid = query_item["association_uuid"]
+
+            image_format = query_item["image_format"]
+            image_url = query_item["image_url"]
+
+            concept = query_item["concept"]
+
+            link_name = query_item["link_name"]
+            to_concept = query_item["to_concept"]
+            link_value = query_item["link_value"]
+
             # Set up moment data
-            if imaged_moment_uuid not in self.moment_image_data and image_format == IMAGE_TYPE:
+            if (
+                imaged_moment_uuid not in self.moment_image_data
+                and image_format == IMAGE_TYPE
+            ):
                 self.moment_image_data[imaged_moment_uuid] = {
-                    'image_reference_uuid': image_reference_uuid,
-                    'image_url': image_url,
+                    "image_reference_uuid": image_reference_uuid,
+                    "image_url": image_url,
                 }
 
             # Tag in ancillary data
@@ -98,43 +109,46 @@ class ImageMosaic:
                 self.moment_ancillary_data[imaged_moment_uuid] = {
                     k: query_item[k]
                     for k in (  # Ancillary data keys
-                        'camera_platform',
-                        'dive_number',
-                        'depth_meters',
-                        'latitude',
-                        'longitude',
-                        'oxygen_ml_per_l',
-                        'pressure_dbar',
-                        'salinity',
-                        'temperature_celsius',
-                        'light_transmission',
+                        "camera_platform",
+                        "dive_number",
+                        "depth_meters",
+                        "latitude",
+                        "longitude",
+                        "oxygen_ml_per_l",
+                        "pressure_dbar",
+                        "salinity",
+                        "temperature_celsius",
+                        "light_transmission",
                     )
                 }
-            
+
             # Extract video data
             video_data = {
                 k: query_item[k]
                 for k in (  # Video data keys
-                    'index_elapsed_time_millis',
-                    'index_timecode',
-                    'index_recorded_timestamp',
-                    'video_start_timestamp',
-                    'video_uri',
-                    'video_container'
+                    "index_elapsed_time_millis",
+                    "index_timecode",
+                    "index_recorded_timestamp",
+                    "video_start_timestamp",
+                    "video_uri",
+                    "video_container",
                 )
             }
-            
+
             # Tag in video data where appropriate
-            if video_data['video_uri'] is not None:  # valid video
+            if video_data["video_uri"] is not None:  # valid video
                 if imaged_moment_uuid not in self.moment_video_data:
                     self.moment_video_data[imaged_moment_uuid] = video_data
-                    
+
                 # For beholder
-                if imaged_moment_uuid not in self.moment_mp4_data and video_data['video_container'] == 'video/mp4':
+                if (
+                    imaged_moment_uuid not in self.moment_mp4_data
+                    and video_data["video_container"] == "video/mp4"
+                ):
                     self.moment_mp4_data[imaged_moment_uuid] = video_data
 
             # Collect bounding boxes
-            if link_name == 'bounding box':
+            if link_name == "bounding box":
                 if association_uuid in seen_associations:
                     continue
                 seen_associations.add(association_uuid)
@@ -143,7 +157,7 @@ class ImageMosaic:
                 localization = VARSLocalization.from_json(json_loc)
 
                 localization.set_concept(concept, to_concept)
-                
+
                 localization.imaged_moment_uuid = imaged_moment_uuid
                 localization.observation_uuid = observation_uuid
                 localization.association_uuid = association_uuid
@@ -156,7 +170,9 @@ class ImageMosaic:
         worklist = {}
         for imaged_moment_uuid in self.moment_localizations:
             if imaged_moment_uuid in self.moment_image_data:
-                worklist[imaged_moment_uuid] = self.moment_image_data[imaged_moment_uuid]['image_url']
+                worklist[imaged_moment_uuid] = self.moment_image_data[
+                    imaged_moment_uuid
+                ]["image_url"]
             else:
                 worklist[imaged_moment_uuid] = None
 
@@ -167,57 +183,78 @@ class ImageMosaic:
             for imaged_moment_uuid, url in worklist.items():
                 if dlg.wasCanceled():
                     raise Exception("Image loading cancelled by user")
-                
-                if imaged_moment_uuid in self.moment_image_map:  # already downloaded, skip
+
+                if (
+                    imaged_moment_uuid in self.moment_image_map
+                ):  # already downloaded, skip
                     continue
 
                 if url is None:  # no image reference, need to use beholder
                     elapsed_time_millis = None
                     mp4_data = self.moment_mp4_data.get(imaged_moment_uuid, None)
                     if mp4_data is None:
-                        LOGGER.warn('No web video available for capture for moment: {}, skipping'.format(imaged_moment_uuid))
+                        LOGGER.warn(
+                            "No web video available for capture for moment: {}, skipping".format(
+                                imaged_moment_uuid
+                            )
+                        )
                         continue
-                    
-                    video_start_datetime = mp4_data['video_start_timestamp']
-        
-                    elapsed_time_millis = mp4_data.get('index_elapsed_time_millis', None)
-                    timecode = mp4_data.get('index_timecode', None)
-                    recorded_timestamp = mp4_data.get('index_recorded_timestamp', None)
-                    
+
+                    video_start_datetime = mp4_data["video_start_timestamp"]
+
+                    elapsed_time_millis = mp4_data.get(
+                        "index_elapsed_time_millis", None
+                    )
+                    timecode = mp4_data.get("index_timecode", None)
+                    recorded_timestamp = mp4_data.get("index_recorded_timestamp", None)
+
                     # Get annotation video time index
                     annotation_datetime = None
                     if recorded_timestamp is not None:
                         annotation_datetime = recorded_timestamp
                     elif elapsed_time_millis is not None:
-                        annotation_datetime = video_start_datetime + datetime.timedelta(milliseconds=int(elapsed_time_millis))
+                        annotation_datetime = video_start_datetime + datetime.timedelta(
+                            milliseconds=int(elapsed_time_millis)
+                        )
                     elif timecode is not None:
-                        hours, minutes, seconds, frames = map(int, timecode.split(':'))
-                        annotation_datetime = video_start_datetime + datetime.timedelta(hours=hours, minutes=minutes, seconds=seconds)
+                        hours, minutes, seconds, frames = map(int, timecode.split(":"))
+                        annotation_datetime = video_start_datetime + datetime.timedelta(
+                            hours=hours, minutes=minutes, seconds=seconds
+                        )
                     else:
-                        LOGGER.error('No time index available for moment: {}, skipping'.format(imaged_moment_uuid))
+                        LOGGER.error(
+                            "No time index available for moment: {}, skipping".format(
+                                imaged_moment_uuid
+                            )
+                        )
                         continue
-                    
+
                     # Compute the elapsed time in milliseconds
-                    elapsed_time_millis = round((annotation_datetime - video_start_datetime).total_seconds() * 1000)
+                    elapsed_time_millis = round(
+                        (annotation_datetime - video_start_datetime).total_seconds()
+                        * 1000
+                    )
                     res = requests.post(
-                        beholder_url + '/capture', 
+                        beholder_url + "/capture",
                         json={
-                            'videoUrl': mp4_data['video_uri'],
-                            'elapsedTimeMillis': int(elapsed_time_millis),
+                            "videoUrl": mp4_data["video_uri"],
+                            "elapsedTimeMillis": int(elapsed_time_millis),
                         },
-                        headers={
-                            'X-Api-Key': self.beholder_api_key
-                        }
+                        headers={"X-Api-Key": self.beholder_api_key},
                     )  # TODO REMOVE
                     if res.status_code != 200:
-                        LOGGER.error('Error getting capture from beholder for moment: {}, skipping'.format(imaged_moment_uuid))
+                        LOGGER.error(
+                            "Error getting capture from beholder for moment: {}, skipping".format(
+                                imaged_moment_uuid
+                            )
+                        )
                         continue
-                    
+
                 else:  # download the image from its URL
                     res = requests.get(url)
                     if res.status_code != 200:
                         LOGGER.warn(
-                            'Unable to fetch image (status {}) at url: {}, skipping'.format(
+                            "Unable to fetch image (status {}) at url: {}, skipping".format(
                                 res.status_code, url
                             )
                         )
@@ -233,7 +270,7 @@ class ImageMosaic:
                 dlg += 1
 
         with pg.ProgressDialog(
-            'Creating widgets...', 0, self.n_localizations
+            "Creating widgets...", 0, self.n_localizations
         ) as roi_pd:
             for (
                 imaged_moment_uuid,
@@ -250,9 +287,7 @@ class ImageMosaic:
                 ancillary_data = (
                     self.moment_ancillary_data.get(imaged_moment_uuid, None) or {}
                 )
-                video_data = (
-                    self.moment_video_data.get(imaged_moment_uuid, None) or {}
-                )
+                video_data = self.moment_video_data.get(imaged_moment_uuid, None) or {}
                 min_x = 0
                 min_y = 0
                 max_x = image.shape[1]
@@ -296,7 +331,9 @@ class ImageMosaic:
         if self.layout is None:
             add_thumbs = True
             self.panel.setLayout(None)
-            self.layout = QtWidgets.QGraphicsLinearLayout(QtCore.Qt.Orientation.Vertical)
+            self.layout = QtWidgets.QGraphicsLinearLayout(
+                QtCore.Qt.Orientation.Vertical
+            )
             self.layout.setContentsMargins(50, 100, 50, 50)
             self.panel.setLayout(self.layout)
 
@@ -318,7 +355,9 @@ class ImageMosaic:
 
         i = 0
         while i < len(self.thumbs):
-            row_layout = QtWidgets.QGraphicsLinearLayout(QtCore.Qt.Orientation.Horizontal)
+            row_layout = QtWidgets.QGraphicsLinearLayout(
+                QtCore.Qt.Orientation.Horizontal
+            )
             j = 0
             while j < columns and i < len(self.thumbs):
                 hide_thumb = False
@@ -352,9 +391,9 @@ class ImageMosaic:
         """
         for rect in self.get_selected():
             # Handle empty concept/part
-            if concept.strip() == '':  # No concept specified? Verify as-is
+            if concept.strip() == "":  # No concept specified? Verify as-is
                 concept = rect.localization.concept
-            if part.strip() == '':  # No part specified? ditto
+            if part.strip() == "":  # No part specified? ditto
                 part = rect.localization.part
 
             # Set the new concept and immediately push to VARS

@@ -13,7 +13,7 @@ from vars_gridview.lib.constants import LOG_DIR
 
 
 def get_logger(
-    filepath, file_level=logging.DEBUG, console_level=logging.WARN, logger_name=''
+    filepath, file_level=logging.DEBUG, console_level=logging.WARN, logger_name=""
 ):
     """Get a logger object initialized with console and file output
 
@@ -45,7 +45,7 @@ def get_logger(
 
     # create formatter
     formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
 
     # add formatter to ch
@@ -63,8 +63,8 @@ def get_logger(
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 LOGGER = get_logger(
-    str(LOG_DIR / (datetime.now().strftime('%Y-%m-%d') + '.txt')),
+    str(LOG_DIR / (datetime.now().strftime("%Y-%m-%d") + ".txt")),
     file_level=logging.DEBUG,
     console_level=logging.WARN,
-    logger_name='vars-gridview',
+    logger_name="vars-gridview",
 )

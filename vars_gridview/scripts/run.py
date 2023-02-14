@@ -21,28 +21,38 @@ import json
 import os
 import sys
 import webbrowser
-from typing import Optional, Tuple
 from pathlib import Path
+from typing import Optional, Tuple
 
 import cv2
 import pyqtgraph as pg
 import qdarkstyle
-from PyQt6.QtCore import QFile, QFileInfo, QTextStream, QSettings, pyqtSlot
+from PyQt6.QtCore import QFile, QFileInfo, QSettings, QTextStream, pyqtSlot
 from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import (
-    QApplication,
-    QCompleter,
-    QMainWindow,
-    QMessageBox,
-)
+from PyQt6.QtWidgets import QApplication, QCompleter, QMainWindow, QMessageBox
 
-from vars_gridview.lib import m3, sql, constants, raziel
-from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib import constants, m3, raziel, sql
 from vars_gridview.lib.boxes import BoxHandler
 from vars_gridview.lib.image_mosaic import ImageMosaic
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts, get_vars_imaged_moment, get_videos_at_datetime
+from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.m3.operations import (
+    get_kb_concepts,
+    get_kb_parts,
+    get_vars_imaged_moment,
+    get_videos_at_datetime,
+)
 from vars_gridview.lib.settings import SettingsManager
-from vars_gridview.lib.sort_methods import AreaSort, HeightSort, ImageReferenceUUIDSort, LabelSort, MeanHueSort, MeanIntensitySort, WidthSort, RegionMeanHueSort, DepthSort
+from vars_gridview.lib.sort_methods import (
+    AreaSort,
+    DepthSort,
+    HeightSort,
+    ImageReferenceUUIDSort,
+    LabelSort,
+    MeanHueSort,
+    MeanIntensitySort,
+    RegionMeanHueSort,
+    WidthSort,
+)
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.LoginDialog import LoginDialog
 from vars_gridview.ui.QueryDialog import QueryDialog
@@ -50,8 +60,8 @@ from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
 
 # Define main window class from template
 CWD = Path(__file__).parent
-ASSETS_DIR = CWD.parent / 'assets'
-UI_FILE_PATH = ASSETS_DIR / 'gridview.ui'
+ASSETS_DIR = CWD.parent / "assets"
+UI_FILE_PATH = ASSETS_DIR / "gridview.ui"
 WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(UI_FILE_PATH)
 
 GUI_SETTINGS = QSettings(str(constants.GUI_SETTINGS_FILE), QSettings.Format.IniFormat)
@@ -73,11 +83,11 @@ class MainWindow(TemplateBaseClass):
     """
     Main application window.
     """
-    
+
     def __init__(self, app):
         QMainWindow.__init__(self)
         TemplateBaseClass.__init__(self)
-        
+
         self._app = app
 
         # Create the main window
@@ -90,7 +100,7 @@ class MainWindow(TemplateBaseClass):
         # Restore and style GUI
         self._restore_gui()
         self._style_gui()
-        
+
         self.verifier = None  # The username of the current verifier
         self.endpoints = None  # The list of endpoint data from Raziel
 
@@ -100,8 +110,10 @@ class MainWindow(TemplateBaseClass):
             None  # Image mosaic (holds the thumbnails as a grid of RectWidgets)
         )
         self.box_handler = None  # Box handler (handles the ROIs and annotations)
-        
-        self.cached_moment_concepts = {}  # Cache for imaged moment -> set of observed concepts
+
+        self.cached_moment_concepts = (
+            {}
+        )  # Cache for imaged moment -> set of observed concepts
 
         # Connect signals to slots
         self.ui.discardButton.clicked.connect(self.move_to_discard)
@@ -112,7 +124,7 @@ class MainWindow(TemplateBaseClass):
         self.ui.hideLabeled.stateChanged.connect(self.update_layout)
         self.ui.styleComboBox.currentTextChanged.connect(self._style_gui)
         self.ui.openVideo.clicked.connect(self.open_video)
-        
+
         self.settings_dialog = SettingsDialog(self)
 
         self._launch()
@@ -125,38 +137,38 @@ class MainWindow(TemplateBaseClass):
         """
         Perform additional on-launch setup after the window is shown.
         """
-        LOGGER.info('Launching application')
-        
+        LOGGER.info("Launching application")
+
         # Run the login procedure
         login_ok = self._login_procedure()
         if not login_ok:
-            LOGGER.error('Login failed')
+            LOGGER.error("Login failed")
             QMessageBox.critical(self, "Login failed", "Login failed, exiting.")
             sys.exit(1)
 
         # Set up the label combo boxes
         self._setup_label_boxes()
-        
+
         # Set up the sort method combo box
         self._setup_sort_methods()
 
         # Set up the menu bar
         self._setup_menu_bar()
-        
-        LOGGER.info('Launch successful')
-    
+
+        LOGGER.info("Launch successful")
+
     def _get_login(self) -> Optional[Tuple[str, str, str]]:
         """
         Prompt a login dialog and return the username, password, and Raziel URL. If failed, returns None.
         """
         login_dialog = LoginDialog(parent=self)
         ok = login_dialog.exec()
-        
+
         if not ok:
             return None
-        
+
         return (*login_dialog.credentials, login_dialog.raziel_url)
-    
+
     def _login_procedure(self) -> bool:
         """
         Perform the full login + authentication procedure. Return True on success, False on fail.
@@ -164,56 +176,62 @@ class MainWindow(TemplateBaseClass):
         login = self._get_login()
         if login is None:  # Login failed
             return False
-        
+
         username, password, raziel_url = login  # unpack the credentials
-        
+
         # Update the Raziel URL setting
         settings = SettingsManager.get_instance()
         if settings.raz_url.value != raziel_url:
-            LOGGER.debug(f'Updating Raziel URL setting to {raziel_url}')
+            LOGGER.debug(f"Updating Raziel URL setting to {raziel_url}")
             settings.raz_url.value = raziel_url
-        
+
         # Authenticate Raziel + get endpoint data
         endpoints = self._auth_raziel(raziel_url, username, password)
         if endpoints is None:  # Authentication failed
             return False
-        
+
         # Authenticate M3 modules
         ok = self._setup_m3(endpoints)
         if not ok:
             return False
-        
+
         # Connect to the database
         sql.connect_from_settings()
-        
+
         # Set the verifier and endpoint data
         self.verifier = username
         self.endpoints = endpoints
-        
+
         return True
-    
+
     def _auth_raziel(self, raziel_url, username, password) -> Optional[list]:
         """
         Authenticate with Raziel. Return endpoints list on success, None on fail.
         """
-        LOGGER.debug(f'Attempting to authenticate user {username} with Raziel at {raziel_url}')
+        LOGGER.debug(
+            f"Attempting to authenticate user {username} with Raziel at {raziel_url}"
+        )
         try:
             endpoints = raziel.authenticate(raziel_url, username, password)
             return endpoints
         except Exception as e:
-            LOGGER.error(f'Raziel authentication failed: {e}')
-            QMessageBox.critical(self, "Authentication failed", f"Failed to authenticate with the configuration server. Check your username and password.\n\n{e}")
-    
+            LOGGER.error(f"Raziel authentication failed: {e}")
+            QMessageBox.critical(
+                self,
+                "Authentication failed",
+                f"Failed to authenticate with the configuration server. Check your username and password.\n\n{e}",
+            )
+
     def _setup_m3(self, endpoints: list) -> bool:
         """
         Setup the M3 modules from a list of authenticated Raziel endpoint dicts. Return True on success, False on fail.
         """
-        LOGGER.debug('Attempting to set up M3')
+        LOGGER.debug("Attempting to set up M3")
         try:
             m3.setup_from_endpoint_data(endpoints)
             return True
         except ValueError as e:
-            LOGGER.error(f'M3 setup failed: {e}')
+            LOGGER.error(f"M3 setup failed: {e}")
             QMessageBox.critical(self, "M3 setup failed", f"M3 setup failed: {e}")
             return False
 
@@ -222,27 +240,27 @@ class MainWindow(TemplateBaseClass):
         Populate the menu bar with menus and actions.
         """
         menu_bar = self.ui.menuBar
-        
-        file_menu = menu_bar.addMenu('&File')
-        
-        settings_action = QAction('&Settings', self)
-        settings_action.setShortcut('Ctrl+,')
+
+        file_menu = menu_bar.addMenu("&File")
+
+        settings_action = QAction("&Settings", self)
+        settings_action.setShortcut("Ctrl+,")
         settings_action.triggered.connect(self._open_settings)
         file_menu.addAction(settings_action)
 
-        query_menu = menu_bar.addMenu('&Query')
+        query_menu = menu_bar.addMenu("&Query")
 
-        query_action = QAction('&Query', self)
-        query_action.setShortcut('Ctrl+Q')
+        query_action = QAction("&Query", self)
+        query_action.setShortcut("Ctrl+Q")
         query_action.triggered.connect(self._do_query)
         query_menu.addAction(query_action)
-    
+
     def _open_settings(self):
         """
         Open the settings dialog.
         """
         self.settings_dialog.show()
-    
+
     def _setup_from_settings(self):
         """
         Propagate the settings to the app.
@@ -267,9 +285,9 @@ class MainWindow(TemplateBaseClass):
         query_data, query_headers = sql.query(constraint_dict)
 
         # Grab the beholder info
-        beholder_endpoint = next(e for e in self.endpoints if e['name'] == 'beholder')
-        beholder_url = beholder_endpoint['url']
-        beholder_api_key = beholder_endpoint['secret']
+        beholder_endpoint = next(e for e in self.endpoints if e["name"] == "beholder")
+        beholder_url = beholder_endpoint["url"]
+        beholder_api_key = beholder_endpoint["secret"]
 
         # Create the image mosaic
         self.image_mosaic = ImageMosaic(
@@ -293,11 +311,11 @@ class MainWindow(TemplateBaseClass):
 
         # Show some stats about the images and annotations
         self.statusBar().showMessage(
-            'Loaded '
+            "Loaded "
             + str(self.image_mosaic.n_images)
-            + ' images and '
+            + " images and "
             + str(self.image_mosaic.n_localizations)
-            + ' localizations.'
+            + " localizations."
         )
 
         # Create the box handler
@@ -314,14 +332,18 @@ class MainWindow(TemplateBaseClass):
         """
         # Set up the combo boxes
         self.ui.labelComboBox.clear()
-        concepts = [''] + sorted([c for c in get_kb_concepts() if c != ''])
+        concepts = [""] + sorted([c for c in get_kb_concepts() if c != ""])
         self.ui.labelComboBox.addItems(concepts)
-        self.ui.labelComboBox.completer().setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.ui.labelComboBox.completer().setCompletionMode(
+            QCompleter.CompletionMode.PopupCompletion
+        )
 
         self.ui.partComboBox.clear()
-        parts = [''] + sorted([p for p in get_kb_parts() if p != ''])
+        parts = [""] + sorted([p for p in get_kb_parts() if p != ""])
         self.ui.partComboBox.addItems(parts)
-        self.ui.partComboBox.completer().setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
+        self.ui.partComboBox.completer().setCompletionMode(
+            QCompleter.CompletionMode.PopupCompletion
+        )
 
     def _setup_sort_methods(self):
         """
@@ -343,32 +365,30 @@ class MainWindow(TemplateBaseClass):
             self.ui.splitter2.restoreState(GUI_SETTINGS.value("splitter2state"))
 
     def _save_gui(self):
-        GUI_SETTINGS.setValue('geometry', self.saveGeometry())
-        GUI_SETTINGS.setValue('windowState', self.saveState())
-        GUI_SETTINGS.setValue('splitter1state', self.ui.splitter1.saveState())
-        GUI_SETTINGS.setValue('splitter2state', self.ui.splitter2.saveState())
+        GUI_SETTINGS.setValue("geometry", self.saveGeometry())
+        GUI_SETTINGS.setValue("windowState", self.saveState())
+        GUI_SETTINGS.setValue("splitter1state", self.ui.splitter1.saveState())
+        GUI_SETTINGS.setValue("splitter2state", self.ui.splitter2.saveState())
 
     def update_labels(self):
         concept = self.ui.labelComboBox.currentText()
         part = self.ui.partComboBox.currentText()
 
-        if concept not in get_kb_concepts() and concept != '':
+        if concept not in get_kb_concepts() and concept != "":
             QMessageBox.critical(
-                self, 'Bad Concept', f'Bad concept \"{concept}\". Canceling.'
+                self, "Bad Concept", f'Bad concept "{concept}". Canceling.'
             )
             return
-        if part not in get_kb_parts() and part != '':
-            QMessageBox.critical(self, 'Bad Part', f'Bad part \"{part}\". Canceling.')
+        if part not in get_kb_parts() and part != "":
+            QMessageBox.critical(self, "Bad Part", f'Bad part "{part}". Canceling.')
             return
 
         to_label = self.image_mosaic.get_selected()
         if len(to_label) > 1:
             opt = QMessageBox.question(
                 self,
-                'Confirm Label',
-                'Label {} localizations?'.format(
-                    len(to_label)
-                ),
+                "Confirm Label",
+                "Label {} localizations?".format(len(to_label)),
                 defaultButton=QMessageBox.StandardButton.No,
             )
         else:
@@ -389,8 +409,8 @@ class MainWindow(TemplateBaseClass):
         to_delete = self.image_mosaic.get_selected()
         opt = QMessageBox.question(
             self,
-            'Confirm Deletion',
-            'Delete {} localizations?\nThis operation cannot be undone.'.format(
+            "Confirm Deletion",
+            "Delete {} localizations?\nThis operation cannot be undone.".format(
                 len(to_delete)
             ),
             defaultButton=QMessageBox.StandardButton.No,
@@ -459,78 +479,105 @@ class MainWindow(TemplateBaseClass):
         # Add ancillary data to the image info list
         self.ui.imageInfoList.clear()
         self.ui.imageInfoList.addItem(
-            'Derived timestamp: {}'.format(rect.annotation_datetime().strftime('%Y-%m-%d %H:%M:%S'))
+            "Derived timestamp: {}".format(
+                rect.annotation_datetime().strftime("%Y-%m-%d %H:%M:%S")
+            )
         )
         self.ui.imageInfoList.addItems(
-            ['{}: {}'.format(key.replace('_', ' ').capitalize(), value) for key, value in rect.ancillary_data.items()]
+            [
+                "{}: {}".format(key.replace("_", " ").capitalize(), value)
+                for key, value in rect.ancillary_data.items()
+            ]
         )
-        
+
         # Update VARS observations label
         imaged_moment_uuid = rect.localization.imaged_moment_uuid
         if imaged_moment_uuid in self.cached_moment_concepts:  # cache hit
             concepts = self.cached_moment_concepts[imaged_moment_uuid]
         else:  # cache miss
-            vars_moment_data = get_vars_imaged_moment(rect.localization.imaged_moment_uuid)
-            concepts = sorted(set(obs['concept'] for obs in vars_moment_data['observations']))
+            vars_moment_data = get_vars_imaged_moment(
+                rect.localization.imaged_moment_uuid
+            )
+            concepts = sorted(
+                set(obs["concept"] for obs in vars_moment_data["observations"])
+            )
             self.cached_moment_concepts[imaged_moment_uuid] = concepts
-        observed_concepts_str = ', '.join(concepts)
+        observed_concepts_str = ", ".join(concepts)
         self.ui.varsObservationsLabel.setText(observed_concepts_str)
-        
+
     @pyqtSlot()
     def open_video(self):
         """
         Open the video of the last selected ROI, if available
         """
         if not self.last_selected_roi:
-            QMessageBox.warning(self, 'No ROI Selected', 'No ROI selected.')
+            QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
             return
-        
+
         # Get the annotation recorded datetime
         annotation_datetime = self.last_selected_roi.annotation_datetime()
-        annotation_platform = self.last_selected_roi.ancillary_data.get('camera_platform', None)
+        annotation_platform = self.last_selected_roi.ancillary_data.get(
+            "camera_platform", None
+        )
         if not annotation_datetime or not annotation_platform:
-            QMessageBox.warning(self, 'Missing Info', 'ROI lacks necessary information to link video.')
+            QMessageBox.warning(
+                self, "Missing Info", "ROI lacks necessary information to link video."
+            )
             return
-        
+
         # Ask M3 for videos at the given moment
         try:
             videos = get_videos_at_datetime(annotation_datetime)
         except Exception as e:
-            QMessageBox.warning(self, 'Error Finding Video', 'An error occurred while finding the video: {}'.format(e))
+            QMessageBox.warning(
+                self,
+                "Error Finding Video",
+                "An error occurred while finding the video: {}".format(e),
+            )
             return
-        
+
         # Find a matching video URL and timedelta
         video_url = None
         annotation_timedelta = None
         for video in videos:
-            if not video['name'].startswith(annotation_platform):  # Skip if platform doesn't match
+            if not video["name"].startswith(
+                annotation_platform
+            ):  # Skip if platform doesn't match
                 continue
-            
-            video_start_timestamp = video.get('start_timestamp', None)
+
+            video_start_timestamp = video.get("start_timestamp", None)
             if video_start_timestamp is None:  # Skip if no start timestamp in video
                 continue
-            
+
             # Parse video start timestamp into datetime object
             try:
-                video_start_datetime = datetime.datetime.strptime(video_start_timestamp, '%Y-%m-%dT%H:%M:%S.%fZ')
+                video_start_datetime = datetime.datetime.strptime(
+                    video_start_timestamp, "%Y-%m-%dT%H:%M:%S.%fZ"
+                )
             except:
-                video_start_datetime = datetime.datetime.strptime(video_start_timestamp, '%Y-%m-%dT%H:%M:%SZ')
-            
+                video_start_datetime = datetime.datetime.strptime(
+                    video_start_timestamp, "%Y-%m-%dT%H:%M:%SZ"
+                )
+
             # Find a matching video reference (MP4 only)
-            video_references = video.get('video_references', [])
+            video_references = video.get("video_references", [])
             for video_reference in video_references:
-                if video_reference['uri'].startswith('http') and video_reference['uri'].endswith('.mp4'):
-                    video_url = video_reference['uri']
+                if video_reference["uri"].startswith("http") and video_reference[
+                    "uri"
+                ].endswith(".mp4"):
+                    video_url = video_reference["uri"]
                     annotation_timedelta = annotation_datetime - video_start_datetime
                     break
 
         # Open the video at the computed time delta (in seconds)
         if video_url is not None:
             annotation_seconds = max(annotation_timedelta.total_seconds(), 0)
-            url = video_url + '#t={},{}'.format(annotation_seconds, annotation_seconds + 1e-3)  # "pause" at the annotation
+            url = video_url + "#t={},{}".format(
+                annotation_seconds, annotation_seconds + 1e-3
+            )  # "pause" at the annotation
             webbrowser.open(url)
         else:
-            QMessageBox.warning(self, 'No Video Found', 'No video found for this ROI.')
+            QMessageBox.warning(self, "No Video Found", "No video found for this ROI.")
 
     @pyqtSlot()
     def _style_gui(self):
@@ -540,17 +587,17 @@ class MainWindow(TemplateBaseClass):
         # setup stylesheet
         # set the environment variable to use a specific wrapper
         # it can be set to PyQt, PyQt5, PyQt6 PySide or PySide2 (not implemented yet)
-        if self.ui.styleComboBox.currentText().lower() == 'darkstyle':
-            os.environ['PYQTGRAPH_QT_LIB'] = 'PyQt6'
+        if self.ui.styleComboBox.currentText().lower() == "darkstyle":
+            os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
             self._app.setStyleSheet(
-                qdarkstyle.load_stylesheet(qt_api=os.environ['PYQTGRAPH_QT_LIB'])
+                qdarkstyle.load_stylesheet(qt_api=os.environ["PYQTGRAPH_QT_LIB"])
             )
-        elif self.ui.styleComboBox.currentText().lower() == 'darkbreeze':
-            file = QFile(str(ASSETS_DIR / 'style'/ 'dark.qss'))
+        elif self.ui.styleComboBox.currentText().lower() == "darkbreeze":
+            file = QFile(str(ASSETS_DIR / "style" / "dark.qss"))
             file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text)
             stream = QTextStream(file)
             self._app.setStyleSheet(stream.readAll())
-        elif self.ui.styleComboBox.currentText().lower() == 'default':
+        elif self.ui.styleComboBox.currentText().lower() == "default":
             self._app.setStyleSheet("")
 
     def closeEvent(self, event):
@@ -570,23 +617,23 @@ def init_settings():
     Initialize the application settings.
     """
     settings = SettingsManager.get_instance()
-    
-    settings.sql_url = ('sql/url', str, constants.SQL_URL_DEFAULT)
-    settings.sql_user = ('sql/user', str, constants.SQL_USER_DEFAULT)
-    settings.sql_password = ('sql/password', str, constants.SQL_PASSWORD_DEFAULT)
-    settings.sql_database = ('sql/database', str, constants.SQL_DATABASE_DEFAULT)
-    
-    settings.raz_url = ('m3/raz_url', str, constants.RAZIEL_URL_DEFAULT)
-    
-    
+
+    settings.sql_url = ("sql/url", str, constants.SQL_URL_DEFAULT)
+    settings.sql_user = ("sql/user", str, constants.SQL_USER_DEFAULT)
+    settings.sql_password = ("sql/password", str, constants.SQL_PASSWORD_DEFAULT)
+    settings.sql_database = ("sql/database", str, constants.SQL_DATABASE_DEFAULT)
+
+    settings.raz_url = ("m3/raz_url", str, constants.RAZIEL_URL_DEFAULT)
+
+
 def main():
     # Create the Qt application
     app = QApplication(sys.argv)
     app.setApplicationName(constants.APP_NAME)
     app.setOrganizationName(constants.APP_ORGANIZATION)
-    
+
     QSettings.setDefaultFormat(QSettings.Format.IniFormat)
-    init_settings()    
+    init_settings()
 
     # Create the main window and show it
     main = MainWindow(app)
