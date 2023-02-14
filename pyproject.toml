@@ -20,6 +20,7 @@ requests = "^2.27.1"
 pyqtgraph = "^0.13.0"
 opencv-python-headless = "^4.5.5.62"
 qdarkstyle = "^3.0.3"
+beholder-client = "^0.1.0"
 
 [tool.poetry.scripts]
 vars-gridview = "vars_gridview.scripts.run:main"

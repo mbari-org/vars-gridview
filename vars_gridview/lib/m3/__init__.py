@@ -1,3 +1,5 @@
+from beholder_client import BeholderClient
+
 from vars_gridview.lib.m3.clients import (
     AnnosaurusClient,
     VampireSquidClient,
@@ -9,6 +11,7 @@ ANNOSAURUS_CLIENT: AnnosaurusClient = None
 VAMPIRE_SQUID_CLIENT: VampireSquidClient = None
 VARS_USER_SERVER_CLIENT: VARSUserServerClient = None
 VARS_KB_SERVER_CLIENT: VARSKBServerClient = None
+BEHOLDER_CLIENT: BeholderClient = None
 
 
 def setup_from_endpoint_data(endpoints: list):
@@ -39,3 +42,7 @@ def setup_from_endpoint_data(endpoints: list):
     kb_url, _ = get_client_url_secret("vars-kb-server")
     global VARS_KB_SERVER_CLIENT
     VARS_KB_SERVER_CLIENT = VARSKBServerClient(kb_url)
+    
+    beholder_url, beholder_api_key = get_client_url_secret("beholder")
+    global BEHOLDER_CLIENT
+    BEHOLDER_CLIENT = BeholderClient(beholder_url, beholder_api_key)
