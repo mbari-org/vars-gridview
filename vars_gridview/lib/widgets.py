@@ -18,6 +18,8 @@ from vars_gridview.lib.annotation import VARSLocalization
 
 class RectWidget(QtWidgets.QGraphicsWidget):
     rectHover = QtCore.pyqtSignal(object)
+    
+    clicked = QtCore.pyqtSignal(object, object)  # self, event
 
     def __init__(
         self,
@@ -46,7 +48,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.setAcceptHoverEvents(True)
         self.bgColor = QtCore.Qt.GlobalColor.darkGray
         self.hoverColor = QtCore.Qt.GlobalColor.lightGray
-        self.isLastSelected = False
+        self.is_last_selected = False
         self.isSelected = False
         self.forReview = False
         self.toDiscard = False
@@ -177,7 +179,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             fill_color = QtCore.Qt.GlobalColor.darkGray
 
         # fill behind image
-        if self.isLastSelected:
+        if self.is_last_selected:
             painter.fillRect(
                 QtCore.QRect(
                     0,
@@ -271,16 +273,4 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             )
 
     def mousePressEvent(self, event):
-        self.isSelected = not self.isSelected
-        self.update()
-        self.rectHover.emit(self)
-
-    def mouseReleaseEvent(self, event):
-        pass
-
-    def hoverEnterEvent(self, event):
-        modifiers = QtWidgets.QApplication.keyboardModifiers()
-        if modifiers == QtCore.Qt.KeyboardModifier.ControlModifier:
-            self.isSelected = not self.isSelected
-            self.update()
-            self.rectHover.emit(self)
+        self.clicked.emit(self, event)

@@ -33,7 +33,7 @@ class ImageMosaic(QtCore.QObject):
         graphics_view: QtWidgets.QGraphicsView,
         query_data: List[List],
         query_headers: List[str],
-        rect_slot: callable,
+        rect_clicked_slot: callable,
         verifier: str,
         beholder_url: str,
         beholder_api_key: str,
@@ -302,7 +302,7 @@ class ImageMosaic(QtCore.QObject):
                     if loc.valid_box and loc.in_bounds(min_x, min_y, max_x, max_y)
                 ]
 
-                # create the widgets
+                # Create the widgets
                 for idx, localization in enumerate(localizations):
                     other_locs = list(localizations)
                     other_locs.remove(localization)
@@ -315,7 +315,7 @@ class ImageMosaic(QtCore.QObject):
                     )
                     rw.text_label = localization.text_label
                     rw.update_zoom(zoom)
-                    rw.rectHover.connect(rect_slot)
+                    rw.clicked.connect(rect_clicked_slot)
                     self._rect_widgets.append(rw)
 
                     localization.rect = rw  # Back reference
@@ -454,6 +454,21 @@ class ImageMosaic(QtCore.QObject):
 
         # Re-render to ensure the deleted widgetss are removed from the view
         self.render_mosaic()
+    
+    def select(self, rect_widget: RectWidget, clear: bool = True):
+        """
+        Select a rect widget.
+        """
+        if rect_widget not in self._rect_widgets:
+            raise ValueError("Widget not in rect widget list")
+        
+        # Clear the selection if requested
+        if clear:
+            self.clear_selected()
+        
+        # Select the widget
+        rect_widget.isSelected = True
+        rect_widget.update()
     
     def select_range(self, first: RectWidget, last: RectWidget):
         """

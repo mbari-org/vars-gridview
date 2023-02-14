@@ -27,9 +27,7 @@ from typing import Optional, Tuple
 import cv2
 import pyqtgraph as pg
 import qdarkstyle
-from PyQt6.QtCore import QFile, QFileInfo, QSettings, QTextStream, pyqtSlot
-from PyQt6.QtGui import QAction
-from PyQt6.QtWidgets import QApplication, QCompleter, QMainWindow, QMessageBox
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib import constants, m3, raziel, sql
 from vars_gridview.lib.boxes import BoxHandler
@@ -64,7 +62,7 @@ ASSETS_DIR = CWD.parent / "assets"
 UI_FILE_PATH = ASSETS_DIR / "gridview.ui"
 WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(UI_FILE_PATH)
 
-GUI_SETTINGS = QSettings(str(constants.GUI_SETTINGS_FILE), QSettings.Format.IniFormat)
+GUI_SETTINGS = QtCore.QSettings(str(constants.GUI_SETTINGS_FILE), QtCore.QSettings.Format.IniFormat)
 
 ENABLED_SORT_METHODS = [
     ImageReferenceUUIDSort,
@@ -85,7 +83,7 @@ class MainWindow(TemplateBaseClass):
     """
 
     def __init__(self, app):
-        QMainWindow.__init__(self)
+        QtWidgets.QMainWindow.__init__(self)
         TemplateBaseClass.__init__(self)
 
         self._app = app
@@ -104,7 +102,7 @@ class MainWindow(TemplateBaseClass):
         self.verifier = None  # The username of the current verifier
         self.endpoints = None  # The list of endpoint data from Raziel
 
-        self.last_selected_roi = None  # Last selected ROI
+        self.last_selected_rect = None  # Last selected ROI
 
         self.image_mosaic = (
             None  # Image mosaic (holds the thumbnails as a grid of RectWidgets)
@@ -143,7 +141,7 @@ class MainWindow(TemplateBaseClass):
         login_ok = self._login_procedure()
         if not login_ok:
             LOGGER.error("Login failed")
-            QMessageBox.critical(self, "Login failed", "Login failed, exiting.")
+            QtWidgets.QMessageBox.critical(self, "Login failed", "Login failed, exiting.")
             sys.exit(1)
 
         # Set up the label combo boxes
@@ -216,7 +214,7 @@ class MainWindow(TemplateBaseClass):
             return endpoints
         except Exception as e:
             LOGGER.error(f"Raziel authentication failed: {e}")
-            QMessageBox.critical(
+            QtWidgets.QMessageBox.critical(
                 self,
                 "Authentication failed",
                 f"Failed to authenticate with the configuration server. Check your username and password.\n\n{e}",
@@ -232,7 +230,7 @@ class MainWindow(TemplateBaseClass):
             return True
         except ValueError as e:
             LOGGER.error(f"M3 setup failed: {e}")
-            QMessageBox.critical(self, "M3 setup failed", f"M3 setup failed: {e}")
+            QtWidgets.QMessageBox.critical(self, "M3 setup failed", f"M3 setup failed: {e}")
             return False
 
     def _setup_menu_bar(self):
@@ -243,14 +241,14 @@ class MainWindow(TemplateBaseClass):
 
         file_menu = menu_bar.addMenu("&File")
 
-        settings_action = QAction("&Settings", self)
+        settings_action = QtGui.QAction("&Settings", self)
         settings_action.setShortcut("Ctrl+,")
         settings_action.triggered.connect(self._open_settings)
         file_menu.addAction(settings_action)
 
         query_menu = menu_bar.addMenu("&Query")
 
-        query_action = QAction("&Query", self)
+        query_action = QtGui.QAction("&Query", self)
         query_action.setShortcut("Ctrl+Q")
         query_action.triggered.connect(self._do_query)
         query_menu.addAction(query_action)
@@ -277,7 +275,7 @@ class MainWindow(TemplateBaseClass):
         if constraint_dict is None:  # User cancelled, do nothing
             return
         else:  # Unload
-            self.last_selected_roi = None
+            self.last_selected_rect = None
             self.image_mosaic = None
             self.box_handler = None
 
@@ -294,7 +292,7 @@ class MainWindow(TemplateBaseClass):
             self.ui.roiGraphicsView,
             query_data,
             query_headers,
-            self.rect_click,
+            self.rect_clicked,
             self.verifier,
             beholder_url,
             beholder_api_key,
@@ -335,14 +333,14 @@ class MainWindow(TemplateBaseClass):
         concepts = [""] + sorted([c for c in get_kb_concepts() if c != ""])
         self.ui.labelComboBox.addItems(concepts)
         self.ui.labelComboBox.completer().setCompletionMode(
-            QCompleter.CompletionMode.PopupCompletion
+            QtWidgets.QCompleter.CompletionMode.PopupCompletion
         )
 
         self.ui.partComboBox.clear()
         parts = [""] + sorted([p for p in get_kb_parts() if p != ""])
         self.ui.partComboBox.addItems(parts)
         self.ui.partComboBox.completer().setCompletionMode(
-            QCompleter.CompletionMode.PopupCompletion
+            QtWidgets.QCompleter.CompletionMode.PopupCompletion
         )
 
     def _setup_sort_methods(self):
@@ -357,7 +355,7 @@ class MainWindow(TemplateBaseClass):
         """
         Restore window size and splitter states
         """
-        finfo = QFileInfo(GUI_SETTINGS.fileName())
+        finfo = QtCore.QFileInfo(GUI_SETTINGS.fileName())
         if finfo.exists() and finfo.isFile():
             self.restoreGeometry(GUI_SETTINGS.value("geometry"))
             self.restoreState(GUI_SETTINGS.value("windowState"))
@@ -375,57 +373,57 @@ class MainWindow(TemplateBaseClass):
         part = self.ui.partComboBox.currentText()
 
         if concept not in get_kb_concepts() and concept != "":
-            QMessageBox.critical(
+            QtWidgets.QMessageBox.critical(
                 self, "Bad Concept", f'Bad concept "{concept}". Canceling.'
             )
             return
         if part not in get_kb_parts() and part != "":
-            QMessageBox.critical(self, "Bad Part", f'Bad part "{part}". Canceling.')
+            QtWidgets.QMessageBox.critical(self, "Bad Part", f'Bad part "{part}". Canceling.')
             return
 
         to_label = self.image_mosaic.get_selected()
         if len(to_label) > 1:
-            opt = QMessageBox.question(
+            opt = QtWidgets.QMessageBox.question(
                 self,
                 "Confirm Label",
                 "Label {} localizations?".format(len(to_label)),
-                defaultButton=QMessageBox.StandardButton.No,
+                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
             )
         else:
-            opt = QMessageBox.StandardButton.Yes
+            opt = QtWidgets.QMessageBox.StandardButton.Yes
 
-        if opt == QMessageBox.StandardButton.Yes:
+        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             # Apply labels to all selected localizations, push to VARS
             self.image_mosaic.apply_label(concept, part)
 
             # Update the label of the selected localization in the image view (if necessary)
             self.box_handler.update_labels()
 
-    @pyqtSlot()
+    @QtCore.pyqtSlot()
     def move_to_discard(self):
         if not self.loaded:
             return
 
         to_delete = self.image_mosaic.get_selected()
-        opt = QMessageBox.question(
+        opt = QtWidgets.QMessageBox.question(
             self,
             "Confirm Deletion",
             "Delete {} localizations?\nThis operation cannot be undone.".format(
                 len(to_delete)
             ),
-            defaultButton=QMessageBox.StandardButton.No,
+            defaultButton=QtWidgets.QMessageBox.StandardButton.No,
         )
-        if opt == QMessageBox.StandardButton.Yes:
+        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             self.image_mosaic.delete_selected()
 
-    @pyqtSlot()
+    @QtCore.pyqtSlot()
     def clear_selected(self):
         if not self.loaded:
             return
 
         self.image_mosaic.clear_selected()
 
-    @pyqtSlot()
+    @QtCore.pyqtSlot()
     def update_layout(self):
         if not self.loaded:
             return
@@ -436,37 +434,46 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic.render_mosaic(sort_method=method)
 
-    @pyqtSlot(int)
+    @QtCore.pyqtSlot(int)
     def update_zoom(self, zoom):
         if not self.loaded:
             return
 
         self.image_mosaic.update_zoom(zoom / 100)
 
-    @pyqtSlot(object)
-    def rect_click(self, rect: RectWidget):
+    @QtCore.pyqtSlot(object, object)
+    def rect_clicked(self, rect: RectWidget, event: QtGui.QMouseEvent):
         if not self.loaded:
             return
+        
+        # Get modifier (ctrl, shift) states
+        ctrl = event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
+        shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
 
         # Save information to VARS for any moved/resized boxes
         self.box_handler.save_all(self.verifier)
 
-        # remove highlight from the last selected ROI
-        if self.last_selected_roi is not None:
+        # Select the widget
+        if shift:
+            self.image_mosaic.select_range(self.last_selected_rect, rect)
+        else:
+            self.image_mosaic.select(rect, clear=not ctrl)
+
+        # Remove highlight from the last selected ROI
+        if self.last_selected_rect is not None:
             self.box_handler.clear()
-            self.last_selected_roi.isLastSelected = False
-            self.last_selected_roi.update()
+            self.last_selected_rect.is_last_selected = False
+            self.last_selected_rect.update()
 
-        # update the new selection
-        rect.isLastSelected = True
+        # Update the last selection
+        rect.is_last_selected = True
         rect.update()
-        self.last_selected_roi = rect
+        self.last_selected_rect = rect
 
+        # Update the image and add the boxes
         full_img = rect.getFullImage()
         if full_img is None:
             return
-
-        # Update the image and add the boxes
         self.box_handler.roiDetail.setImage(cv2.cvtColor(full_img, cv2.COLOR_BGR2RGB))
         self.box_handler.add_annotation(rect.index, rect)
 
@@ -505,22 +512,22 @@ class MainWindow(TemplateBaseClass):
         observed_concepts_str = ", ".join(concepts)
         self.ui.varsObservationsLabel.setText(observed_concepts_str)
 
-    @pyqtSlot()
+    @QtCore.pyqtSlot()
     def open_video(self):
         """
         Open the video of the last selected ROI, if available
         """
-        if not self.last_selected_roi:
-            QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
+        if not self.last_selected_rect:
+            QtWidgets.QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
             return
 
         # Get the annotation recorded datetime
-        annotation_datetime = self.last_selected_roi.annotation_datetime()
-        annotation_platform = self.last_selected_roi.ancillary_data.get(
+        annotation_datetime = self.last_selected_rect.annotation_datetime()
+        annotation_platform = self.last_selected_rect.ancillary_data.get(
             "camera_platform", None
         )
         if not annotation_datetime or not annotation_platform:
-            QMessageBox.warning(
+            QtWidgets.QMessageBox.warning(
                 self, "Missing Info", "ROI lacks necessary information to link video."
             )
             return
@@ -529,7 +536,7 @@ class MainWindow(TemplateBaseClass):
         try:
             videos = get_videos_at_datetime(annotation_datetime)
         except Exception as e:
-            QMessageBox.warning(
+            QtWidgets.QMessageBox.warning(
                 self,
                 "Error Finding Video",
                 "An error occurred while finding the video: {}".format(e),
@@ -577,9 +584,9 @@ class MainWindow(TemplateBaseClass):
             )  # "pause" at the annotation
             webbrowser.open(url)
         else:
-            QMessageBox.warning(self, "No Video Found", "No video found for this ROI.")
+            QtWidgets.QMessageBox.warning(self, "No Video Found", "No video found for this ROI.")
 
-    @pyqtSlot()
+    @QtCore.pyqtSlot()
     def _style_gui(self):
         """
         Set the GUI stylesheet.
@@ -593,9 +600,9 @@ class MainWindow(TemplateBaseClass):
                 qdarkstyle.load_stylesheet(qt_api=os.environ["PYQTGRAPH_QT_LIB"])
             )
         elif self.ui.styleComboBox.currentText().lower() == "darkbreeze":
-            file = QFile(str(ASSETS_DIR / "style" / "dark.qss"))
-            file.open(QFile.OpenModeFlag.ReadOnly | QFile.OpenModeFlag.Text)
-            stream = QTextStream(file)
+            file = QtCore.QFile(str(ASSETS_DIR / "style" / "dark.qss"))
+            file.open(QtCore.QFile.OpenModeFlag.ReadOnly | QtCore.QFile.OpenModeFlag.Text)
+            stream = QtCore.QTextStream(file)
             self._app.setStyleSheet(stream.readAll())
         elif self.ui.styleComboBox.currentText().lower() == "default":
             self._app.setStyleSheet("")
@@ -604,7 +611,7 @@ class MainWindow(TemplateBaseClass):
         self._save_gui()
         if self.loaded:
             self.box_handler.save_all(self.verifier)
-        QMainWindow.closeEvent(self, event)
+        QtWidgets.QMainWindow.closeEvent(self, event)
 
     def query(self) -> Optional[dict]:
         dialog = QueryDialog(parent=self)
@@ -628,11 +635,11 @@ def init_settings():
 
 def main():
     # Create the Qt application
-    app = QApplication(sys.argv)
+    app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName(constants.APP_NAME)
     app.setOrganizationName(constants.APP_ORGANIZATION)
 
-    QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+    QtCore.QSettings.setDefaultFormat(QtCore.QSettings.Format.IniFormat)
     init_settings()
 
     # Create the main window and show it
