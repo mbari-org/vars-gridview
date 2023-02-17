@@ -235,23 +235,36 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         else:
             fill_color = QtCore.Qt.GlobalColor.darkGray
 
-        # fill behind image
-        if self.is_last_selected:
+        def color_for_concept(concept: str):
+            hash = sum(map(ord, concept)) << 5
+            color = QtGui.QColor()
+            color.setHsl(round((hash % 360) / 360 * 255), 255, 217, 255)
+            return color
+        
+        # Fill outline if selected
+        if self.is_selected:
             painter.fillRect(
                 QtCore.QRect(
-                    0,
-                    0,
-                    int(self.zoom * (self.pic.rect().width() + 2 * self.bordersize)),
-                    int(self.zoom)
-                    * (
-                        self.pic.rect().height()
-                        + self.labelheight
-                        + 2 * self.bordersize
-                    ),
+                    -2,
+                    -2,
+                    self.boundingRect().width() + 4,
+                    self.boundingRect().height() + 4,
                 ),
                 QtGui.QColor(61, 174, 233, 255),
             )
 
+        # Fill background if verified
+        if self.is_verified:
+            painter.fillRect(
+                QtCore.QRect(
+                    0,
+                    0,
+                    self.boundingRect().width(),
+                    self.boundingRect().height(),
+                ),
+                color_for_concept(self.text_label),
+            )
+            
         # Fill label
         painter.fillRect(
             QtCore.QRect(
@@ -260,10 +273,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
                 int(self.zoom * self.pic.rect().width()),
                 int(self.zoom * self.labelheight),
             ),
-            fill_color,
+            color_for_concept(self.text_label),
         )
 
         # Draw image
+        painter.setBackgroundMode(QtCore.Qt.BGMode.TransparentMode)
         painter.drawPixmap(
             QtCore.QRect(
                 int(self.zoom * self.bordersize),

@@ -42,7 +42,7 @@ class ImageMosaic(QtCore.QObject):
     ):
         super().__init__()
         
-        self._rect_widgets = []
+        self._rect_widgets: List[RectWidget] = []
         self.roi_map = {}
         self._hide_labeled = True
         self.hide_discarded = True
@@ -556,8 +556,10 @@ class ImageMosaic(QtCore.QObject):
         # Select all widgets in the range
         self.clear_selected()
         for idx in range(begin_idx, end_idx + 1):
-            self._rect_widgets[idx].is_selected = True
-            self._rect_widgets[idx].update()
+            # Only select if it's visible
+            if self._rect_widgets[idx].isVisible():    
+                self._rect_widgets[idx].is_selected = True
+                self._rect_widgets[idx].update()
 
     def clear_selected(self):
         """
