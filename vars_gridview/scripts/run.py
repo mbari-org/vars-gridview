@@ -114,7 +114,7 @@ class MainWindow(TemplateBaseClass):
         )  # Cache for imaged moment -> set of observed concepts
 
         # Connect signals to slots
-        self.ui.discardButton.clicked.connect(self.move_to_discard)
+        self.ui.discardButton.clicked.connect(self.delete)
         self.ui.clearSelections.clicked.connect(self.clear_selected)
         self.ui.labelSelectedButton.clicked.connect(self.update_labels)
         self.ui.zoomSpinBox.valueChanged.connect(self.update_zoom)
@@ -400,7 +400,7 @@ class MainWindow(TemplateBaseClass):
             self.box_handler.update_labels()
 
     @QtCore.pyqtSlot()
-    def move_to_discard(self):
+    def delete(self):
         if not self.loaded:
             return
 
@@ -415,6 +415,11 @@ class MainWindow(TemplateBaseClass):
         )
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             self.image_mosaic.delete_selected()
+            self.box_handler.roi_detail.clear()
+            self.box_handler.clear()
+            self.ui.annotationXML.clear()
+            self.ui.imageInfoList.clear()
+            self.ui.varsObservationsLabel.clear()
 
     @QtCore.pyqtSlot()
     def clear_selected(self):
@@ -471,11 +476,11 @@ class MainWindow(TemplateBaseClass):
         self.last_selected_rect = rect
 
         # Update the image and add the boxes
-        full_img = rect.getFullImage()
-        if full_img is None:
+        rect_full_image = rect.get_full_image()
+        if rect_full_image is None:
             return
-        self.box_handler.roiDetail.setImage(cv2.cvtColor(full_img, cv2.COLOR_BGR2RGB))
-        self.box_handler.add_annotation(rect.index, rect)
+        self.box_handler.roi_detail.setImage(cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB))
+        self.box_handler.add_annotation(rect.localization_index, rect)
 
         # Add localization data to the panel
         self.ui.annotationXML.clear()

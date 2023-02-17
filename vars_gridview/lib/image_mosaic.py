@@ -18,9 +18,11 @@ from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.sort_methods import SortMethod
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.lib.constants import IMAGE_TYPE
+from vars_gridview.ui.DeleteDialog import DeleteDialog
 
 
 class ImageMosaic(QtCore.QObject):
@@ -236,15 +238,17 @@ class ImageMosaic(QtCore.QObject):
                         (annotation_datetime - video_start_datetime).total_seconds()
                         * 1000
                     )
-                    res = requests.post(
-                        beholder_url + "/capture",
-                        json={
-                            "videoUrl": mp4_data["video_uri"],
-                            "elapsedTimeMillis": int(elapsed_time_millis),
-                        },
-                        headers={"X-Api-Key": self.beholder_api_key},
-                    )  # TODO REMOVE
-                    if res.status_code != 200:
+                    try:
+                        res = requests.post(
+                            beholder_url + "/capture",
+                            json={
+                                "videoUrl": mp4_data["video_uri"],
+                                "elapsedTimeMillis": int(elapsed_time_millis),
+                            },
+                            headers={"X-Api-Key": self.beholder_api_key},
+                        )
+                        res.raise_for_status()
+                    except Exception as e:
                         LOGGER.error(
                             "Error getting capture from beholder for moment: {}, skipping".format(
                                 imaged_moment_uuid
@@ -271,59 +275,50 @@ class ImageMosaic(QtCore.QObject):
 
                 dlg += 1
 
-        with pg.ProgressDialog(
-            "Creating widgets...", 0, self.n_localizations
-        ) as roi_pd:
-            for (
-                imaged_moment_uuid,
-                localizations,
-            ) in self.moment_localizations.items():
-                # If image not there for one reason or another, skip
-                if (
-                    imaged_moment_uuid not in self.moment_image_map
-                    or self.moment_image_map[imaged_moment_uuid] is None
-                ):
-                    continue
+        for imaged_moment_uuid, localizations in self.moment_localizations.items():
+            # If image not there for one reason or another, skip
+            if (
+                imaged_moment_uuid not in self.moment_image_map
+                or self.moment_image_map[imaged_moment_uuid] is None
+            ):
+                continue
 
-                image = self.moment_image_map[imaged_moment_uuid]
-                ancillary_data = (
-                    self.moment_ancillary_data.get(imaged_moment_uuid, None) or {}
+            image = self.moment_image_map[imaged_moment_uuid]
+            ancillary_data = (
+                self.moment_ancillary_data.get(imaged_moment_uuid, None) or {}
+            )
+            video_data = self.moment_video_data.get(imaged_moment_uuid, None) or {}
+            min_x = 0
+            min_y = 0
+            max_x = image.shape[1]
+            max_y = image.shape[0]
+
+            # Filter out invalid boxes
+            localizations = [
+                loc
+                for loc in localizations
+                if loc.valid_box and loc.in_bounds(min_x, min_y, max_x, max_y)
+            ]
+
+            # Create the widgets
+            for idx, localization in enumerate(localizations):
+                other_locs = list(localizations)
+                other_locs.remove(localization)
+                rw = RectWidget(
+                    other_locs + [localization],
+                    image,
+                    ancillary_data,
+                    video_data,
+                    len(other_locs),
                 )
-                video_data = self.moment_video_data.get(imaged_moment_uuid, None) or {}
-                min_x = 0
-                min_y = 0
-                max_x = image.shape[1]
-                max_y = image.shape[0]
+                rw.text_label = localization.text_label
+                rw.update_zoom(zoom)
+                rw.clicked.connect(rect_clicked_slot)
+                self._rect_widgets.append(rw)
 
-                # Filter out invalid boxes
-                localizations = [
-                    loc
-                    for loc in localizations
-                    if loc.valid_box and loc.in_bounds(min_x, min_y, max_x, max_y)
-                ]
+                localization.rect = rw  # Back reference
 
-                # Create the widgets
-                for idx, localization in enumerate(localizations):
-                    other_locs = list(localizations)
-                    other_locs.remove(localization)
-                    rw = RectWidget(
-                        other_locs + [localization],
-                        image,
-                        ancillary_data,
-                        video_data,
-                        len(other_locs),
-                    )
-                    rw.text_label = localization.text_label
-                    rw.update_zoom(zoom)
-                    rw.clicked.connect(rect_clicked_slot)
-                    self._rect_widgets.append(rw)
-
-                    localization.rect = rw  # Back reference
-
-                    self.n_localizations += 1
-
-                    # update progress bar
-                    roi_pd += 1
+                self.n_localizations += 1
 
     def sort_rect_widgets(self, sort_method: SortMethod):
         """
@@ -364,7 +359,7 @@ class ImageMosaic(QtCore.QObject):
         
     def _clear_graphics_layout(self):
         """
-        Clear the graphics layout
+        Remove all widgets from the layout
         """
         while self._graphics_widget.layout().count() > 0:
             self._graphics_widget.layout().removeAt(0)
@@ -384,9 +379,11 @@ class ImageMosaic(QtCore.QObject):
             rect_widget_height = self._rect_widgets[0].boundingRect().height()
             columns = max(int(width / rect_widget_width), 1)
         else:
+            rect_widget_width = 0
+            rect_widget_height = 0
             columns = 1  # No widgets, so just one column
 
-        # Clear the graphics layout
+        # Clear the graphics
         self._clear_graphics_layout()
 
         # Get the subset of rect widgets to render
@@ -424,7 +421,7 @@ class ImageMosaic(QtCore.QObject):
 
             # Update the widget's text label and deselect it
             rect.text_label = rect.localization.text_label
-            rect.isSelected = False
+            rect.is_selected = False
 
             # Propagate visual changes
             rect.update()
@@ -438,21 +435,83 @@ class ImageMosaic(QtCore.QObject):
         Returns:
             List of selected widgets
         """
-        return [rw for rw in self._rect_widgets if rw.isSelected]
+        return [rw for rw in self._rect_widgets if rw.is_selected]
 
     def delete_selected(self):
         """
         Delete all selected rect widgets and re-render.
+        
+        The logic for handling the association/observation is handled here.
+        1. If the selected localizations are the only localizations for an observation, add the observation to a list
+        2. Show a dialog to the user asking if they want to also delete the observations
+        3. If the user says yes, delete the observations
+        4. If no, delete the bounding box associations only
         """
-        for rw in self.get_selected():
-            rw.localization.delete()
-            rw.deleted = True
-            self._rect_widgets.remove(rw)
-
+        selected = self.get_selected()
+        
+        bounding_box_association_uuids_to_delete = [
+            rw.localization.association_uuid
+            for rw in selected
+        ]
+        
+        observation_uuids = [
+            rw.localization.observation_uuid
+            for rw in selected
+        ]
+        
+        # Get the UUIDs of the bounding box associations tied to the observations
+        bounding_box_association_uuids_by_observation_uuid = dict()
+        with pg.ProgressDialog("Checking parent observations...", 0, len(observation_uuids), parent=self._graphics_view) as obs_pd:
+            for observation_uuid in set(observation_uuids):
+                if observation_uuid not in bounding_box_association_uuids_to_delete:
+                    bounding_box_association_uuids_by_observation_uuid[observation_uuid] = []
+                
+                try:
+                    observation = operations.get_observation(observation_uuid)  # Get the observation data from VARS
+                    for association in observation.get('associations'):
+                        if association.get('link_name') == 'bounding box':
+                            association_uuid = association.get('uuid')
+                            
+                            # Add the association UUID to the list for this observation UUID
+                            bounding_box_association_uuids_by_observation_uuid[observation_uuid].append(association_uuid)
+                except Exception as e:
+                    LOGGER.error(f"Error getting observation {observation_uuid}: {e}")
+                
+                obs_pd += 1
+        
+        # Select the subset of observations that will have no more bounding box associations after deleting the selected ones
+        dangling_observations_uuids_to_delete = [
+            observation_uuid for observation_uuid in observation_uuids
+            if len(set(bounding_box_association_uuids_by_observation_uuid[observation_uuid]) - set(bounding_box_association_uuids_to_delete)) == 0
+        ]
+        
+        if len(dangling_observations_uuids_to_delete) > 0:
+            # Show a dialog to the user asking if they want to delete observations too
+            confirm = QtWidgets.QMessageBox.question(
+                self._graphics_view, "Delete dangling observations?",
+                f"This operation would leave {len(dangling_observations_uuids_to_delete)} observations with no bounding box associations. Would you like to delete these dangling observations too?"
+            )
+            
+            if confirm == QtWidgets.QMessageBox.StandardButton.Yes:
+                delete_observations = True
+            else:
+                delete_observations = False
+        else:  # No dangling observations, so just delete the localizations
+            delete_observations = False
+        
         # De-select the deleted widgets
         self.clear_selected()
+        
+        # Delete the observations/associations for the selected widgets and hide them
+        with pg.ProgressDialog(f"Deleting localizations{' and dangling observations' if delete_observations else ''}...", 0, len(selected), parent=self._graphics_view) as pd:
+            for rw in selected:
+                delete_observation = delete_observations and rw.localization.observation_uuid in dangling_observations_uuids_to_delete  # Only delete the observation if it's in the list of dangling observations
+                rw.delete(observation=delete_observation)
+                rw.hide()
+                self._rect_widgets.remove(rw)
+                pd += 1
 
-        # Re-render to ensure the deleted widgetss are removed from the view
+        # Re-render to ensure the deleted widgets are removed from the view
         self.render_mosaic()
     
     def select(self, rect_widget: RectWidget, clear: bool = True):
@@ -467,7 +526,7 @@ class ImageMosaic(QtCore.QObject):
             self.clear_selected()
         
         # Select the widget
-        rect_widget.isSelected = True
+        rect_widget.is_selected = True
         rect_widget.update()
     
     def select_range(self, first: RectWidget, last: RectWidget):
@@ -489,7 +548,7 @@ class ImageMosaic(QtCore.QObject):
         # Select all widgets in the range
         self.clear_selected()
         for idx in range(begin_idx, end_idx + 1):
-            self._rect_widgets[idx].isSelected = True
+            self._rect_widgets[idx].is_selected = True
             self._rect_widgets[idx].update()
 
     def clear_selected(self):
@@ -497,7 +556,7 @@ class ImageMosaic(QtCore.QObject):
         Clear the selection of rect widgets.
         """
         for ind in range(0, len(self._rect_widgets)):
-            self._rect_widgets[ind].isSelected = False
+            self._rect_widgets[ind].is_selected = False
             self._rect_widgets[ind].update()
 
     def update_zoom(self, zoom):

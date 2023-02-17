@@ -14,6 +14,8 @@ import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib.annotation import VARSLocalization
+from vars_gridview.lib.m3 import operations
+from vars_gridview.lib.log import LOGGER
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
@@ -27,17 +29,17 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         image: np.ndarray,
         ancillary_data: dict,
         video_data: dict,
-        index: int,
+        localization_index: int,
         parent=None,
         text_label="rect widget",
     ):
         QtWidgets.QGraphicsWidget.__init__(self, parent)
 
-        self.localizations = localizations  # Dumb, but it works
+        self.localizations = localizations
         self.image = image
         self.ancillary_data = ancillary_data
         self.video_data = video_data
-        self.index = index
+        self.localization_index = localization_index
 
         self.labelheight = 30
         self.bordersize = 4
@@ -45,19 +47,74 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.zoom = 0.5
         self.text_label = text_label
         self._boundingRect = QtCore.QRect()
-        self.setAcceptHoverEvents(True)
-        self.bgColor = QtCore.Qt.GlobalColor.darkGray
-        self.hoverColor = QtCore.Qt.GlobalColor.lightGray
+        self.background_color = QtCore.Qt.GlobalColor.darkGray
+        self.hover_color = QtCore.Qt.GlobalColor.lightGray
+        
         self.is_last_selected = False
-        self.isSelected = False
-        self.forReview = False
-        self.toDiscard = False
+        self.is_selected = False
 
         self.roi = None
         self.pic = None
         self.update_roi_pic()
 
-        self.deleted = False
+        self._deleted = False  # Flag to indicate if this rect widget has been deleted. Used to prevent double deletion.
+
+    @property
+    def deleted(self) -> bool:
+        """
+        Check if this rect widget has been deleted.
+        """
+        return self._deleted
+    
+    @deleted.setter
+    def deleted(self, value: bool) -> None:
+        """
+        Set the deleted flag for this rect widget and its localization.
+        """
+        self._deleted = value
+        self.localization.deleted = value
+
+    def delete(self, observation: bool = False) -> bool:
+        """
+        Delete this rect widget and its associated localization. If observation is True, delete the entire observation instead.
+        
+        Args:
+            observation: If True, delete the entire observation instead of just the association.
+        
+        Returns:
+            True if the rect widget was deleted successfully, False otherwise.
+        """
+        if self.deleted:  # Don't delete twice
+            raise ValueError("This rect widget has already been deleted")
+        
+        if observation:
+            try:
+                operations.delete_observation(self.observation_uuid)
+                self.deleted = True
+            except Exception as e:
+                LOGGER.error(f"Error deleting observation {self.observation_uuid} from rect widget: {e}")
+        else:
+            try:
+                operations.delete_association(self.association_uuid)
+                self.deleted = True
+            except Exception as e:
+                LOGGER.error(f"Error deleting association {self.association_uuid} from rect widget: {e}")
+        
+        return self.deleted
+
+    @property
+    def observation_uuid(self) -> str:
+        """
+        Get the UUID of the observation associated with this rect widget.
+        """
+        return self.localization.observation_uuid
+    
+    @property
+    def association_uuid(self) -> str:
+        """
+        Get the UUID of the association associated with this rect widget.
+        """
+        return self.localization.association_uuid
 
     def update_roi_pic(self):
         self.roi = self.localization.get_roi(self.image)
@@ -66,11 +123,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     @property
     def is_verified(self) -> bool:
-        return self.localizations[self.index].verified
+        return self.localizations[self.localization_index].verified
 
     @property
-    def localization(self):
-        return self.localizations[self.index]
+    def localization(self) -> VARSLocalization:
+        return self.localizations[self.localization_index]
 
     @property
     def image_width(self):
@@ -120,7 +177,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.boundingRect()
         self.updateGeometry()
 
-    def getFullImage(self):
+    def get_full_image(self):
         return np.rot90(self.image, 3, (0, 1))
 
     def boundingRect(self):
@@ -171,7 +228,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         painter.setPen(pen)
 
         # very simple selection and annotation logic
-        if self.isSelected:
+        if self.is_selected:
             fill_color = QtCore.Qt.GlobalColor.green
         elif self.is_verified:
             fill_color = QtCore.Qt.GlobalColor.yellow
@@ -229,48 +286,6 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         painter.drawText(
             text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, self.text_label
         )
-
-        if self.toDiscard:
-            painter.fillRect(
-                QtCore.QRect(
-                    int(self.zoom * self.bordersize),
-                    int(self.zoom * (self.bordersize)),
-                    int(self.zoom * self.pic.rect().width()),
-                    int(self.zoom * self.labelheight),
-                ),
-                QtCore.Qt.GlobalColor.gray,
-            )
-            text_rect = QtCore.QRect(
-                0,
-                int(self.zoom * (self.pic.rect().y())),
-                int(self.zoom * self.pic.rect().width()),
-                int(self.zoom * self.labelheight),
-            )
-            painter.setPen(QtCore.Qt.GlobalColor.red)
-            painter.drawText(
-                text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "To Remove"
-            )
-
-        if self.forReview:
-            painter.fillRect(
-                QtCore.QRect(
-                    int(self.zoom * self.bordersize),
-                    int(self.zoom * (self.bordersize)),
-                    int(self.zoom * self.pic.rect().width()),
-                    int(self.zoom * self.labelheight),
-                ),
-                QtCore.Qt.GlobalColor.gray,
-            )
-            text_rect = QtCore.QRect(
-                0,
-                int(self.zoom * (self.pic.rect().y())),
-                int(self.zoom * self.pic.rect().width()),
-                int(self.zoom * self.labelheight),
-            )
-            painter.setPen(QtCore.Qt.GlobalColor.blue)
-            painter.drawText(
-                text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, "For Review"
-            )
 
     def mousePressEvent(self, event):
         self.clicked.emit(self, event)

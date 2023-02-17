@@ -77,8 +77,8 @@ class BoundingBox(pg.RectROI):
             self.setPos(min(max_x, max(min_x, x)), min(max_y, max(min_y, y)))
 
     @property
-    def isSelected(self):
-        return self.rect.isSelected
+    def is_selected(self):
+        return self.rect.is_selected
 
     def _dirty(self):
         self.dirty = True
@@ -153,12 +153,12 @@ class BoxHandler:
         self.boxes = []
         self.dragging = False
 
-        self.vb = pg.ViewBox()
+        self.view_box = pg.ViewBox()
         self.graphics_view = graphics_view
-        self.graphics_view.setCentralItem(self.vb)
-        self.vb.setAspectLocked()
-        self.roiDetail = pg.ImageItem()
-        self.vb.addItem(self.roiDetail)
+        self.graphics_view.setCentralItem(self.view_box)
+        self.view_box.setAspectLocked()
+        self.roi_detail = pg.ImageItem()
+        self.view_box.addItem(self.roi_detail)
         self.localization = localization
         self.all_labels = all_labels
         self.verifier = verifier
@@ -167,7 +167,7 @@ class BoxHandler:
 
     def update_labels(self):
         for box in self.boxes:
-            if box.isSelected:
+            if box.is_selected:
                 box.update_label()
 
     def add_annotation(self, obj_idx, rect):
@@ -192,7 +192,7 @@ class BoxHandler:
 
                 # Create the bounding box
                 bb = BoundingBox(
-                    self.vb,
+                    self.view_box,
                     [xmin, height - ymin],
                     [xmax - xmin, -1 * (ymax - ymin)],
                     rect,
@@ -212,9 +212,9 @@ class BoxHandler:
             if box.dirty:
                 box.localization.push_changes(verifier)
 
-    def mapToItem(self, pos):
-        pt = self.vb.mapSceneToView(pos)
-        pt = self.vb.mapFromViewToItem(self.roiDetail, pt)
+    def map_pos_to_item(self, pos):
+        pt = self.view_box.mapSceneToView(pos)
+        pt = self.view_box.mapFromViewToItem(self.roi_detail, pt)
         return pt
 
     def clear(self):

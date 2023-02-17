@@ -10,7 +10,7 @@ from typing import Optional, Union
 import numpy as np
 
 from vars_gridview.lib.m3.operations import (
-    delete_bounding_box,
+    delete_association,
     update_bounding_box_data,
     update_bounding_box_part,
     update_observation_concept,
@@ -125,6 +125,10 @@ class VARSLocalization:
     @property
     def deleted(self):
         return self._deleted
+    
+    @deleted.setter
+    def deleted(self, value):
+        self._deleted = value
 
     def set_box(self, x: int, y: int, width: int, height: int):
         if self.x != x or self.y != y or self.width != width or self.height != height:
@@ -164,10 +168,6 @@ class VARSLocalization:
             and self.xf <= max_x
             and self.yf <= max_y
         )
-
-    def delete(self):
-        delete_bounding_box(self.association_uuid)
-        self._deleted = True
 
     def push_changes(self, verifier: str):
         do_modify_box = False
