@@ -282,6 +282,12 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             int(self.zoom * self.pic.rect().width()),
             int(self.zoom * self.labelheight),
         )
+        
+        # Set font
+        font = QtGui.QFont(
+            'Arial', int(self.zoom * self.labelheight * 0.5), QtGui.QFont.Weight.Bold, False
+        )
+        painter.setFont(font)
 
         painter.drawText(
             text_rect, QtCore.Qt.AlignmentFlag.AlignCenter, self.text_label
