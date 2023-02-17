@@ -390,12 +390,21 @@ class ImageMosaic(QtCore.QObject):
             rw for rw in self._rect_widgets
             if not (self._hide_labeled and rw.is_verified)
         ]
+        
+        # Hide all rect widgets that we aren't rendering
+        rect_widgets_to_hide = [
+            rw for rw in self._rect_widgets
+            if rw not in rect_widgets_to_render
+        ]
+        for rw in rect_widgets_to_hide:
+            rw.hide()
 
         # Add the rect widgets to the layout
         for idx, rect_widget in enumerate(rect_widgets_to_render):
             row = int(idx / columns)
             col = idx % columns
             self._graphics_widget.layout().addItem(rect_widget, row, col)
+            rect_widget.show()  # Make sure it's visible
         
         # Resize the widget to fit the rect widget grid
         self._graphics_widget.resize(
