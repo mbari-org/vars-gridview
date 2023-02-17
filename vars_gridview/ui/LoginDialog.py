@@ -53,6 +53,8 @@ class LoginDialog(QtWidgets.QDialog):
         super().__init__(parent)
 
         self.setWindowTitle("Login")
+        
+        self.setMinimumWidth(400)
 
         self._login_form = LoginDialog.LoginForm(self, completer)
 
