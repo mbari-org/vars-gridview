@@ -252,7 +252,7 @@
                                             </font>
                                         </property>
                                         <property name="text">
-                                            <string>Hide Labeled</string>
+                                            <string>Hide Verified</string>
                                         </property>
                                         <property name="checked">
                                             <bool>false</bool>
