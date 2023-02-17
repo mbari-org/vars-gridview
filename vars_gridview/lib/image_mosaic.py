@@ -363,7 +363,7 @@ class ImageMosaic(QtCore.QObject):
         while self._graphics_widget.layout().count() > 0:
             self._graphics_widget.layout().removeAt(0)
 
-    def render_mosaic(self, sort_method: Optional[SortMethod] = None):
+    def render_mosaic(self):
         """
         Load images + annotations and populate the mosaic
         """

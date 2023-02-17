@@ -42,12 +42,14 @@ from vars_gridview.lib.m3.operations import (
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import (
     AreaSort,
+    AssociationUUIDSort,
     DepthSort,
     HeightSort,
     ImageReferenceUUIDSort,
     LabelSort,
     MeanHueSort,
     MeanIntensitySort,
+    ObservationUUIDSort,
     RegionMeanHueSort,
     WidthSort,
 )
@@ -65,6 +67,8 @@ WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(UI_FILE_PATH)
 GUI_SETTINGS = QtCore.QSettings(str(constants.GUI_SETTINGS_FILE), QtCore.QSettings.Format.IniFormat)
 
 ENABLED_SORT_METHODS = [
+    AssociationUUIDSort,
+    ObservationUUIDSort,
     ImageReferenceUUIDSort,
     LabelSort,
     WidthSort,
@@ -305,7 +309,8 @@ class MainWindow(TemplateBaseClass):
 
         # Render
         sort_method = self.ui.sortMethod.currentData()
-        self.image_mosaic.render_mosaic(sort_method=sort_method)
+        self.image_mosaic.sort_rect_widgets(sort_method)
+        self.image_mosaic.render_mosaic()
 
         # Show some stats about the images and annotations
         self.statusBar().showMessage(
@@ -437,7 +442,8 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
-        self.image_mosaic.render_mosaic(sort_method=method)
+        self.image_mosaic.sort_rect_widgets(method)
+        self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot(int)
     def update_zoom(self, zoom):

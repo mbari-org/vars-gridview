@@ -28,6 +28,13 @@ class SQLTab(AbstractSettingsTab):
 
     def arrange(self):
         layout = QtWidgets.QFormLayout()
+        
+        layout.addRow(
+            "",
+            QtWidgets.QLabel(
+                "Changes in this tab will only take effect after restarting the application."
+            )
+        )
 
         layout.addRow("Server URL", self.sql_url_edit)
         layout.addRow("Username", self.user_edit)

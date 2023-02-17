@@ -29,6 +29,22 @@ class SortMethod(ABC):
         rect_widgets.sort(key=cls.key, **kwargs)
 
 
+class AssociationUUIDSort(SortMethod):
+    NAME = "Association UUID"
+
+    @staticmethod
+    def key(rect: RectWidget) -> str:
+        return rect.association_uuid
+
+
+class ObservationUUIDSort(SortMethod):
+    NAME = "Observation UUID"
+    
+    @staticmethod
+    def key(rect: RectWidget) -> Any:
+        return rect.observation_uuid
+
+
 class ImageReferenceUUIDSort(SortMethod):
     NAME = "Image reference UUID"
 

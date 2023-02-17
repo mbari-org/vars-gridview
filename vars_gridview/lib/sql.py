@@ -4,6 +4,7 @@ from typing import Tuple
 import pymssql
 
 from vars_gridview.lib.constants import BASE_QUERY_FILE
+from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.settings import SettingsManager
 
 SQL_CONNECTION = None
@@ -89,8 +90,7 @@ def connect(server_url: str, user: str, password: str, database: str):
             server=server_url, user=user, password=password, database=database
         )
     except pymssql.DatabaseError as e:
-        pass  # TODO: log an error
-        print(f"Failed to connect to SQL server: {e}")
+        LOGGER.error(f"Failed to connect to SQL server: {e}")
         sys.exit(1)
 
 
