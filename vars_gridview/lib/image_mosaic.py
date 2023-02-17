@@ -22,7 +22,6 @@ from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.sort_methods import SortMethod
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.lib.constants import IMAGE_TYPE
-from vars_gridview.ui.DeleteDialog import DeleteDialog
 
 
 class ImageMosaic(QtCore.QObject):
