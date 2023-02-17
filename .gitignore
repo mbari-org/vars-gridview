@@ -3,3 +3,4 @@ vars_gridview/assets/gui.ini
 vars_gridview/logs/
 logs/
 dist/
+poetry.lock
