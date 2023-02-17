@@ -110,6 +110,10 @@ class AnnosaurusClient(M3Client):
         return super().url_to(path)
 
     @needs_auth
+    def create_association(self, data: dict) -> requests.Response:
+        return self.post("/associations", data=data)
+    
+    @needs_auth
     def update_association(
         self, association_uuid: str, data: dict
     ) -> requests.Response:
@@ -118,12 +122,23 @@ class AnnosaurusClient(M3Client):
     @needs_auth
     def delete_association(self, association_uuid: str) -> requests.Response:
         return self.delete(f"/associations/{association_uuid}")
+    
+    def get_observation(self, observation_uuid: str) -> requests.Response:
+        return self.get(f"/observations/{observation_uuid}")
+    
+    @needs_auth
+    def create_observation(self, data: dict) -> requests.Response:
+        return self.post("/annotations", data=data)
 
     @needs_auth
     def update_observation(
         self, observation_uuid: str, data: dict
     ) -> requests.Response:
         return self.put(f"/observations/{observation_uuid}", data=data)
+    
+    @needs_auth
+    def delete_observation(self, observation_uuid: str) -> requests.Response:
+        return self.delete(f'/observations/{observation_uuid}')
 
 
 class VampireSquidClient(M3Client):
