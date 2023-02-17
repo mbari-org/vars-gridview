@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from datetime import datetime
 from typing import Any, List
 
 import numpy as np
@@ -29,20 +30,28 @@ class SortMethod(ABC):
         rect_widgets.sort(key=cls.key, **kwargs)
 
 
+class RecordedTimestampSort(SortMethod):
+    NAME = "Recorded timestamp"
+    
+    @staticmethod
+    def key(rect: RectWidget) -> datetime:
+        return rect.annotation_datetime() or datetime.min
+
+
 class AssociationUUIDSort(SortMethod):
     NAME = "Association UUID"
 
     @staticmethod
     def key(rect: RectWidget) -> str:
-        return rect.association_uuid
+        return rect.association_uuid or ""
 
 
 class ObservationUUIDSort(SortMethod):
     NAME = "Observation UUID"
     
     @staticmethod
-    def key(rect: RectWidget) -> Any:
-        return rect.observation_uuid
+    def key(rect: RectWidget) -> str:
+        return rect.observation_uuid or ""
 
 
 class ImageReferenceUUIDSort(SortMethod):

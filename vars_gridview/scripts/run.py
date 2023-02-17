@@ -50,6 +50,7 @@ from vars_gridview.lib.sort_methods import (
     MeanHueSort,
     MeanIntensitySort,
     ObservationUUIDSort,
+    RecordedTimestampSort,
     RegionMeanHueSort,
     WidthSort,
 )
@@ -67,6 +68,7 @@ WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(UI_FILE_PATH)
 GUI_SETTINGS = QtCore.QSettings(str(constants.GUI_SETTINGS_FILE), QtCore.QSettings.Format.IniFormat)
 
 ENABLED_SORT_METHODS = [
+    RecordedTimestampSort,
     AssociationUUIDSort,
     ObservationUUIDSort,
     ImageReferenceUUIDSort,
