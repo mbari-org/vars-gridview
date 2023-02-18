@@ -247,8 +247,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
                 QtCore.QRect(
                     -2,
                     -2,
-                    self.boundingRect().width() + 4,
-                    self.boundingRect().height() + 4,
+                    int(self.boundingRect().width() + 4),
+                    int(self.boundingRect().height() + 4),
                 ),
                 QtGui.QColor(61, 174, 233, 255),
             )
@@ -259,8 +259,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
                 QtCore.QRect(
                     0,
                     0,
-                    self.boundingRect().width(),
-                    self.boundingRect().height(),
+                    int(self.boundingRect().width()),
+                    int(self.boundingRect().height()),
                 ),
                 color_for_concept(self.text_label),
             )
