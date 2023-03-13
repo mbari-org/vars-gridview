@@ -469,6 +469,8 @@ class MainWindow(TemplateBaseClass):
         # Select the widget
         if shift:
             self.image_mosaic.select_range(self.last_selected_rect, rect)
+        elif ctrl and rect.is_selected:
+            self.image_mosaic.deselect(rect)
         else:
             self.image_mosaic.select(rect, clear=not ctrl)
 

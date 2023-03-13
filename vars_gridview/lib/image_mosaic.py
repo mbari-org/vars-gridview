@@ -522,6 +522,17 @@ class ImageMosaic(QtCore.QObject):
         # Re-render to ensure the deleted widgets are removed from the view
         self.render_mosaic()
     
+    def deselect(self, rect_widget: RectWidget):
+        """
+        Deselect a rect widget.
+        """
+        if rect_widget not in self._rect_widgets:
+            raise ValueError("Widget not in rect widget list")
+        
+        # Deselect the widget
+        rect_widget.is_selected = False
+        rect_widget.update()
+    
     def select(self, rect_widget: RectWidget, clear: bool = True):
         """
         Select a rect widget.
