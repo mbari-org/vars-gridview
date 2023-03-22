@@ -14,6 +14,7 @@ from vars_gridview.lib.log import LOGGER
 KB_CONCEPTS = None
 KB_PARTS = None
 USERS = None
+VIDEO_SEQUENCE_NAMES = None
 
 
 def get_kb_concepts() -> List[str]:
@@ -224,3 +225,19 @@ def get_vars_imaged_moment(image_reference_uuid: str) -> dict:
     )
 
     return response.json()
+
+
+def get_video_sequence_names() -> List[str]:
+    """
+    Get a list of all video sequence names.
+    """
+    global VIDEO_SEQUENCE_NAMES
+    if not VIDEO_SEQUENCE_NAMES:
+        LOGGER.debug("Getting video sequence names from Vampire Squid")
+        response = m3.VAMPIRE_SQUID_CLIENT.get_video_sequence_names()
+
+        response.raise_for_status()
+        VIDEO_SEQUENCE_NAMES = response.json()
+        LOGGER.debug(f"Got {len(VIDEO_SEQUENCE_NAMES)} video sequence names")
+    
+    return VIDEO_SEQUENCE_NAMES

@@ -17,6 +17,7 @@ SELECT DISTINCT
     assoc.link_value AS link_value,
     chief_scientist,
     dive_number,
+    video_sequence_name,
     camera_platform,
     depth_meters,
     latitude,

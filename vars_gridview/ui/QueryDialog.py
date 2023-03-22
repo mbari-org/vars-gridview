@@ -21,6 +21,7 @@ from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
     get_kb_descendants,
     get_users,
+    get_video_sequence_names,
 )
 
 
@@ -110,6 +111,26 @@ class DiveNumberFilter(Filter):
         )
         if ok:
             return DiveNumberFilter.Result(dive_number)
+
+
+class VideoSequenceNameFilter(Filter):
+    class Result(Filter.Result):
+        def __init__(self, video_sequence_name: str):
+            self.video_sequence_name = video_sequence_name
+
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            yield Constraint("video_sequence_name", self.video_sequence_name)
+
+        def __str__(self) -> str:
+            return "Video sequence name: {}".format(self.video_sequence_name)
+    
+    def __call__(self) -> Optional[Result]:
+        video_sequence_name, ok = QInputDialog.getItem(
+            self.parent, "Video sequence name", "Video sequence name", get_video_sequence_names(), 0, True
+        )
+        if ok:
+            return VideoSequenceNameFilter.Result(video_sequence_name)
 
 
 class ChiefScientistFilter(Filter):
@@ -383,6 +404,7 @@ class QueryDialog(QDialog):
             ConceptFilter(self, "Concept"),
             ConceptDescFilter(self, "Concept (+ descendants)"),
             DiveNumberFilter(self, "Dive number"),
+            VideoSequenceNameFilter(self, "Video sequence name"),
             ChiefScientistFilter(self, "Chief scientist"),
             PlatformFilter(self, "Platform"),
             ObserverFilter(self, "Observer"),

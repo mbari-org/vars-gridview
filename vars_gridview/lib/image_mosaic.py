@@ -199,6 +199,7 @@ class ImageMosaic(QtCore.QObject):
             for imaged_moment_uuid, url in worklist.items():
                 if dlg.wasCanceled():
                     LOGGER.info("Image loading cancelled by user")
+                    break
 
                 if (
                     imaged_moment_uuid in self.moment_image_map
