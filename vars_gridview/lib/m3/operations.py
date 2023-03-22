@@ -200,6 +200,19 @@ def get_videos_at_datetime(dt: datetime) -> List[dict]:
     return response.json()
 
 
+def get_video_by_video_reference_uuid(video_reference_uuid: str) -> dict:
+    """
+    Get a video information by a contained video reference UUID.
+    """
+    LOGGER.debug(f"Getting video by video reference UUID {video_reference_uuid}")
+    response = m3.VAMPIRE_SQUID_CLIENT.get_video_by_video_reference_uuid(
+        video_reference_uuid
+    )
+
+    response.raise_for_status()
+    return response.json()
+
+
 def get_vars_imaged_moment(image_reference_uuid: str) -> dict:
     """
     Get MBARI VARS imaged moment by UUID.

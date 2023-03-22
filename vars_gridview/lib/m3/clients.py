@@ -151,6 +151,9 @@ class VampireSquidClient(M3Client):
 
     def get_videos_at_timestamp(self, timestamp: str) -> requests.Response:
         return self.get(f"/videos/timestamp/{timestamp}")
+    
+    def get_video_by_video_reference_uuid(self, video_reference_uuid: str) -> requests.Response:
+        return self.get(f"/videos/videoreference/{video_reference_uuid}")
 
 
 class VARSUserServerClient(M3Client):

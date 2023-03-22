@@ -60,9 +60,10 @@ class ImageMosaic(QtCore.QObject):
         self.moment_image_data = {}
         self.moment_localizations = {}
         self.moment_video_data = {}
-        self.moment_mp4_data = {}
         self.observation_data = {}
         self.moment_image_map = {}  # Big
+        
+        self.video_reference_uuid_to_mp4_video_reference = {}
 
         self.moment_localizations = {}
         self.moment_ancillary_data = {}
@@ -75,99 +76,111 @@ class ImageMosaic(QtCore.QObject):
 
         # Munge query items into corresponding dicts
         seen_associations = set()
-        for query_item in (
-            dict(zip(query_headers, i)) for i in query_data
-        ):  # TODO Make pagination
-            for k, v in query_item.items():  # Stringify UUID objects
-                if type(v) == UUID:
-                    query_item[k] = str(v)
+        with pg.ProgressDialog('Getting video information...', maximum=len(query_data)) as progress:
+            for query_item in (
+                dict(zip(query_headers, i)) for i in query_data
+            ):  # TODO Make pagination
+                for k, v in query_item.items():  # Stringify UUID objects
+                    if type(v) == UUID:
+                        query_item[k] = str(v)
 
-            # Extract fields
-            imaged_moment_uuid = query_item["imaged_moment_uuid"]
-            image_reference_uuid = query_item["image_reference_uuid"]
-            observation_uuid = query_item["observation_uuid"]
-            association_uuid = query_item["association_uuid"]
+                # Extract fields
+                imaged_moment_uuid = query_item["imaged_moment_uuid"]
+                image_reference_uuid = query_item["image_reference_uuid"]
+                observation_uuid = query_item["observation_uuid"]
+                association_uuid = query_item["association_uuid"]
 
-            image_format = query_item["image_format"]
-            image_url = query_item["image_url"]
+                image_format = query_item["image_format"]
+                image_url = query_item["image_url"]
 
-            concept = query_item["concept"]
+                concept = query_item["concept"]
 
-            link_name = query_item["link_name"]
-            to_concept = query_item["to_concept"]
-            link_value = query_item["link_value"]
+                link_name = query_item["link_name"]
+                to_concept = query_item["to_concept"]
+                link_value = query_item["link_value"]
 
-            # Set up moment data
-            if (
-                imaged_moment_uuid not in self.moment_image_data
-                and image_format == IMAGE_TYPE
-            ):
-                self.moment_image_data[imaged_moment_uuid] = {
-                    "image_reference_uuid": image_reference_uuid,
-                    "image_url": image_url,
-                }
+                # Set up moment data
+                if (
+                    imaged_moment_uuid not in self.moment_image_data
+                    and image_format == IMAGE_TYPE
+                ):
+                    self.moment_image_data[imaged_moment_uuid] = {
+                        "image_reference_uuid": image_reference_uuid,
+                        "image_url": image_url,
+                    }
 
-            # Tag in ancillary data
-            if imaged_moment_uuid not in self.moment_ancillary_data:
-                self.moment_ancillary_data[imaged_moment_uuid] = {
+                # Tag in ancillary data
+                if imaged_moment_uuid not in self.moment_ancillary_data:
+                    self.moment_ancillary_data[imaged_moment_uuid] = {
+                        k: query_item[k]
+                        for k in (  # Ancillary data keys
+                            "camera_platform",
+                            "dive_number",
+                            "depth_meters",
+                            "latitude",
+                            "longitude",
+                            "oxygen_ml_per_l",
+                            "pressure_dbar",
+                            "salinity",
+                            "temperature_celsius",
+                            "light_transmission",
+                        )
+                    }
+
+                # Extract video data
+                video_data = {
                     k: query_item[k]
-                    for k in (  # Ancillary data keys
-                        "camera_platform",
-                        "dive_number",
-                        "depth_meters",
-                        "latitude",
-                        "longitude",
-                        "oxygen_ml_per_l",
-                        "pressure_dbar",
-                        "salinity",
-                        "temperature_celsius",
-                        "light_transmission",
+                    for k in (  # Video data keys
+                        "index_elapsed_time_millis",
+                        "index_timecode",
+                        "index_recorded_timestamp",
+                        "video_start_timestamp",
+                        "video_uri",
+                        "video_container",
+                        "video_reference_uuid"
                     )
                 }
 
-            # Extract video data
-            video_data = {
-                k: query_item[k]
-                for k in (  # Video data keys
-                    "index_elapsed_time_millis",
-                    "index_timecode",
-                    "index_recorded_timestamp",
-                    "video_start_timestamp",
-                    "video_uri",
-                    "video_container",
-                )
-            }
+                # Tag in video data where appropriate
+                if video_data.get("video_uri", None) is not None:  # valid video
+                    if imaged_moment_uuid not in self.moment_video_data:
+                        self.moment_video_data[imaged_moment_uuid] = video_data
 
-            # Tag in video data where appropriate
-            if video_data["video_uri"] is not None:  # valid video
-                if imaged_moment_uuid not in self.moment_video_data:
-                    self.moment_video_data[imaged_moment_uuid] = video_data
+                # Find the corresponding MP4 video reference for this video reference, if there is one
+                video_reference_uuid = query_item["video_reference_uuid"]
+                if video_reference_uuid is not None and video_reference_uuid not in self.video_reference_uuid_to_mp4_video_reference:
+                    try:
+                        video_data = operations.get_video_by_video_reference_uuid(video_reference_uuid)
+                        for video_reference in video_data["video_references"]:
+                            if video_reference.get("container", None) == "video/mp4":
+                                self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = video_reference
+                                break
+                        else:
+                            self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = None
+                    except requests.exceptions.HTTPError as e:
+                        LOGGER.error(f"Could not get video data for video reference {video_reference_uuid}: {e}")
+                        self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = None
 
-                # For beholder
-                if (
-                    imaged_moment_uuid not in self.moment_mp4_data
-                    and video_data["video_container"] == "video/mp4"
-                ):
-                    self.moment_mp4_data[imaged_moment_uuid] = video_data
+                # Collect bounding boxes
+                if link_name == "bounding box":
+                    if association_uuid in seen_associations:
+                        continue
+                    seen_associations.add(association_uuid)
 
-            # Collect bounding boxes
-            if link_name == "bounding box":
-                if association_uuid in seen_associations:
-                    continue
-                seen_associations.add(association_uuid)
+                    json_loc = link_value
+                    localization = VARSLocalization.from_json(json_loc)
 
-                json_loc = link_value
-                localization = VARSLocalization.from_json(json_loc)
+                    localization.set_concept(concept, to_concept)
 
-                localization.set_concept(concept, to_concept)
+                    localization.imaged_moment_uuid = imaged_moment_uuid
+                    localization.observation_uuid = observation_uuid
+                    localization.association_uuid = association_uuid
 
-                localization.imaged_moment_uuid = imaged_moment_uuid
-                localization.observation_uuid = observation_uuid
-                localization.association_uuid = association_uuid
-
-                if imaged_moment_uuid not in self.moment_localizations:
-                    self.moment_localizations[imaged_moment_uuid] = []
-                self.moment_localizations[imaged_moment_uuid].append(localization)
+                    if imaged_moment_uuid not in self.moment_localizations:
+                        self.moment_localizations[imaged_moment_uuid] = []
+                    self.moment_localizations[imaged_moment_uuid].append(localization)
+            
+                progress += 1
 
         # Create a worklist (imaged moment UUID -> URL or None)
         worklist = {}
@@ -189,27 +202,37 @@ class ImageMosaic(QtCore.QObject):
 
                 if (
                     imaged_moment_uuid in self.moment_image_map
-                ):  # already downloaded, skip
+                ):  # Already downloaded, skip
+                    LOGGER.debug("Skipping, already downloaded image for moment: {}".format(imaged_moment_uuid))
                     continue
 
-                if url is None:  # no image reference, need to use beholder
-                    elapsed_time_millis = None
-                    mp4_data = self.moment_mp4_data.get(imaged_moment_uuid, None)
-                    if mp4_data is None:
-                        LOGGER.warning(
-                            "No web video available for capture for moment: {}, skipping".format(
-                                imaged_moment_uuid
+                if url is None:  # No image reference, need to use beholder
+                    original_video_data = self.moment_video_data[imaged_moment_uuid]
+                    
+                    # Find the video URI of the MP4 video
+                    video_uri = None
+                    original_video_reference_uuid = original_video_data["video_reference_uuid"]
+                    if original_video_reference_uuid is not None and original_video_reference_uuid in self.video_reference_uuid_to_mp4_video_reference:
+                        mp4_video_reference = self.video_reference_uuid_to_mp4_video_reference[original_video_reference_uuid]
+                        if mp4_video_reference is not None:
+                            video_uri = mp4_video_reference["uri"]
+                        else:
+                            LOGGER.warning(
+                                "No web video available for capture for moment: {}, skipping".format(
+                                    imaged_moment_uuid
+                                )
                             )
-                        )
-                        continue
+                            continue
 
-                    video_start_datetime = mp4_data["video_start_timestamp"]
-
-                    elapsed_time_millis = mp4_data.get(
+                    # Compute the elapsed time in milliseconds of the annotation into the video
+                    elapsed_time_millis = None
+                    
+                    video_start_datetime = original_video_data["video_start_timestamp"]
+                    elapsed_time_millis = original_video_data.get(
                         "index_elapsed_time_millis", None
                     )
-                    timecode = mp4_data.get("index_timecode", None)
-                    recorded_timestamp = mp4_data.get("index_recorded_timestamp", None)
+                    timecode = original_video_data.get("index_timecode", None)
+                    recorded_timestamp = original_video_data.get("index_recorded_timestamp", None)
 
                     # Get annotation video time index
                     annotation_datetime = None
@@ -237,11 +260,14 @@ class ImageMosaic(QtCore.QObject):
                         (annotation_datetime - video_start_datetime).total_seconds()
                         * 1000
                     )
+                    
+                    # Get the capture from beholder
+                    LOGGER.debug(f"Getting capture from beholder for moment: {imaged_moment_uuid} ({video_uri} @ {elapsed_time_millis} ms)")
                     try:
                         res = requests.post(
                             beholder_url + "/capture",
                             json={
-                                "videoUrl": mp4_data["video_uri"],
+                                "videoUrl": video_uri,
                                 "elapsedTimeMillis": int(elapsed_time_millis),
                             },
                             headers={"X-Api-Key": self.beholder_api_key},
@@ -274,12 +300,14 @@ class ImageMosaic(QtCore.QObject):
 
                 dlg += 1
 
+        # Create the rect widgets
         for imaged_moment_uuid, localizations in self.moment_localizations.items():
             # If image not there for one reason or another, skip
             if (
                 imaged_moment_uuid not in self.moment_image_map
                 or self.moment_image_map[imaged_moment_uuid] is None
             ):
+                LOGGER.debug(f"Skipping moment {imaged_moment_uuid} due to missing image")
                 continue
 
             image = self.moment_image_map[imaged_moment_uuid]
@@ -300,7 +328,7 @@ class ImageMosaic(QtCore.QObject):
             ]
 
             # Create the widgets
-            for idx, localization in enumerate(localizations):
+            for localization in localizations:
                 other_locs = list(localizations)
                 other_locs.remove(localization)
                 rw = RectWidget(
