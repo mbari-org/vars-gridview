@@ -538,68 +538,37 @@ class MainWindow(TemplateBaseClass):
 
         # Get the annotation recorded datetime
         annotation_datetime = self.last_selected_rect.annotation_datetime()
-        annotation_platform = self.last_selected_rect.ancillary_data.get(
-            "camera_platform", None
-        )
-        if not annotation_datetime or not annotation_platform:
+        
+        # Get the annotation video reference UUID and start timestamp
+        video_reference_uuid = self.last_selected_rect.video_data.get("video_reference_uuid", None)
+        video_start_datetime = self.last_selected_rect.video_data.get("video_start_timestamp", None)
+        
+        # Exit if we don't have what we need
+        if annotation_datetime is None or video_reference_uuid is None or video_start_datetime is None:
             QtWidgets.QMessageBox.warning(
                 self, "Missing Info", "ROI lacks necessary information to link video."
             )
             return
-
-        # Ask M3 for videos at the given moment
-        try:
-            videos = get_videos_at_datetime(annotation_datetime)
-        except Exception as e:
+        
+        # Get the MP4 video reference from the image mosaic, if available
+        mp4_video_reference = self.image_mosaic.video_reference_uuid_to_mp4_video_reference.get(video_reference_uuid, None)
+        if mp4_video_reference is None:
             QtWidgets.QMessageBox.warning(
-                self,
-                "Error Finding Video",
-                "An error occurred while finding the video: {}".format(e),
+                self, "Missing Video", "ROI lacks MP4 video."
             )
             return
 
-        # Find a matching video URL and timedelta
-        video_url = None
-        annotation_timedelta = None
-        for video in videos:
-            if not video["name"].startswith(
-                annotation_platform
-            ):  # Skip if platform doesn't match
-                continue
+        mp4_video_url = mp4_video_reference.get("uri", None)
 
-            video_start_timestamp = video.get("start_timestamp", None)
-            if video_start_timestamp is None:  # Skip if no start timestamp in video
-                continue
+        # Compute the timedelta between the annotation and video start
+        annotation_timedelta = annotation_datetime - video_start_datetime
 
-            # Parse video start timestamp into datetime object
-            try:
-                video_start_datetime = datetime.datetime.strptime(
-                    video_start_timestamp, "%Y-%m-%dT%H:%M:%S.%fZ"
-                )
-            except:
-                video_start_datetime = datetime.datetime.strptime(
-                    video_start_timestamp, "%Y-%m-%dT%H:%M:%SZ"
-                )
-
-            # Find a matching video reference (MP4 only)
-            video_references = video.get("video_references", [])
-            for video_reference in video_references:
-                if video_reference["uri"].startswith("http") and video_reference[
-                    "uri"
-                ].endswith(".mp4"):
-                    video_url = video_reference["uri"]
-                    annotation_timedelta = annotation_datetime - video_start_datetime
-                    break
-
-        # Open the video at the computed time delta (in seconds)
-        if video_url is not None:
-            annotation_seconds = max(annotation_timedelta.total_seconds(), 0)
-            url = video_url + "#t={},{}".format(
-                annotation_seconds, annotation_seconds + 1e-3
-            )  # "pause" at the annotation
-            webbrowser.open(url)
-        else:
-            QtWidgets.QMessageBox.warning(self, "No Video Found", "No video found for this ROI.")
+        # Open the MP4 video at the computed timedelta (in seconds)
+        annotation_seconds = max(annotation_timedelta.total_seconds(), 0)
+        url = mp4_video_url + "#t={},{}".format(
+            annotation_seconds, annotation_seconds + 1e-3
+        )  # "pause" at the annotation
+        webbrowser.open(url)
 
     @QtCore.pyqtSlot()
     def _style_gui(self):
