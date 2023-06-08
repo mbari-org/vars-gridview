@@ -168,6 +168,9 @@ class ImageMosaic(QtCore.QObject):
                         video_sequence = operations.get_video_sequence_by_name(video_sequence_name)
                         for video in video_sequence["videos"]:
                             # Extract video time bounds
+                            if "start_timestamp" not in video or "duration_millis" not in video:  # invalid video, can't use
+                                continue
+                            
                             video_start_timestamp = parse_iso(video["start_timestamp"])
                             video_end_timestamp = video_start_timestamp + timedelta(milliseconds=video["duration_millis"])
                             
