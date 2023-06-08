@@ -4,7 +4,7 @@ M3 operations. Make use of the clients defined in __init__.py.
 
 import json
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 import requests
 
@@ -210,6 +210,17 @@ def get_video_by_video_reference_uuid(video_reference_uuid: str) -> dict:
         video_reference_uuid
     )
 
+    response.raise_for_status()
+    return response.json()
+
+
+def get_video_sequence_by_name(name: str) -> dict:
+    """
+    Get a video sequence by name.
+    """
+    LOGGER.debug(f"Getting video sequence by name {name}")
+    response = m3.VAMPIRE_SQUID_CLIENT.get_video_sequence_by_name(name)
+    
     response.raise_for_status()
     return response.json()
 

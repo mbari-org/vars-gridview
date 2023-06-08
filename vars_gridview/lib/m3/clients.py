@@ -157,6 +157,9 @@ class VampireSquidClient(M3Client):
     
     def get_video_sequence_names(self) -> requests.Response:
         return self.get("/videosequences/names")
+    
+    def get_video_sequence_by_name(self, name: str) -> requests.Response:
+        return self.get(f"/videosequences/name/{name}")
 
 
 class VARSUserServerClient(M3Client):

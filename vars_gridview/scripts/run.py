@@ -54,6 +54,7 @@ from vars_gridview.lib.sort_methods import (
     RegionMeanHueSort,
     WidthSort,
 )
+from vars_gridview.lib.util import parse_iso
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.LoginDialog import LoginDialog
 from vars_gridview.ui.QueryDialog import QueryDialog
@@ -541,7 +542,14 @@ class MainWindow(TemplateBaseClass):
         
         # Get the annotation video reference UUID and start timestamp
         video_reference_uuid = self.last_selected_rect.video_data.get("video_reference_uuid", None)
-        video_start_datetime = self.last_selected_rect.video_data.get("video_start_timestamp", None)
+        proxy_mp4 = self.last_selected_rect.video_data.get("proxy_mp4", None)
+        if proxy_mp4 is None:
+            QtWidgets.QMessageBox.warning(
+                self, "Missing Video", "ROI lacks MP4 video."
+            )
+            return
+            
+        video_start_datetime = proxy_mp4.get("start_timestamp", None)
         
         # Exit if we don't have what we need
         if annotation_datetime is None or video_reference_uuid is None or video_start_datetime is None:
@@ -561,7 +569,7 @@ class MainWindow(TemplateBaseClass):
         mp4_video_url = mp4_video_reference.get("uri", None)
 
         # Compute the timedelta between the annotation and video start
-        annotation_timedelta = annotation_datetime - video_start_datetime
+        annotation_timedelta = annotation_datetime - parse_iso(video_start_datetime)
 
         # Open the MP4 video at the computed timedelta (in seconds)
         annotation_seconds = max(annotation_timedelta.total_seconds(), 0)

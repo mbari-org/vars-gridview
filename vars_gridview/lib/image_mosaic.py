@@ -6,7 +6,7 @@ Distributed under MIT license. See license.txt for more infomation.
 
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional
 from uuid import UUID
 
@@ -20,6 +20,7 @@ from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.sort_methods import SortMethod
+from vars_gridview.lib.util import get_timestamp, parse_iso
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.lib.constants import IMAGE_TYPE
 
@@ -137,7 +138,8 @@ class ImageMosaic(QtCore.QObject):
                         "video_start_timestamp",
                         "video_uri",
                         "video_container",
-                        "video_reference_uuid"
+                        "video_reference_uuid",
+                        "video_sequence_name"
                     )
                 }
 
@@ -148,17 +150,39 @@ class ImageMosaic(QtCore.QObject):
 
                 # Find the corresponding MP4 video reference for this video reference, if there is one
                 video_reference_uuid = query_item["video_reference_uuid"]
-                if video_reference_uuid is not None and video_reference_uuid not in self.video_reference_uuid_to_mp4_video_reference:
+                video_sequence_name = query_item["video_sequence_name"]
+                
+                original_video_start_timestamp = video_data["video_start_timestamp"]
+                    
+                elapsed_time_millis = video_data.get(
+                    "index_elapsed_time_millis", None
+                )
+                timecode = video_data.get("index_timecode", None)
+                recorded_timestamp = video_data.get("index_recorded_timestamp", None)
+
+                # Get annotation video time index
+                annotation_timestamp = get_timestamp(original_video_start_timestamp, recorded_timestamp, elapsed_time_millis, timecode)
+                
+                if annotation_timestamp is not None and video_reference_uuid is not None and video_reference_uuid not in self.video_reference_uuid_to_mp4_video_reference:
                     try:
-                        video_data = operations.get_video_by_video_reference_uuid(video_reference_uuid)
-                        for video_reference in video_data["video_references"]:
-                            if video_reference.get("container", None) == "video/mp4":
-                                self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = video_reference
-                                break
-                        else:
-                            self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = None
+                        video_sequence = operations.get_video_sequence_by_name(video_sequence_name)
+                        for video in video_sequence["videos"]:
+                            # Extract video time bounds
+                            video_start_timestamp = parse_iso(video["start_timestamp"])
+                            video_end_timestamp = video_start_timestamp + timedelta(milliseconds=video["duration_millis"])
+                            
+                            if not (video_start_timestamp <= annotation_timestamp <= video_end_timestamp):  # Annotation is not in this video
+                                continue
+                            
+                            for video_reference in video["video_references"]:
+                                if video_reference.get("container", None) == "video/mp4":
+                                    self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = video_reference
+                                    video_data["proxy_mp4"] = video
+                                    break
+                            else:
+                                self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = None
                     except requests.exceptions.HTTPError as e:
-                        LOGGER.error(f"Could not get video data for video reference {video_reference_uuid}: {e}")
+                        LOGGER.error(f"Could not get video sequence data for name {video_sequence_name}: {e}")
                         self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = None
 
                 # Collect bounding boxes
@@ -225,10 +249,8 @@ class ImageMosaic(QtCore.QObject):
                             )
                             continue
 
-                    # Compute the elapsed time in milliseconds of the annotation into the video
-                    elapsed_time_millis = None
+                    video_start_timestamp = original_video_data["video_start_timestamp"]  # TODO check this
                     
-                    video_start_datetime = original_video_data["video_start_timestamp"]
                     elapsed_time_millis = original_video_data.get(
                         "index_elapsed_time_millis", None
                     )
@@ -236,19 +258,9 @@ class ImageMosaic(QtCore.QObject):
                     recorded_timestamp = original_video_data.get("index_recorded_timestamp", None)
 
                     # Get annotation video time index
-                    annotation_datetime = None
-                    if recorded_timestamp is not None:
-                        annotation_datetime = recorded_timestamp
-                    elif elapsed_time_millis is not None:
-                        annotation_datetime = video_start_datetime + datetime.timedelta(
-                            milliseconds=int(elapsed_time_millis)
-                        )
-                    elif timecode is not None:
-                        hours, minutes, seconds, frames = map(int, timecode.split(":"))
-                        annotation_datetime = video_start_datetime + datetime.timedelta(
-                            hours=hours, minutes=minutes, seconds=seconds
-                        )
-                    else:
+                    annotation_timestamp = get_timestamp(video_start_timestamp, recorded_timestamp, elapsed_time_millis, timecode)
+                    
+                    if annotation_timestamp is None:
                         LOGGER.error(
                             "No time index available for moment: {}, skipping".format(
                                 imaged_moment_uuid
@@ -258,7 +270,7 @@ class ImageMosaic(QtCore.QObject):
 
                     # Compute the elapsed time in milliseconds
                     elapsed_time_millis = round(
-                        (annotation_datetime - video_start_datetime).total_seconds()
+                        (annotation_timestamp - video_start_timestamp).total_seconds()
                         * 1000
                     )
                     
