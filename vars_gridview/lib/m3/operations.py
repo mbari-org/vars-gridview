@@ -225,6 +225,17 @@ def get_video_sequence_by_name(name: str) -> dict:
     return response.json()
 
 
+def get_video_sequence_by_uuid(uuid: str) -> dict:
+    """
+    Get a video sequence by UUID.
+    """
+    LOGGER.debug(f"Getting video sequence by UUID {uuid}")
+    response = m3.VAMPIRE_SQUID_CLIENT.get_video_sequence_by_uuid(uuid)
+    
+    response.raise_for_status()
+    return response.json()
+
+
 def get_vars_imaged_moment(image_reference_uuid: str) -> dict:
     """
     Get MBARI VARS imaged moment by UUID.
