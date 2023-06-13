@@ -537,39 +537,28 @@ class MainWindow(TemplateBaseClass):
             QtWidgets.QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
             return
 
-        # Get the annotation recorded datetime
-        annotation_datetime = self.last_selected_rect.annotation_datetime()
+        # Get the annotation imaged moment UUID
+        imaged_moment_uuid = self.last_selected_rect.imaged_moment_uuid
         
-        # Get the annotation video reference UUID and start timestamp
-        video_reference_uuid = self.last_selected_rect.video_data.get("video_reference_uuid", None)
-        proxy_mp4 = self.last_selected_rect.video_data.get("proxy_mp4", None)
-        if proxy_mp4 is None:
+        # Get the annotation MP4 video data
+        mp4_video_data = self.image_mosaic.moment_mp4_data.get(imaged_moment_uuid, None)
+        if mp4_video_data is None:
             QtWidgets.QMessageBox.warning(
                 self, "Missing Video", "ROI lacks MP4 video."
             )
             return
-            
-        video_start_datetime = proxy_mp4.get("start_timestamp", None)
         
-        # Exit if we don't have what we need
-        if annotation_datetime is None or video_reference_uuid is None or video_start_datetime is None:
-            QtWidgets.QMessageBox.warning(
-                self, "Missing Info", "ROI lacks necessary information to link video."
-            )
-            return
-        
-        # Get the MP4 video reference from the image mosaic, if available
-        mp4_video_reference = self.image_mosaic.video_reference_uuid_to_mp4_video_reference.get(video_reference_uuid, None)
-        if mp4_video_reference is None:
-            QtWidgets.QMessageBox.warning(
-                self, "Missing Video", "ROI lacks MP4 video."
-            )
-            return
+        mp4_video = mp4_video_data["video"]
+        mp4_video_reference = mp4_video_data["video_reference"]
 
         mp4_video_url = mp4_video_reference.get("uri", None)
+        mp4_start_timestamp = parse_iso(mp4_video["start_timestamp"])
+
+        # Get the annotation timestamp
+        annotation_datetime = self.image_mosaic.moment_timestamps[imaged_moment_uuid]
 
         # Compute the timedelta between the annotation and video start
-        annotation_timedelta = annotation_datetime - parse_iso(video_start_datetime)
+        annotation_timedelta = annotation_datetime - mp4_start_timestamp
 
         # Open the MP4 video at the computed timedelta (in seconds)
         annotation_seconds = max(annotation_timedelta.total_seconds(), 0)

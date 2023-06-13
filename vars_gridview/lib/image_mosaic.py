@@ -61,10 +61,13 @@ class ImageMosaic(QtCore.QObject):
         self.moment_image_data = {}
         self.moment_localizations = {}
         self.moment_video_data = {}
+        self.moment_mp4_data = {}
+        self.moment_timestamps = {}
         self.observation_data = {}
         self.moment_image_map = {}  # Big
         
         self.video_reference_uuid_to_mp4_video_reference = {}
+        self.video_sequences_by_name = {}
 
         self.moment_localizations = {}
         self.moment_ancillary_data = {}
@@ -142,52 +145,61 @@ class ImageMosaic(QtCore.QObject):
                         "video_sequence_name"
                     )
                 }
-
-                # Tag in video data where appropriate
+                
+                # Tag in video data
                 if video_data.get("video_uri", None) is not None:  # valid video
                     if imaged_moment_uuid not in self.moment_video_data:
                         self.moment_video_data[imaged_moment_uuid] = video_data
-
-                # Find the corresponding MP4 video reference for this video reference, if there is one
-                video_reference_uuid = query_item["video_reference_uuid"]
-                video_sequence_name = query_item["video_sequence_name"]
                 
-                original_video_start_timestamp = video_data["video_start_timestamp"]
-                    
-                elapsed_time_millis = video_data.get(
-                    "index_elapsed_time_millis", None
-                )
-                timecode = video_data.get("index_timecode", None)
-                recorded_timestamp = video_data.get("index_recorded_timestamp", None)
-
-                # Get annotation video time index
-                annotation_timestamp = get_timestamp(original_video_start_timestamp, recorded_timestamp, elapsed_time_millis, timecode)
+                # Observation data
+                recorded_timestamp = video_data["index_recorded_timestamp"]
+                elapsed_time_millis = video_data["index_elapsed_time_millis"]
+                timecode = video_data["index_timecode"]
                 
-                if annotation_timestamp is not None and video_reference_uuid is not None and video_reference_uuid not in self.video_reference_uuid_to_mp4_video_reference:
+                # Video sequence data
+                video_sequence_name = video_data["video_sequence_name"]
+                
+                # Video data
+                video_start_timestamp = video_data["video_start_timestamp"]
+                
+                # ------------------
+                
+                # Get full video sequence data if not already fetched
+                if video_sequence_name not in self.video_sequences_by_name:
+                    # Try to fetch
                     try:
-                        video_sequence = operations.get_video_sequence_by_name(video_sequence_name)
-                        for video in video_sequence["videos"]:
-                            # Extract video time bounds
-                            if "start_timestamp" not in video or "duration_millis" not in video:  # invalid video, can't use
-                                continue
-                            
-                            video_start_timestamp = parse_iso(video["start_timestamp"])
-                            video_end_timestamp = video_start_timestamp + timedelta(milliseconds=video["duration_millis"])
-                            
-                            if not (video_start_timestamp <= annotation_timestamp <= video_end_timestamp):  # Annotation is not in this video
-                                continue
-                            
-                            for video_reference in video["video_references"]:
-                                if video_reference.get("container", None) == "video/mp4":
-                                    self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = video_reference
-                                    video_data["proxy_mp4"] = video
-                                    break
-                            else:
-                                self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = None
-                    except requests.exceptions.HTTPError as e:
-                        LOGGER.error(f"Could not get video sequence data for name {video_sequence_name}: {e}")
-                        self.video_reference_uuid_to_mp4_video_reference[video_reference_uuid] = None
+                        video_sequence_data = operations.get_video_sequence_by_name(
+                            video_sequence_name
+                        )
+                    except Exception as e:
+                        LOGGER.error(f"Failed to get video sequence data for {video_sequence_name}: {e}")
+                        video_sequence_data = None
+                    
+                    # Store in dict
+                    self.video_sequences_by_name[video_sequence_name] = video_sequence_data
+                
+                # ------------------
 
+                if imaged_moment_uuid not in self.moment_mp4_data:
+                    # Get imaged moment's time index
+                    moment_timestamp = get_timestamp(video_start_timestamp, recorded_timestamp, elapsed_time_millis, timecode)
+                    self.moment_timestamps[imaged_moment_uuid] = moment_timestamp
+                    
+                    if moment_timestamp is None:  # No timestamp, can't use
+                        continue
+                    
+                    # Find the corresponding MP4 video reference (in the same video sequence) for this imaged moment, if there is one
+                    mp4_video_data = self.find_mp4_video_data(video_sequence_name, moment_timestamp)
+                    
+                    if mp4_video_data is not None:
+                        LOGGER.debug(f"Found MP4 video reference {mp4_video_data['video_reference']['uuid']} for imaged moment {imaged_moment_uuid}")
+                    else:
+                        LOGGER.warning(f"Could not find MP4 video reference for imaged moment {imaged_moment_uuid}")
+                    
+                    self.moment_mp4_data[imaged_moment_uuid] = mp4_video_data
+                
+                # ------------------
+                
                 # Collect bounding boxes
                 if link_name == "bounding box":
                     if association_uuid in seen_associations:
@@ -235,55 +247,34 @@ class ImageMosaic(QtCore.QObject):
                     continue
 
                 if url is None:  # No image reference, need to use beholder
-                    original_video_data = self.moment_video_data[imaged_moment_uuid]
+                    video_data = self.moment_video_data[imaged_moment_uuid]
                     
                     # Find the video URI of the MP4 video
-                    video_uri = None
-                    original_video_reference_uuid = original_video_data["video_reference_uuid"]
-                    if original_video_reference_uuid is not None and original_video_reference_uuid in self.video_reference_uuid_to_mp4_video_reference:
-                        mp4_video_reference = self.video_reference_uuid_to_mp4_video_reference[original_video_reference_uuid]
-                        if mp4_video_reference is not None:
-                            video_uri = mp4_video_reference["uri"]
-                        else:
-                            LOGGER.warning(
-                                "No web video available for capture for moment: {}, skipping".format(
-                                    imaged_moment_uuid
-                                )
-                            )
-                            continue
-
-                    video_start_timestamp = original_video_data["video_start_timestamp"]  # TODO check this
-                    
-                    elapsed_time_millis = original_video_data.get(
-                        "index_elapsed_time_millis", None
-                    )
-                    timecode = original_video_data.get("index_timecode", None)
-                    recorded_timestamp = original_video_data.get("index_recorded_timestamp", None)
-
-                    # Get annotation video time index
-                    annotation_timestamp = get_timestamp(video_start_timestamp, recorded_timestamp, elapsed_time_millis, timecode)
-                    
-                    if annotation_timestamp is None:
-                        LOGGER.error(
-                            "No time index available for moment: {}, skipping".format(
-                                imaged_moment_uuid
-                            )
-                        )
+                    original_video_reference_uuid = video_data["video_reference_uuid"]
+                    if original_video_reference_uuid is None:
+                        LOGGER.error(f"Imaged moment {imaged_moment_uuid} has no video reference, skipping")
                         continue
-
-                    # Compute the elapsed time in milliseconds
-                    elapsed_time_millis = round(
-                        (annotation_timestamp - video_start_timestamp).total_seconds()
-                        * 1000
-                    )
                     
+                    mp4_video_data = self.moment_mp4_data.get(imaged_moment_uuid, None)
+                    if mp4_video_data is None:
+                        LOGGER.warning(f"Imaged moment {imaged_moment_uuid} has no MP4 video reference, skipping")
+                        continue
+                    
+                    # Get the MP4 video data
+                    mp4_video_reference_uri = mp4_video_data["video_reference"]["uri"]
+                    mp4_video_start_timestamp = parse_iso(mp4_video_data["video"]["start_timestamp"])  # datetime
+                    moment_timestamp = self.moment_timestamps[imaged_moment_uuid]
+                    
+                    # Compute the offset in milliseconds
+                    elapsed_time_millis = round((moment_timestamp - mp4_video_start_timestamp).total_seconds() * 1000)
+
                     # Get the capture from beholder
-                    LOGGER.debug(f"Getting capture from beholder for moment: {imaged_moment_uuid} ({video_uri} @ {elapsed_time_millis} ms)")
+                    LOGGER.debug(f"Getting capture from beholder for moment: {imaged_moment_uuid} ({mp4_video_reference_uri} @ {elapsed_time_millis} ms)")
                     try:
                         res = requests.post(
                             beholder_url + "/capture",
                             json={
-                                "videoUrl": video_uri,
+                                "videoUrl": mp4_video_reference_uri,
                                 "elapsedTimeMillis": int(elapsed_time_millis),
                             },
                             headers={"X-Api-Key": self.beholder_api_key},
@@ -362,6 +353,57 @@ class ImageMosaic(QtCore.QObject):
                 localization.rect = rw  # Back reference
 
                 self.n_localizations += 1
+
+    def find_mp4_video_data(self, video_sequence_name: str, timestamp: datetime) -> Optional[dict]:
+        """
+        Find a video with an MP4 video reference for the given video sequence name and timestamp.
+        
+        Args:
+            video_sequence_name: The video sequence name
+            timestamp: The timestamp
+        
+        Returns:
+            The matching video data dict, or None if no match found
+        """
+        if video_sequence_name not in self.video_sequences_by_name:  # Video sequence not encountered
+            return None
+
+        video_sequence = self.video_sequences_by_name[video_sequence_name]
+        
+        if video_sequence is None:  # No info about this video sequence
+            return None
+        
+        videos = video_sequence.get("videos", [])
+        for video in videos:
+            video_duration_millis = video.get("duration_millis", None)
+            if video_duration_millis is None:  # No duration
+                continue
+            
+            video_start_timestamp = video.get("start_timestamp", None)
+            if video_start_timestamp is None:  # No start timestamp
+                continue
+            
+            # Compute datetime start-end range
+            video_start_timestamp = parse_iso(video_start_timestamp)
+            video_end_timestamp = video_start_timestamp + timedelta(milliseconds=video_duration_millis)
+            
+            if not (video_start_timestamp <= timestamp <= video_end_timestamp):  # Timestamp not in range
+                continue
+            
+            video_references = video.get("video_references", [])
+            for video_reference in video_references:
+                container = video_reference.get("container", None)
+                if container is None:  # No container
+                    continue
+                
+                if container != "video/mp4":  # Unsupported container
+                    continue
+                
+                return {
+                    "video": video,
+                    "video_reference": video_reference,
+                }
+        
 
     def sort_rect_widgets(self, sort_method: SortMethod):
         """

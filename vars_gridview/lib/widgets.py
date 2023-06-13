@@ -103,6 +103,13 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         return self.deleted
 
     @property
+    def imaged_moment_uuid(self) -> str:
+        """
+        Get the UUID of the imaged moment associated with this rect widget.
+        """
+        return self.localization.imaged_moment_uuid
+
+    @property
     def observation_uuid(self) -> str:
         """
         Get the UUID of the observation associated with this rect widget.
