@@ -20,6 +20,8 @@ import datetime
 import json
 import os
 import sys
+from time import sleep
+from uuid import UUID
 import webbrowser
 from pathlib import Path
 from typing import Optional, Tuple
@@ -27,6 +29,7 @@ from typing import Optional, Tuple
 import cv2
 import pyqtgraph as pg
 import qdarkstyle
+from sharktopoda_client.client import SharktopodaClient
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib import constants, m3, raziel, sql
@@ -37,7 +40,6 @@ from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
     get_kb_parts,
     get_vars_imaged_moment,
-    get_videos_at_datetime,
 )
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import (
@@ -119,6 +121,9 @@ class MainWindow(TemplateBaseClass):
         self.cached_moment_concepts = (
             {}
         )  # Cache for imaged moment -> set of observed concepts
+        
+        self.sharktopoda_client = None  # Sharktopoda client
+        self.sharktopoda_connected = False  # Whether the Sharktopoda client is connected
 
         # Connect signals to slots
         self.ui.discardButton.clicked.connect(self.delete)
@@ -159,6 +164,9 @@ class MainWindow(TemplateBaseClass):
 
         # Set up the menu bar
         self._setup_menu_bar()
+        
+        # Set up Sharktopoda client
+        self._setup_sharktopoda_client()
 
         LOGGER.info("Launch successful")
 
@@ -259,6 +267,14 @@ class MainWindow(TemplateBaseClass):
         query_action.setShortcut("Ctrl+Q")
         query_action.triggered.connect(self._do_query)
         query_menu.addAction(query_action)
+    
+    def _setup_sharktopoda_client(self):
+        """
+        Create the Sharktopoda video player client.
+        """
+        self.sharktopoda_client = SharktopodaClient("::1", 8800, 8801)
+        self.sharktopoda_client.connect()
+        self.sharktopoda_connected = True
 
     def _open_settings(self):
         """
@@ -560,12 +576,19 @@ class MainWindow(TemplateBaseClass):
         # Compute the timedelta between the annotation and video start
         annotation_timedelta = annotation_datetime - mp4_start_timestamp
 
-        # Open the MP4 video at the computed timedelta (in seconds)
-        annotation_seconds = max(annotation_timedelta.total_seconds(), 0)
-        url = mp4_video_url + "#t={},{}".format(
-            annotation_seconds, annotation_seconds + 1e-3
-        )  # "pause" at the annotation
-        webbrowser.open(url)
+        # # Open the MP4 video at the computed timedelta (in seconds)
+        # annotation_seconds = max(annotation_timedelta.total_seconds(), 0)
+        # url = mp4_video_url + "#t={},{}".format(
+        #     annotation_seconds, annotation_seconds + 1e-3
+        # )  # "pause" at the annotation
+        # webbrowser.open(url)
+        
+        # Open the video in Sharktopoda 2
+        annotation_milliseconds = max(annotation_timedelta.total_seconds() * 1000, 0)
+        video_reference_uuid = UUID(mp4_video_reference["uuid"])
+        self.sharktopoda_client.open(video_reference_uuid, mp4_video_url)
+        sleep(2)  # TODO: don't do this, don't do this, don't do this (wait for Sharktopoda to open instead)
+        self.sharktopoda_client.seek_elapsed_time(video_reference_uuid, annotation_milliseconds)
 
     @QtCore.pyqtSlot()
     def _style_gui(self):
