@@ -21,7 +21,7 @@ import json
 import os
 import sys
 from time import sleep
-from uuid import UUID
+from uuid import UUID, uuid4
 import webbrowser
 from pathlib import Path
 from typing import Optional, Tuple
@@ -30,6 +30,7 @@ import cv2
 import pyqtgraph as pg
 import qdarkstyle
 from sharktopoda_client.client import SharktopodaClient
+from sharktopoda_client.dto import Localization
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib import constants, m3, raziel, sql
@@ -273,8 +274,13 @@ class MainWindow(TemplateBaseClass):
         Create the Sharktopoda video player client.
         """
         self.sharktopoda_client = SharktopodaClient("::1", 8800, 8801)
-        self.sharktopoda_client.connect()
-        self.sharktopoda_connected = True
+        ok = self.sharktopoda_client.connect()
+        self.sharktopoda_connected = ok
+        
+        if not ok:
+            LOGGER.error("Failed to connect to Sharktopoda")
+            QtWidgets.QMessageBox.critical(self, "Sharktopoda connection failed", "Failed to connect to Sharktopoda. Falling back on web browser player.")
+            return
 
     def _open_settings(self):
         """
@@ -552,9 +558,11 @@ class MainWindow(TemplateBaseClass):
         if not self.last_selected_rect:
             QtWidgets.QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
             return
+        
+        rect = self.last_selected_rect
 
         # Get the annotation imaged moment UUID
-        imaged_moment_uuid = self.last_selected_rect.imaged_moment_uuid
+        imaged_moment_uuid = rect.imaged_moment_uuid
         
         # Get the annotation MP4 video data
         mp4_video_data = self.image_mosaic.moment_mp4_data.get(imaged_moment_uuid, None)
@@ -576,19 +584,47 @@ class MainWindow(TemplateBaseClass):
         # Compute the timedelta between the annotation and video start
         annotation_timedelta = annotation_datetime - mp4_start_timestamp
 
-        # # Open the MP4 video at the computed timedelta (in seconds)
-        # annotation_seconds = max(annotation_timedelta.total_seconds(), 0)
-        # url = mp4_video_url + "#t={},{}".format(
-        #     annotation_seconds, annotation_seconds + 1e-3
-        # )  # "pause" at the annotation
-        # webbrowser.open(url)
+        if not self.sharktopoda_connected:
+            # Open the MP4 video at the computed timedelta (in seconds)
+            annotation_seconds = max(annotation_timedelta.total_seconds(), 0)
+            url = mp4_video_url + "#t={},{}".format(
+                annotation_seconds, annotation_seconds + 1e-3
+            )  # "pause" at the annotation
+            webbrowser.open(url)
+            return
         
         # Open the video in Sharktopoda 2
         annotation_milliseconds = max(annotation_timedelta.total_seconds() * 1000, 0)
         video_reference_uuid = UUID(mp4_video_reference["uuid"])
-        self.sharktopoda_client.open(video_reference_uuid, mp4_video_url)
-        sleep(2)  # TODO: don't do this, don't do this, don't do this (wait for Sharktopoda to open instead)
-        self.sharktopoda_client.seek_elapsed_time(video_reference_uuid, annotation_milliseconds)
+        
+        def color_for_concept(concept: str):
+            hash = sum(map(ord, concept)) << 5
+            color = QtGui.QColor()
+            color.setHsl(round((hash % 360) / 360 * 255), 255, 217, 255)
+            return color
+        
+        localization = Localization(
+            uuid=uuid4(),
+            concept=rect.localization.concept,
+            elapsed_time_millis=annotation_milliseconds,
+            x=rect.localization.x,
+            y=rect.localization.y,
+            width=rect.localization.width,
+            height=rect.localization.height,
+            duration_millis=1000,
+            color=color_for_concept(rect.localization.concept).name()
+        )
+        
+        def show_localization():
+            self.sharktopoda_client.seek_elapsed_time(video_reference_uuid, annotation_milliseconds)
+            self.sharktopoda_client.clear_localizations(video_reference_uuid)
+            self.sharktopoda_client.add_localizations(video_reference_uuid, [localization])
+        
+        self.sharktopoda_client.open(
+            video_reference_uuid, 
+            mp4_video_url, 
+            callback=show_localization
+        )
 
     @QtCore.pyqtSlot()
     def _style_gui(self):
