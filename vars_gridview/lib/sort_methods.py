@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Tuple
 
 import numpy as np
 
@@ -28,6 +28,32 @@ class SortMethod(ABC):
         Sort a list of RectWidgets.
         """
         rect_widgets.sort(key=cls.key, **kwargs)
+
+
+class SortMethodGroup:
+    """
+    Composite method for sorting rect widgets by multiple sort methods. Methods are applied in the order they are specified.
+    """
+    
+    def __init__(self, *methods: SortMethod):
+        self.methods = methods
+
+    def key(self, rect: RectWidget) -> Tuple[Any]:
+        return tuple(method.key(rect) for method in self.methods)
+    
+    def sort(self, rect_widgets: List[RectWidget], **kwargs):
+        rect_widgets.sort(key=self.key, **kwargs)
+
+
+class NoopSort(SortMethod):
+    """
+    No-op sort method. Keeps the order of the rect widgets as-is.
+    """
+    NAME = "No-op"
+    
+    @staticmethod
+    def key(rect: RectWidget) -> None:
+        return None
 
 
 class RecordedTimestampSort(SortMethod):
