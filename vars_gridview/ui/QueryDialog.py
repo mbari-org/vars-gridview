@@ -164,7 +164,7 @@ class PlatformFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("platform", self.platform)
+            yield Constraint("camera_platform", self.platform)
 
         def __str__(self) -> str:
             return "Platform: {}".format(self.platform)
