@@ -61,6 +61,7 @@ from vars_gridview.lib.util import parse_iso
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.LoginDialog import LoginDialog
 from vars_gridview.ui.QueryDialog import QueryDialog
+from vars_gridview.ui.SortDialog import SortDialog
 from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
 
 # Define main window class from template
@@ -131,10 +132,11 @@ class MainWindow(TemplateBaseClass):
         self.ui.clearSelections.clicked.connect(self.clear_selected)
         self.ui.labelSelectedButton.clicked.connect(self.update_labels)
         self.ui.zoomSpinBox.valueChanged.connect(self.update_zoom)
-        self.ui.sortMethod.currentTextChanged.connect(self.update_layout)
+        # self.ui.sortMethod.currentTextChanged.connect(self.update_layout)
         self.ui.hideLabeled.stateChanged.connect(self.update_layout)
         self.ui.styleComboBox.currentTextChanged.connect(self._style_gui)
         self.ui.openVideo.clicked.connect(self.open_video)
+        self.ui.sortButton.clicked.connect(self._sort_widgets)
 
         self.settings_dialog = SettingsDialog(self)
 
@@ -160,8 +162,8 @@ class MainWindow(TemplateBaseClass):
         # Set up the label combo boxes
         self._setup_label_boxes()
 
-        # Set up the sort method combo box
-        self._setup_sort_methods()
+        # # Set up the sort method combo box
+        # self._setup_sort_methods()
 
         # Set up the menu bar
         self._setup_menu_bar()
@@ -295,6 +297,22 @@ class MainWindow(TemplateBaseClass):
         m3.setup_from_settings()
         sql.connect_from_settings()
 
+    def _sort_widgets(self):
+        """
+        Open the sort dialog and apply a sort method to the rect widgets.
+        """
+        # Show a sort dialog
+        sort_dialog = SortDialog(parent=self)
+        ok = sort_dialog.exec()
+        if not ok:
+            return
+        method = sort_dialog.method
+        if method is None:
+            return
+        
+        self.image_mosaic.sort_rect_widgets(method)
+        self.image_mosaic.render_mosaic()
+
     def _do_query(self):
         """
         Perform a query based on the filter string.
@@ -333,8 +351,8 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
 
         # Render
-        sort_method = self.ui.sortMethod.currentData()
-        self.image_mosaic.sort_rect_widgets(sort_method)
+        # sort_method = self.ui.sortMethod.currentData()
+        # self.image_mosaic.sort_rect_widgets(sort_method)  # TODO replace this logic
         self.image_mosaic.render_mosaic()
 
         # Show some stats about the images and annotations
@@ -373,13 +391,13 @@ class MainWindow(TemplateBaseClass):
             QtWidgets.QCompleter.CompletionMode.PopupCompletion
         )
 
-    def _setup_sort_methods(self):
-        """
-        Populate the sort method combo box
-        """
-        self.ui.sortMethod.clear()
-        for method in ENABLED_SORT_METHODS:
-            self.ui.sortMethod.addItem(method.NAME, userData=method)
+    # def _setup_sort_methods(self):
+    #     """
+    #     Populate the sort method combo box
+    #     """
+    #     self.ui.sortMethod.clear()
+    #     for method in ENABLED_SORT_METHODS:
+    #         self.ui.sortMethod.addItem(method.NAME, userData=method)
 
     def _restore_gui(self):
         """
@@ -463,7 +481,7 @@ class MainWindow(TemplateBaseClass):
         if not self.loaded:
             return
 
-        method = self.ui.sortMethod.currentData()
+        # method = self.ui.sortMethod.currentData()
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
