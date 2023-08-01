@@ -348,6 +348,78 @@ class VideoReferenceUUIDFilter(Filter):
             return VideoReferenceUUIDFilter.Result(video_reference_uuid.lower())
 
 
+class ActivityFilter(Filter):
+    class Result(Filter.Result):
+        def __init__(self, activity: str):
+            self.activity = activity
+        
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            yield Constraint("activity", self.activity)
+        
+        def __str__(self) -> str:
+            return "Activity: {}".format(self.activity)
+    
+    def __call__(self) -> Optional[Result]:
+        activity, ok = QInputDialog.getText(
+            self.parent,
+            "Activity",
+            "Activity",
+            QLineEdit.EchoMode.Normal,
+            "",
+        )
+        if ok:
+            return ActivityFilter.Result(activity)
+
+
+class ObservationGroupFilter(Filter):
+    class Result(Filter.Result):
+        def __init__(self, observation_group: str):
+            self.observation_group = observation_group
+        
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            yield Constraint("observation_group", self.observation_group)
+        
+        def __str__(self) -> str:
+            return "Observation group: {}".format(self.observation_group)
+    
+    def __call__(self) -> Optional[Result]:
+        observation_group, ok = QInputDialog.getText(
+            self.parent,
+            "Observation group",
+            "Observation group",
+            QLineEdit.EchoMode.Normal,
+            "",
+        )
+        if ok:
+            return ObservationGroupFilter.Result(observation_group)
+
+
+class GeneratorFilter(Filter):
+    class Result(Filter.Result):
+        def __init__(self, generator: str):
+            self.generator = generator
+        
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            yield Constraint("JSON_VALUE(assoc.link_value, '$.generator')", self.generator)
+
+        def __str__(self) -> str:
+            return "Generator: {}".format(self.generator)
+    
+    def __call__(self) -> Optional[Result]:
+        generator, ok = QInputDialog.getText(
+            self.parent,
+            "Generator",
+            "Generator",
+            QLineEdit.EchoMode.Normal,
+            "",
+        )
+        if ok:
+            return GeneratorFilter.Result(generator)
+
+
 class ResultListModel(QAbstractListModel):
     def __init__(self, parent: QObject = None, results: List[Filter.Result] = None):
         super().__init__(parent=parent)
@@ -403,7 +475,7 @@ class QueryDialog(QDialog):
         self.filters = [
             ConceptFilter(self, "Concept"),
             ConceptDescFilter(self, "Concept (+ descendants)"),
-            DiveNumberFilter(self, "Dive number"),
+            # DiveNumberFilter(self, "Dive number"),
             VideoSequenceNameFilter(self, "Video sequence name"),
             ChiefScientistFilter(self, "Chief scientist"),
             PlatformFilter(self, "Platform"),
@@ -413,6 +485,9 @@ class QueryDialog(QDialog):
             AssociationUUIDFilter(self, "Association UUID"),
             ImageReferenceUUIDFilter(self, "Image reference UUID"),
             VideoReferenceUUIDFilter(self, "Video reference UUID"),
+            ActivityFilter(self, "Activity"),
+            ObservationGroupFilter(self, "Observation group"),
+            GeneratorFilter(self, "Generator"),
         ]
 
         # Create button bar (add, remove, clear constraints)

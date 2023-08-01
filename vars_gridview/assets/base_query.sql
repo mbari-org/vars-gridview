@@ -30,4 +30,6 @@ SELECT DISTINCT
 FROM
     annotations anno INNER JOIN associations assoc ON anno.observation_uuid = assoc.observation_uuid
 WHERE
+    assoc.link_name = 'bounding box' AND
+    assoc.link_value LIKE '{{%}}' AND
     {filters}
