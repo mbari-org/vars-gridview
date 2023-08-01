@@ -1,4 +1,4 @@
-SELECT DISTINCT
+SELECT
     imaged_moment_uuid,
     image_reference_uuid,
     anno.observation_uuid AS observation_uuid,
