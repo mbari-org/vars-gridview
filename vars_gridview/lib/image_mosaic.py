@@ -164,6 +164,10 @@ class ImageMosaic(QtCore.QObject):
                 
                 # ------------------
                 
+                # Skip if the video sequence name is not set
+                if video_sequence_name is None:
+                    continue
+                
                 # Get full video sequence data if not already fetched
                 if video_sequence_name not in self.video_sequences_by_name:
                     # Try to fetch
