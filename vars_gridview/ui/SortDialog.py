@@ -21,8 +21,17 @@ class SortDialog(QDialog):
 
         self.methods = [
             sm.RecordedTimestampSort,
+            sm.AssociationUUIDSort,
+            sm.ObservationUUIDSort,
+            sm.ImageReferenceUUIDSort,
             sm.LabelSort,
-            sm.DepthSort,
+            sm.WidthSort,
+            sm.HeightSort,
+            sm.AreaSort,
+            sm.MeanIntensitySort,
+            sm.MeanHueSort,
+            sm.RegionMeanHueSort,
+            sm.DepthSort
         ]
 
         self.setWindowTitle("Sort")
