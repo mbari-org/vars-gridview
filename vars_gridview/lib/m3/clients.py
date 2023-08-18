@@ -139,6 +139,9 @@ class AnnosaurusClient(M3Client):
     @needs_auth
     def delete_observation(self, observation_uuid: str) -> requests.Response:
         return self.delete(f'/observations/{observation_uuid}')
+    
+    def get_imaged_moment(self, imaged_moment_uuid: str) -> requests.Response:
+        return self.get(f"/imagedmoments/{imaged_moment_uuid}")
 
 
 class VampireSquidClient(M3Client):
