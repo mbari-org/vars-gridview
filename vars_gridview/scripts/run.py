@@ -40,7 +40,7 @@ from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
     get_kb_parts,
-    get_vars_imaged_moment,
+    get_imaged_moment,
 )
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import (
@@ -553,12 +553,12 @@ class MainWindow(TemplateBaseClass):
             ]
         )
 
-        # Update VARS observations label
+        # Update observations label
         imaged_moment_uuid = rect.localization.imaged_moment_uuid
         if imaged_moment_uuid in self.cached_moment_concepts:  # cache hit
             concepts = self.cached_moment_concepts[imaged_moment_uuid]
         else:  # cache miss
-            vars_moment_data = get_vars_imaged_moment(
+            vars_moment_data = get_imaged_moment(
                 rect.localization.imaged_moment_uuid
             )
             concepts = sorted(

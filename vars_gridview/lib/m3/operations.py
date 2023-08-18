@@ -225,16 +225,14 @@ def get_video_sequence_by_name(name: str) -> dict:
     return response.json()
 
 
-def get_vars_imaged_moment(image_reference_uuid: str) -> dict:
+def get_imaged_moment(image_reference_uuid: str) -> dict:
     """
-    Get MBARI VARS imaged moment by UUID.
-    This will not work unless you are connected to the MBARI network!
+    Get an imaged moment by UUID.
     """
-    LOGGER.debug(f"Getting VARS imaged moment {image_reference_uuid}")
-    response = requests.get(
-        "http://m3.shore.mbari.org/anno/v1/imagedmoments/" + image_reference_uuid
-    )
+    LOGGER.debug(f"Getting imaged moment {image_reference_uuid}")
+    response = m3.ANNOSAURUS_CLIENT.get_imaged_moment(image_reference_uuid)
 
+    response.raise_for_status()
     return response.json()
 
 
