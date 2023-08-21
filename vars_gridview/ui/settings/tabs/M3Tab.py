@@ -13,6 +13,7 @@ class M3Tab(AbstractSettingsTab):
 
         self.raziel_url_edit = QtWidgets.QLineEdit(self._settings.raz_url.value)
         self.raziel_url_edit.textChanged.connect(self.settingsChanged.emit)
+        self._settings.raz_url.valueChanged.connect(self.raziel_url_edit.setText)
 
         self.arrange()
 

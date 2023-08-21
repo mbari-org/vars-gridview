@@ -13,16 +13,20 @@ class SQLTab(AbstractSettingsTab):
 
         self.sql_url_edit = QtWidgets.QLineEdit(self._settings.sql_url.value)
         self.sql_url_edit.textChanged.connect(self.settingsChanged.emit)
+        self._settings.sql_url.valueChanged.connect(self.sql_url_edit.setText)
 
         self.user_edit = QtWidgets.QLineEdit(self._settings.sql_user.value)
         self.user_edit.textChanged.connect(self.settingsChanged.emit)
+        self._settings.sql_user.valueChanged.connect(self.user_edit.setText)
 
         self.password_edit = QtWidgets.QLineEdit(self._settings.sql_password.value)
         self.password_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
         self.password_edit.textChanged.connect(self.settingsChanged.emit)
+        self._settings.sql_password.valueChanged.connect(self.password_edit.setText)
 
         self.database_edit = QtWidgets.QLineEdit(self._settings.sql_database.value)
         self.database_edit.textChanged.connect(self.settingsChanged.emit)
+        self._settings.sql_database.valueChanged.connect(self.database_edit.setText)
 
         self.arrange()
 
