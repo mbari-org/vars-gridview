@@ -485,7 +485,7 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
-        self.image_mosaic.sort_rect_widgets(method)
+        # self.image_mosaic.sort_rect_widgets(method)
         self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot(int)
