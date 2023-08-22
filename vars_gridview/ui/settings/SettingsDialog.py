@@ -3,6 +3,7 @@ from PyQt6 import QtCore, QtWidgets
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 from vars_gridview.ui.settings.tabs.M3Tab import M3Tab
 from vars_gridview.ui.settings.tabs.SQLTab import SQLTab
+from vars_gridview.ui.settings.tabs.AppearanceTab import AppearanceTab
 
 
 class SettingsDialog(QtWidgets.QDialog):
@@ -91,3 +92,4 @@ class SettingsDialog(QtWidgets.QDialog):
     def _add_tabs(self):
         self._register_tab(M3Tab())
         self._register_tab(SQLTab())
+        self._register_tab(AppearanceTab())

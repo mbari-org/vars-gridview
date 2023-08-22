@@ -137,6 +137,9 @@ class MainWindow(TemplateBaseClass):
         self.ui.styleComboBox.currentTextChanged.connect(self._style_gui)
         self.ui.openVideo.clicked.connect(self.open_video)
         self.ui.sortButton.clicked.connect(self._sort_widgets)
+        
+        self._settings = SettingsManager.get_instance()
+        self._settings.label_font_size.valueChanged.connect(self.update_layout)
 
         self.settings_dialog = SettingsDialog(self)
 
@@ -196,10 +199,9 @@ class MainWindow(TemplateBaseClass):
         username, password, raziel_url = login  # unpack the credentials
 
         # Update the Raziel URL setting
-        settings = SettingsManager.get_instance()
-        if settings.raz_url.value != raziel_url:
+        if self._settings.raz_url.value != raziel_url:
             LOGGER.debug(f"Updating Raziel URL setting to {raziel_url}")
-            settings.raz_url.value = raziel_url
+            self._settings.raz_url.value = raziel_url
 
         # Authenticate Raziel + get endpoint data
         endpoints = self._auth_raziel(raziel_url, username, password)
@@ -689,6 +691,8 @@ def init_settings():
     settings.sql_database = ("sql/database", str, constants.SQL_DATABASE_DEFAULT)
 
     settings.raz_url = ("m3/raz_url", str, constants.RAZIEL_URL_DEFAULT)
+    
+    settings.label_font_size = ("appearance/label_font_size", int, constants.LABEL_FONT_SIZE_DEFAULT)
 
 
 def main():

@@ -16,6 +16,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.settings import SettingsManager
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
@@ -305,8 +306,12 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         )
         
         # Set font
+        # font = QtGui.QFont(
+        #     'Arial', int(self.zoom * self.labelheight * 0.5), QtGui.QFont.Weight.Bold, False
+        # )
+        settings = SettingsManager.get_instance()
         font = QtGui.QFont(
-            'Arial', int(self.zoom * self.labelheight * 0.5), QtGui.QFont.Weight.Bold, False
+            'Arial', settings.label_font_size.value, QtGui.QFont.Weight.Bold, False
         )
         painter.setFont(font)
 

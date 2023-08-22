@@ -24,3 +24,6 @@ LOG_DIR = ROOT_DIR / "logs"
 
 # Preferred image type
 IMAGE_TYPE = "image/png"
+
+# Appearance defaults
+LABEL_FONT_SIZE_DEFAULT = 8
