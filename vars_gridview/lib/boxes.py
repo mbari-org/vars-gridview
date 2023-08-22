@@ -8,9 +8,10 @@ Distributed under MIT license. See license.txt for more information.
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt6 import QtCore
+from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
 
 
 class BoundingBox(pg.RectROI):
@@ -22,6 +23,7 @@ class BoundingBox(pg.RectROI):
         rect,
         localization,
         verifier,
+        image_mosaic,
         color=(255, 0, 0),
         label="ROI",
     ):
@@ -61,6 +63,70 @@ class BoundingBox(pg.RectROI):
 
         self.localization = localization
         self.rect = rect
+        
+        self.image_mosaic = image_mosaic
+        
+        self._menu = QtWidgets.QMenu()
+        self._setup_menu()
+        
+        self.setAcceptedMouseButtons(QtCore.Qt.MouseButton.LeftButton)
+        self.sigClicked.connect(lambda bbox, ev: self.rect.clicked.emit(self.rect, ev))  # Pass click event to rect
+    
+    def _setup_menu(self):
+        """
+        Set up the context menu for the bounding box.
+        """
+        self._menu.addAction("Change concept", self._do_change_concept)
+        self._menu.addAction("Change part", self._do_change_part)
+        self._menu.addSeparator()
+        self._menu.addAction("Delete", self._do_delete)
+    
+    def contextMenuEvent(self, ev):
+        """
+        Show the context menu.
+        """
+        self._menu.popup(ev.screenPos())
+
+    def _do_delete(self):
+        """
+        Delete (clicked from context menu).
+        """
+        self.image_mosaic.select(self.rect)
+        self.image_mosaic.delete_selected()
+    
+    def _do_change_concept(self):
+        """
+        Change concept (clicked from context menu).
+        """
+        concept, ok = QtWidgets.QInputDialog.getItem(
+            self.image_mosaic._graphics_view,
+            "Change concept",
+            "Concept:",
+            get_kb_concepts()
+        )
+        
+        if not ok:
+            return
+        
+        self.image_mosaic.select(self.rect)
+        self.image_mosaic.apply_label(concept, "")
+    
+    def _do_change_part(self):
+        """
+        Change part (clicked from context menu).
+        """
+        part, ok = QtWidgets.QInputDialog.getItem(
+            self.image_mosaic._graphics_view,
+            "Change part",
+            "Part:",
+            get_kb_parts()
+        )
+        
+        if not ok:
+            return
+        
+        self.image_mosaic.select(self.rect)
+        self.image_mosaic.apply_label("", part)
 
     def check_bounds(self):
         x, y = self.pos()
@@ -134,12 +200,6 @@ class BoundingBox(pg.RectROI):
             self.textItem.setText(self.label)
             self.textItem.setPos(x, y)
 
-    def mouseClickEvent(self, ev):
-        if (
-            ev.button() == QtCore.Qt.MouseButton.RightButton
-        ):  # Capture and ignore right clicks
-            pass
-
 
 class BoxHandler:
     def __init__(
@@ -195,9 +255,10 @@ class BoxHandler:
                     self.view_box,
                     [xmin, height - ymin],
                     [xmax - xmin, -1 * (ymax - ymin)],
-                    rect,
+                    localization.rect,
                     localization,
                     self.verifier,
+                    self.image_mosaic,
                     color=color,
                     label=label,
                 )

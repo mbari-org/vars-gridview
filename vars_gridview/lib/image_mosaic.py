@@ -7,7 +7,7 @@ Distributed under MIT license. See license.txt for more infomation.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from uuid import UUID
 
 import cv2

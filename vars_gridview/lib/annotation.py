@@ -170,6 +170,9 @@ class VARSLocalization:
         )
 
     def push_changes(self, verifier: str):
+        if self._deleted:
+            return
+        
         do_modify_box = False
 
         if self._dirty_concept:
