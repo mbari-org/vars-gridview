@@ -20,6 +20,7 @@ import datetime
 import json
 import os
 import sys
+from threading import Thread
 from time import sleep
 from uuid import UUID, uuid4
 import webbrowser
@@ -165,14 +166,11 @@ class MainWindow(TemplateBaseClass):
         # Set up the label combo boxes
         self._setup_label_boxes()
 
-        # # Set up the sort method combo box
-        # self._setup_sort_methods()
-
         # Set up the menu bar
         self._setup_menu_bar()
         
-        # Set up Sharktopoda client
-        self._setup_sharktopoda_client()
+        # Set up Sharktopoda client in background thread
+        Thread(target=self._setup_sharktopoda_client).start()
 
         LOGGER.info("Launch successful")
 
@@ -282,8 +280,7 @@ class MainWindow(TemplateBaseClass):
         self.sharktopoda_connected = ok
         
         if not ok:
-            LOGGER.error("Failed to connect to Sharktopoda")
-            QtWidgets.QMessageBox.critical(self, "Sharktopoda connection failed", "Failed to connect to Sharktopoda. Falling back on web browser player.")
+            LOGGER.warning("Could not connect to Sharktopoda")
             return
 
     def _open_settings(self):
