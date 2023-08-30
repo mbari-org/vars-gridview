@@ -18,6 +18,7 @@ http://synapses.awardspace.info/pages-scripts/python/pages/python-pyqt_qgraphics
 
 import datetime
 import json
+import logging
 import os
 import sys
 from threading import Thread
@@ -93,6 +94,8 @@ class MainWindow(TemplateBaseClass):
     """
     Main application window.
     """
+    
+    sharktopodaConnected = QtCore.pyqtSignal()
 
     def __init__(self, app):
         QtWidgets.QMainWindow.__init__(self)
@@ -142,7 +145,7 @@ class MainWindow(TemplateBaseClass):
         self._settings = SettingsManager.get_instance()
         self._settings.label_font_size.valueChanged.connect(self.update_layout)
 
-        self.settings_dialog = SettingsDialog(self)
+        self.settings_dialog = SettingsDialog(self._setup_sharktopoda_client, self.sharktopodaConnected, parent=self)
 
         self._launch()
 
@@ -170,7 +173,7 @@ class MainWindow(TemplateBaseClass):
         self._setup_menu_bar()
         
         # Set up Sharktopoda client in background thread
-        Thread(target=self._setup_sharktopoda_client).start()
+        # Thread(target=self._setup_sharktopoda_client).start()
 
         LOGGER.info("Launch successful")
 
@@ -275,13 +278,26 @@ class MainWindow(TemplateBaseClass):
         """
         Create the Sharktopoda video player client.
         """
-        self.sharktopoda_client = SharktopodaClient("::1", 8800, 8801)
+        self.sharktopoda_client = SharktopodaClient(
+            self._settings.sharktopoda_host.value, 
+            self._settings.sharktopoda_outgoing_port.value, 
+            self._settings.sharktopoda_incoming_port.value
+        )
+        
+        for handler in LOGGER.handlers:
+            self.sharktopoda_client.logger.addHandler(handler)
+            self.sharktopoda_client._udp_client.logger.addHandler(handler)
+            self.sharktopoda_client._udp_server.logger.addHandler(handler)
+            handler.setLevel(logging.DEBUG)
+        
         ok = self.sharktopoda_client.connect()
         self.sharktopoda_connected = ok
         
         if not ok:
             LOGGER.warning("Could not connect to Sharktopoda")
             return
+        
+        self.sharktopodaConnected.emit()
 
     def _open_settings(self):
         """
@@ -633,6 +649,7 @@ class MainWindow(TemplateBaseClass):
         )
         
         def show_localization():
+            sleep(1)
             self.sharktopoda_client.seek_elapsed_time(video_reference_uuid, annotation_milliseconds)
             self.sharktopoda_client.clear_localizations(video_reference_uuid)
             self.sharktopoda_client.add_localizations(video_reference_uuid, [localization])
@@ -690,6 +707,10 @@ def init_settings():
     settings.raz_url = ("m3/raz_url", str, constants.RAZIEL_URL_DEFAULT)
     
     settings.label_font_size = ("appearance/label_font_size", int, constants.LABEL_FONT_SIZE_DEFAULT)
+    
+    settings.sharktopoda_host = ("video/sharktopoda_host", str, constants.SHARKTOPODA_HOST_DEFAULT)
+    settings.sharktopoda_outgoing_port = ("video/sharktopoda_outgoing_port", int, constants.SHARKTOPODA_OUTGOING_PORT_DEFAULT)
+    settings.sharktopoda_incoming_port = ("video/sharktopoda_incoming_port", int, constants.SHARKTOPODA_INCOMING_PORT_DEFAULT)
 
 
 def main():

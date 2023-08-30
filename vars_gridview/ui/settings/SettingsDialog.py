@@ -4,6 +4,7 @@ from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsT
 from vars_gridview.ui.settings.tabs.M3Tab import M3Tab
 from vars_gridview.ui.settings.tabs.SQLTab import SQLTab
 from vars_gridview.ui.settings.tabs.AppearanceTab import AppearanceTab
+from vars_gridview.ui.settings.tabs.VideoPlayerTab import VideoPlayerTab
 
 
 class SettingsDialog(QtWidgets.QDialog):
@@ -15,7 +16,7 @@ class SettingsDialog(QtWidgets.QDialog):
 
     applySettings = QtCore.pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, connect_slot, connected_signal, parent=None):
         super().__init__(parent)
 
         self.setWindowTitle("Settings")
@@ -46,7 +47,7 @@ class SettingsDialog(QtWidgets.QDialog):
         self._update_apply_enabled()
 
         # Add tabs
-        self._add_tabs()
+        self._add_tabs(connect_slot, connected_signal)
 
         # Arrange the dialog layout
         self._arrange()
@@ -89,7 +90,8 @@ class SettingsDialog(QtWidgets.QDialog):
         tab.settingsChanged.connect(self._on_settings_changed)
         self.applySettings.connect(tab.apply_settings)
 
-    def _add_tabs(self):
+    def _add_tabs(self, connect_slot, connected_signal):
         self._register_tab(M3Tab())
         self._register_tab(SQLTab())
         self._register_tab(AppearanceTab())
+        self._register_tab(VideoPlayerTab(connect_slot, connected_signal))
