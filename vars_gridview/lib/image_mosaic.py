@@ -332,11 +332,13 @@ class ImageMosaic(QtCore.QObject):
             max_y = image.shape[0]
 
             # Filter out invalid boxes
-            localizations = [
-                loc
-                for loc in localizations
-                if loc.valid_box and loc.in_bounds(min_x, min_y, max_x, max_y)
-            ]
+            valid_localizations = []
+            for loc in localizations:
+                if not (loc.valid_box and loc.in_bounds(min_x, min_y, max_x, max_y)):
+                    LOGGER.debug(f"Skipping localization {loc.uuid} due to invalid box or out of bounds")
+                    continue
+                valid_localizations.append(loc)
+            localizations = valid_localizations
 
             # Create the widgets
             for localization in localizations:
