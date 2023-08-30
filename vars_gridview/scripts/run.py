@@ -16,8 +16,10 @@ This was inspired from a PyQt4 GraphicsGridLayout example found here:
 http://synapses.awardspace.info/pages-scripts/python/pages/python-pyqt_qgraphicsview-thumbnails-grid.py.html
 """
 
+import argparse
 import datetime
 import json
+import logging
 import os
 import sys
 from threading import Thread
@@ -37,7 +39,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from vars_gridview.lib import constants, m3, raziel, sql
 from vars_gridview.lib.boxes import BoxHandler
 from vars_gridview.lib.image_mosaic import ImageMosaic
-from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.log import LOGGER, AppLogger
 from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
     get_kb_parts,
@@ -692,7 +694,23 @@ def init_settings():
     settings.label_font_size = ("appearance/label_font_size", int, constants.LABEL_FONT_SIZE_DEFAULT)
 
 
+def parse_args():
+    """
+    Parse command line arguments.
+    """
+    parser = argparse.ArgumentParser(description="VARS Gridview")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging to console")
+    return parser.parse_args()
+
+
 def main():
+    # Parse command line arguments
+    args = parse_args()
+
+    # Set up logging
+    if args.verbose:
+        AppLogger.get_instance().set_stream_level(logging.DEBUG)
+
     # Create the Qt application
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName(constants.APP_NAME)
