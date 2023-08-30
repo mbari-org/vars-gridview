@@ -335,7 +335,7 @@ class ImageMosaic(QtCore.QObject):
             valid_localizations = []
             for loc in localizations:
                 if not (loc.valid_box and loc.in_bounds(min_x, min_y, max_x, max_y)):
-                    LOGGER.debug(f"Skipping localization {loc.uuid} due to invalid box or out of bounds")
+                    LOGGER.debug(f"Skipping localization {loc.association_uuid} due to invalid box or out of bounds")
                     continue
                 valid_localizations.append(loc)
             localizations = valid_localizations
