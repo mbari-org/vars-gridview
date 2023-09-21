@@ -142,7 +142,9 @@ class ImageMosaic(QtCore.QObject):
                         "video_uri",
                         "video_container",
                         "video_reference_uuid",
-                        "video_sequence_name"
+                        "video_sequence_name",
+                        "video_width",
+                        "video_height",
                     )
                 }
                 
@@ -240,6 +242,7 @@ class ImageMosaic(QtCore.QObject):
             "Downloading images...", 0, len(set(worklist.keys()))
         ) as dlg:
             for imaged_moment_uuid, url in worklist.items():
+                dlg += 1
                 if dlg.wasCanceled():
                     LOGGER.info("Image loading cancelled by user")
                     break
@@ -250,8 +253,15 @@ class ImageMosaic(QtCore.QObject):
                     LOGGER.debug("Skipping, already downloaded image for moment: {}".format(imaged_moment_uuid))
                     continue
 
+                # Scale factors. Needed if the image is not the same size as the annotation's source image
+                scale_x = 1.0
+                scale_y = 1.0
+
                 if url is None:  # No image reference, need to use beholder
                     video_data = self.moment_video_data[imaged_moment_uuid]
+                    
+                    source_width = video_data["video_width"]
+                    source_height = video_data["video_height"]
                     
                     # Find the video URI of the MP4 video
                     original_video_reference_uuid = video_data["video_reference_uuid"]
@@ -266,6 +276,8 @@ class ImageMosaic(QtCore.QObject):
                     
                     # Get the MP4 video data
                     mp4_video_reference_uri = mp4_video_data["video_reference"]["uri"]
+                    mp4_width = mp4_video_data["video_reference"]["width"]
+                    mp4_height = mp4_video_data["video_reference"]["height"]
                     mp4_video_start_timestamp = parse_iso(mp4_video_data["video"]["start_timestamp"])  # datetime
                     moment_timestamp = self.moment_timestamps[imaged_moment_uuid]
                     
@@ -291,6 +303,9 @@ class ImageMosaic(QtCore.QObject):
                             )
                         )
                         continue
+                    
+                    scale_x = source_width / mp4_width
+                    scale_y = source_height / mp4_height
 
                 else:  # download the image from its URL
                     res = requests.get(url)
@@ -305,11 +320,25 @@ class ImageMosaic(QtCore.QObject):
                 img_raw = res.content
                 img_arr = np.fromstring(img_raw, np.uint8)
                 img = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
+                
+                # Rescale the image if needed
+                if scale_x != 1.0 or scale_y != 1.0:
+                    LOGGER.debug(f"Resizing image for moment {imaged_moment_uuid} by {scale_x}x{scale_y}")
+                    
+                    if scale_x == 0 or scale_y == 0:
+                        LOGGER.warn(f"Invalid scale factors for moment {imaged_moment_uuid}: {scale_x}x{scale_y}, skipping")
+                        continue
+                    
+                    img = cv2.resize(
+                        img,
+                        None,
+                        fx=scale_x,
+                        fy=scale_y,
+                        interpolation=cv2.INTER_CUBIC,  # see OpenCV docs: https://docs.opencv.org/4.8.0/da/d54/group__imgproc__transform.html#ga47a974309e9102f5f08231edc7e7529d
+                    )
 
                 self.moment_image_map[imaged_moment_uuid] = img
                 self.n_images += 1
-
-                dlg += 1
 
         # Create the rect widgets
         for imaged_moment_uuid, localizations in self.moment_localizations.items():

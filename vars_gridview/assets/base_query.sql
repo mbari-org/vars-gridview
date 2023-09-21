@@ -18,6 +18,8 @@ SELECT
     chief_scientist,
     dive_number,
     video_sequence_name,
+    video_width,
+    video_height,
     camera_platform,
     depth_meters,
     latitude,
