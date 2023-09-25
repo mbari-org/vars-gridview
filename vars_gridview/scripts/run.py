@@ -635,6 +635,7 @@ class MainWindow(TemplateBaseClass):
         )
         
         def show_localization():
+            sleep(0.5)  # A hack, since Sharktopoda 2 crashes if you send it a command too soon
             self.sharktopoda_client.seek_elapsed_time(video_reference_uuid, annotation_milliseconds)
             self.sharktopoda_client.clear_localizations(video_reference_uuid)
             self.sharktopoda_client.add_localizations(video_reference_uuid, [localization])

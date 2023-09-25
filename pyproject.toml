@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vars-gridview"
-version = "0.3.7"
+version = "0.3.8"
 description = "VARS GridView is a tool for reviewing and correcting VARS localizations in bulk."
 authors = [
     "Kevin Barnard <kbarnard@mbari.org>",
@@ -15,13 +15,13 @@ include = ["LICENSE"]
 [tool.poetry.dependencies]
 python = "^3.8"
 pyqt6 = "^6.4.0"
-pymssql = "^2.2.4"
+pymssql = ">=2.2.4, <2.2.8"
 requests = "^2.27.1"
 pyqtgraph = "^0.13.0"
 opencv-python = "^4.5.5.62"
 qdarkstyle = "^3.0.3"
 beholder-client = "^0.1.0"
-sharktopoda-client = "0.4.1"
+sharktopoda-client = "^0.4.3"
 
 [tool.poetry.scripts]
 vars-gridview = "vars_gridview.scripts.run:main"
