@@ -20,7 +20,7 @@ from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.sort_methods import SortMethod
-from vars_gridview.lib.util import get_timestamp, parse_iso
+from vars_gridview.lib.util import get_timestamp, parse_iso, parse_sqlserver_native
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.lib.constants import IMAGE_TYPE
 
@@ -167,9 +167,9 @@ class ImageMosaic(QtCore.QObject):
                 # Handle string timestamps (convert to datetime)
                 # Note: This is only apparently an issue with FreeTDS (what pymssql uses) on Apple Silicon
                 if isinstance(recorded_timestamp, str):
-                    recorded_timestamp = parse_iso(recorded_timestamp)
+                    recorded_timestamp = parse_sqlserver_native(recorded_timestamp)
                 if isinstance(video_start_timestamp, str):
-                    video_start_timestamp = parse_iso(video_start_timestamp)
+                    video_start_timestamp = parse_sqlserver_native(video_start_timestamp)
                 
                 # ------------------
                 

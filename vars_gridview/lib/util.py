@@ -62,3 +62,21 @@ def parse_iso(timestamp: str) -> datetime:
         return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
     except ValueError:
         return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_sqlserver_native(timestamp: str) -> datetime:
+    """
+    Parse a SQL Server native timestamp.
+    
+    Args:
+        timestamp: The timestamp to parse.
+    
+    Returns:
+        The parsed timestamp.
+    """
+    if isinstance(timestamp, datetime):  # short circuit
+        return timestamp
+    
+    datetime_part, *decimal_part = timestamp.split(".")
+    subsecond_timedelta = timedelta(seconds=float(f".{decimal_part[0]}")) if decimal_part else timedelta()
+    return datetime.strptime(datetime_part, "%Y-%m-%d %H:%M:%S") + subsecond_timedelta
