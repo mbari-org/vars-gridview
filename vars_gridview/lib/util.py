@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 
-def get_timestamp(video_start_timestamp: datetime, recorded_timestamp: Optional[datetime], elapsed_time_millis: Optional[int] = None, timecode: Optional[str] = None) -> Optional[datetime]:
+def get_timestamp(video_start_timestamp: datetime, recorded_timestamp: Optional[datetime] = None, elapsed_time_millis: Optional[int] = None, timecode: Optional[str] = None) -> Optional[datetime]:
     """
     Get a timestamp from the given parameters. One of the following must be provided:
     - recorded_timestamp

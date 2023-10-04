@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "vars-gridview"
-version = "0.3.13"
+version = "0.3.14"
 description = "VARS GridView is a tool for reviewing and correcting VARS localizations in bulk."
 authors = [
     "Kevin Barnard <kbarnard@mbari.org>",

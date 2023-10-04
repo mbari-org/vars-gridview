@@ -168,8 +168,10 @@ class ImageMosaic(QtCore.QObject):
                 # Note: This is only apparently an issue with FreeTDS (what pymssql uses) on Apple Silicon
                 if isinstance(recorded_timestamp, str):
                     recorded_timestamp = parse_sqlserver_native(recorded_timestamp)
+                    video_data["index_recorded_timestamp"] = recorded_timestamp  # Update the video data dict for downstream use
                 if isinstance(video_start_timestamp, str):
                     video_start_timestamp = parse_sqlserver_native(video_start_timestamp)
+                    video_data["video_start_timestamp"] = video_start_timestamp  # Update the video data dict for downstream use
                 
                 # ------------------
                 
