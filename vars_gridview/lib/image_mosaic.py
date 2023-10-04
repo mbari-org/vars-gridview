@@ -164,6 +164,13 @@ class ImageMosaic(QtCore.QObject):
                 # Video data
                 video_start_timestamp = video_data["video_start_timestamp"]
                 
+                # Handle string timestamps (convert to datetime)
+                # Note: This is only apparently an issue with FreeTDS (what pymssql uses) on Apple Silicon
+                if isinstance(recorded_timestamp, str):
+                    recorded_timestamp = parse_iso(recorded_timestamp)
+                if isinstance(video_start_timestamp, str):
+                    video_start_timestamp = parse_iso(video_start_timestamp)
+                
                 # ------------------
                 
                 # Skip if the video sequence name is not set

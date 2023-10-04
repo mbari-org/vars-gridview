@@ -55,6 +55,9 @@ def parse_iso(timestamp: str) -> datetime:
     Returns:
         The parsed timestamp.
     """
+    if isinstance(timestamp, datetime):  # short circuit
+        return timestamp
+    
     try:
         return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
     except ValueError:
