@@ -6,8 +6,9 @@ Distributed under MIT license. See license.txt for more infomation.
 
 """
 
+from collections import namedtuple
 from datetime import datetime, timedelta
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
 import cv2
@@ -17,10 +18,12 @@ import requests
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.annotation import VARSLocalization
+from vars_gridview.lib.entities import Association, ImageReference, ImagedMoment, Observation
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
+from vars_gridview.lib.models import BoundingBox
 from vars_gridview.lib.sort_methods import SortMethod
-from vars_gridview.lib.util import get_timestamp, parse_iso, parse_sqlserver_native
+from vars_gridview.lib.util import get_timestamp, parse_iso, parse_sqlserver_native, parse_timestamp
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.lib.constants import IMAGE_TYPE
 
@@ -77,6 +80,17 @@ class ImageMosaic(QtCore.QObject):
 
         self.n_images = 0
         self.n_localizations = 0
+        
+        # Extract the object graph from the query data
+        (
+            self._imaged_moments_by_uuid, 
+            self._observations_by_uuid, 
+            self._associations_by_uuid, 
+            self._image_references_by_uuid
+        ) = self._extract_object_graph(query_data, query_headers)
+        
+        # Populate the rect widgets
+        self._populate_rect_widgets(rect_clicked_slot)
 
         # Munge query items into corresponding dicts
         seen_associations = set()
@@ -397,6 +411,141 @@ class ImageMosaic(QtCore.QObject):
                 localization.rect = rw  # Back reference
 
                 self.n_localizations += 1
+
+    def _extract_object_graph(self, query_data: List[tuple], query_headers: List[str]) -> Tuple[Dict[UUID, ImagedMoment], Dict[UUID, Observation], Dict[UUID, Association], Dict[UUID, ImageReference]]:
+        """
+        Extract an object graph from the available query data.
+        
+        Args:
+            query_data: List of query data tuples (database rows)
+            query_headers: List of query headers (column names)
+        
+        Returns:
+            A tuple of dicts (imaged moments, observations, associations, image references) that are each indexed by UUID.
+        """
+        Row = namedtuple("Row", query_headers)
+        rows = [Row(*i) for i in query_data]
+        
+        # Extract the underlying entities (object graph) from the query data
+        
+        # Image moments
+        imaged_moments_by_uuid = {}
+        for row in rows:
+            uuid = row.imaged_moment_uuid
+            if uuid is None:
+                continue
+            
+            if uuid in imaged_moments_by_uuid:
+                continue
+            
+            imaged_moments_by_uuid[uuid] = ImagedMoment(
+                uuid=uuid,
+                elapsed_time_millis=row.index_elapsed_time_millis,
+                recorded_timestamp=parse_timestamp(row.index_recorded_timestamp),
+                timecode=row.index_timecode,
+            )
+        
+        # Observations
+        observations_by_uuid = {}
+        for row in rows:
+            uuid = row.observation_uuid
+            if uuid is None:
+                continue
+            
+            if uuid in observations_by_uuid:
+                continue
+            
+            observation = Observation(
+                uuid=uuid,
+                concept=row.concept,
+                observer=row.observer,
+            )
+            
+            observations_by_uuid[uuid] = observation
+            
+            # Add to imaged moment
+            imaged_moment_uuid = row.imaged_moment_uuid
+            if imaged_moment_uuid is not None:
+                imaged_moment = imaged_moments_by_uuid.get(imaged_moment_uuid, None)
+                if imaged_moment is not None:
+                    imaged_moment.add_observation(observation)
+            
+        # Associations
+        associations_by_uuid = {}
+        for row in rows:
+            uuid = row.association_uuid
+            if uuid is None:
+                continue
+            
+            if uuid in observations_by_uuid:
+                continue
+            
+            association = Association(
+                uuid=uuid,
+                link_name=row.link_name,
+                to_concept=row.to_concept,
+                link_value=row.link_value,
+            )
+            
+            associations_by_uuid[uuid] = association
+            
+            # Add to observation
+            observation_uuid = row.observation_uuid
+            if observation_uuid is not None:
+                observation = observations_by_uuid.get(observation_uuid, None)
+                if observation is not None:
+                    observation.add_association(association)
+        
+        # Image references
+        image_references_by_uuid = {}
+        for row in rows:
+            uuid = row.image_reference_uuid
+            if uuid is None:
+                continue
+            
+            if uuid in image_references_by_uuid:
+                continue
+            
+            image_reference = ImageReference(
+                uuid=uuid,
+                format=row.image_format,
+                url=row.image_url,
+            )
+            
+            image_references_by_uuid[uuid] = image_reference
+            
+            # Add to imaged moment
+            imaged_moment_uuid = row.imaged_moment_uuid
+            if imaged_moment_uuid is not None:
+                imaged_moment = imaged_moments_by_uuid.get(imaged_moment_uuid, None)
+                if imaged_moment is not None:
+                    imaged_moment.add_image_reference(image_reference)
+        
+        return imaged_moments_by_uuid, observations_by_uuid, associations_by_uuid, image_references_by_uuid
+
+
+    def _populate_rect_widgets(self, rect_clicked_slot: callable):
+        """
+        Populate the rect widgets in the mosaic.
+        
+        Args:
+            rect_clicked_slot: Slot to connect to the rect widgets' clicked signal
+        """
+        # Collect and parse bounding box associations
+        bounding_boxes = []
+        for association_uuid, association in self._associations_by_uuid.items():
+            if association.link_name != "bounding box":
+                continue
+            
+            # Parse the bounding box
+            try:
+                bounding_box = BoundingBox.from_association(association)
+            except BoundingBox.MalformedBoundingBoxError as e:
+                LOGGER.error(f"Malformed bounding box for association {association_uuid}: {e}")
+                continue
+            
+            bounding_boxes.append(bounding_box)
+        
 
     def find_mp4_video_data(self, video_sequence_name: str, timestamp: datetime) -> Optional[dict]:
         """

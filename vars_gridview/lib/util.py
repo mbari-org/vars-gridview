@@ -4,7 +4,7 @@ Utilities.
 
 
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Union
 
 
 def get_timestamp(video_start_timestamp: datetime, recorded_timestamp: Optional[datetime] = None, elapsed_time_millis: Optional[int] = None, timecode: Optional[str] = None) -> Optional[datetime]:
@@ -80,3 +80,22 @@ def parse_sqlserver_native(timestamp: str) -> datetime:
     datetime_part, *decimal_part = timestamp.split(".")
     subsecond_timedelta = timedelta(seconds=float(f".{decimal_part[0]}")) if decimal_part else timedelta()
     return datetime.strptime(datetime_part, "%Y-%m-%d %H:%M:%S") + subsecond_timedelta
+
+
+def parse_timestamp(timestamp: Union[str, datetime]) -> Optional[datetime]:
+    """
+    Parse a timestamp.
+    """
+    if isinstance(timestamp, datetime):  # short circuit
+        return timestamp
+    
+    try:
+        return parse_iso(timestamp)
+    except ValueError:
+        pass
+    
+    try:
+        return parse_sqlserver_native(timestamp)
+    except ValueError:
+        pass
+    
