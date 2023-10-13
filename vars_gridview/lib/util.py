@@ -7,7 +7,12 @@ from datetime import datetime, timedelta
 from typing import Optional, Union
 
 
-def get_timestamp(video_start_timestamp: datetime, recorded_timestamp: Optional[datetime] = None, elapsed_time_millis: Optional[int] = None, timecode: Optional[str] = None) -> Optional[datetime]:
+def get_timestamp(
+    video_start_timestamp: Union[datetime, str], 
+    recorded_timestamp: Optional[Union[datetime, str]] = None, 
+    elapsed_time_millis: Optional[int] = None, 
+    timecode: Optional[str] = None
+) -> Optional[datetime]:
     """
     Get a timestamp from the given parameters. One of the following must be provided:
     - recorded_timestamp
@@ -26,11 +31,11 @@ def get_timestamp(video_start_timestamp: datetime, recorded_timestamp: Optional[
     """             
     # First, try to use the recorded timestamp (microsecond resolution)
     if recorded_timestamp is not None:
-        return recorded_timestamp
+        return parse_timestamp(recorded_timestamp)
     
     # Next, try to use the elapsed time in milliseconds (millisecond resolution)
     elif elapsed_time_millis is not None:
-        return video_start_timestamp + timedelta(
+        return parse_timestamp(video_start_timestamp) + timedelta(
             milliseconds=int(elapsed_time_millis)
         )
     
@@ -98,4 +103,3 @@ def parse_timestamp(timestamp: Union[str, datetime]) -> Optional[datetime]:
         return parse_sqlserver_native(timestamp)
     except ValueError:
         pass
-    

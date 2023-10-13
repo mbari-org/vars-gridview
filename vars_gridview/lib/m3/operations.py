@@ -217,6 +217,16 @@ def get_video_by_video_reference_uuid(video_reference_uuid: str) -> dict:
 def get_video_sequence_by_name(name: str) -> dict:
     """
     Get a video sequence by name.
+    
+    Args:
+        name: Name of the video sequence to get.
+    
+    Returns:
+        The video sequence as a dict.
+    
+    Raises:
+        requests.HTTPError: If the request fails.
+        json.JSONDecodeError: If the response is not valid JSON.
     """
     LOGGER.debug(f"Getting video sequence by name {name}")
     response = m3.VAMPIRE_SQUID_CLIENT.get_video_sequence_by_name(name)
@@ -225,12 +235,43 @@ def get_video_sequence_by_name(name: str) -> dict:
     return response.json()
 
 
-def get_imaged_moment(image_reference_uuid: str) -> dict:
+def get_imaged_moment(imaged_moment_uuid: str) -> dict:
     """
     Get an imaged moment by UUID.
+    
+    Args:
+        image: UUID of the imaged moment to get.
+    
+    Returns:
+        The imaged moment as a dict.
+    
+    Raises:
+        requests.HTTPError: If the request fails.
+        json.JSONDecodeError: If the response is not valid JSON.
     """
-    LOGGER.debug(f"Getting imaged moment {image_reference_uuid}")
-    response = m3.ANNOSAURUS_CLIENT.get_imaged_moment(image_reference_uuid)
+    LOGGER.debug(f"Getting imaged moment {imaged_moment_uuid}")
+    response = m3.ANNOSAURUS_CLIENT.get_imaged_moment(imaged_moment_uuid)
+
+    response.raise_for_status()
+    return response.json()
+
+
+def get_image_reference(image_reference_uuid: str) -> dict:
+    """
+    Get an image reference by UUID.
+    
+    Args:
+        image_reference_uuid: UUID of the image reference to get.
+    
+    Returns:
+        The image reference as a dict.
+    
+    Raises:
+        requests.HTTPError: If the request fails.
+        json.JSONDecodeError: If the response is not valid JSON.
+    """
+    LOGGER.debug(f"Getting image reference {image_reference_uuid}")
+    response = m3.ANNOSAURUS_CLIENT.get_image_reference(image_reference_uuid)
 
     response.raise_for_status()
     return response.json()

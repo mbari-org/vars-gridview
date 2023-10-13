@@ -8,7 +8,7 @@ Distributed under MIT license. See license.txt for more infomation.
 
 from collections import namedtuple
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 from uuid import UUID
 
 import cv2
@@ -18,10 +18,10 @@ import requests
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.annotation import VARSLocalization
-from vars_gridview.lib.entities import Association, ImageReference, ImagedMoment, Observation
+from vars_gridview.lib.entities import Association, ImageReference, ImagedMoment, Observation, VideoReference
 from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.m3 import operations
-from vars_gridview.lib.models import BoundingBox
+from vars_gridview.lib.m3 import BEHOLDER_CLIENT, operations
+from vars_gridview.lib.models import BeholderImageSource, BoundingBox, ImageReferenceImageSource
 from vars_gridview.lib.sort_methods import SortMethod
 from vars_gridview.lib.util import get_timestamp, parse_iso, parse_sqlserver_native, parse_timestamp
 from vars_gridview.lib.widgets import RectWidget
@@ -532,7 +532,7 @@ class ImageMosaic(QtCore.QObject):
             rect_clicked_slot: Slot to connect to the rect widgets' clicked signal
         """
         # Collect and parse bounding box associations
-        bounding_boxes = []
+        bounding_boxes: List[BoundingBox] = []
         for association_uuid, association in self._associations_by_uuid.items():
             if association.link_name != "bounding box":
                 continue
@@ -546,7 +546,85 @@ class ImageMosaic(QtCore.QObject):
             
             bounding_boxes.append(bounding_box)
         
+        # Link the bounding boxes to images
+        for bounding_box in bounding_boxes:
+            image_source = None
+            
+            # Check if bounding box has a preferred image reference
+            preferred_image_reference_uuid = bounding_box.metadata.get("image_reference_uuid", None)
+            if preferred_image_reference_uuid is not None:
+                # Get the image reference, if we have it
+                image_reference = self._image_references_by_uuid.get(preferred_image_reference_uuid, None)
+                
+                # If not, fetch it via M3 and cache it
+                if image_reference is None:
+                    try:
+                        image_reference_dict = operations.get_image_reference(preferred_image_reference_uuid)
+                        image_reference = ImageReference.from_m3_dict(image_reference_dict)
+                    except Exception as e:
+                        LOGGER.error(f"Failed to get bounding box preferred image reference {preferred_image_reference_uuid}: {e}")
+                        continue
+                
+                # We got the image reference; use it as the image source
+                if image_reference is not None:
+                    image_source = ImageReferenceImageSource(image_reference)
+                
+            else:  # We need to use Beholder
+                imaged_moment = bounding_box.association.observation.imaged_moment
+                mp4_video_references = self.find_mp4_video_references(imaged_moment)
+                if not mp4_video_references:  # No matches
+                    LOGGER.warning(f"Could not find MP4 video reference for imaged moment {imaged_moment.uuid}")
+                    continue
+                elif len(mp4_video_references) > 1:  # Multiple candidates
+                    LOGGER.warning(f"Could not resolve MP4 video reference for imaged moment {imaged_moment.uuid}: multiple candidates")
+                    continue
+                
+                mp4_video_reference = mp4_video_references[0]
+                
+                # Get the image source
+                image_source = BeholderImageSource(BEHOLDER_CLIENT, mp4_video_reference, imaged_moment)
+            
+            bounding_box.image_source = image_source
 
+    def find_mp4_video_references(self, imaged_moment: ImagedMoment) -> Iterable[VideoReference]:
+        """
+        Find all matching MP4 video references for the given imaged moment.
+        
+        Matches if the video reference URI ends with `.mp4` and the imaged moment is within the video reference's start-end range.
+        
+        Args:
+            bounding_box: The bounding box
+        
+        Returns:
+            The matching MP4 video references.
+        """
+        video_sequence_videos = imaged_moment.video_reference.video.video_sequence.videos
+        video_references = [video_reference for video in video_sequence_videos for video_reference in video.video_references]  # Flattened list of video references for all videos in the video sequence
+        
+        def match(video_reference: VideoReference) -> bool:
+            """
+            Predicate to check if the given video reference matches the imaged moment.
+            """
+            ends_with_mp4 = video_reference.uri.lower().endswith(".mp4")
+            
+            video = video_reference.video
+            
+            try:  # Get timestamps
+                start_timestamp = video.get_start_timestamp()
+                imaged_moment_timestamp = imaged_moment.get_timestamp()
+                end_timestamp = video.get_end_timestamp()
+            except ValueError:
+                return False
+            
+            if start_timestamp is None or imaged_moment_timestamp is None or end_timestamp is None:
+                return False
+            
+            in_range = start_timestamp <= imaged_moment_timestamp <= end_timestamp
+            
+            return ends_with_mp4 and in_range
+        
+        return filter(match, video_references)
+    
     def find_mp4_video_data(self, video_sequence_name: str, timestamp: datetime) -> Optional[dict]:
         """
         Find a video with an MP4 video reference for the given video sequence name and timestamp.
