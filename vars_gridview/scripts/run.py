@@ -1,23 +1,8 @@
-# -*- coding: utf-8 -*-
 """
-gridview.py -- A small python app to display ROIs and edit labels driven by FathomNet annotations
-Copyright 2020  Monterey Bay Aquarium Research Institute
-Distributed under MIT license. See license.txt for more information.
-
-The app loads images from a directory and then sorts them by label, time, or height. Based on the max
-image size and the scree width, it divides the layout into columns and rows and then
-fills these with RectWidgets. Each rect widget controls an ROI and annotation and
-new annotations can be applied to groups of selected widgets
-
-The app also provides a view similar to rectlabel, where existing annotations can be dragged to adjust and
-new annotations can be added.
-
-This was inspired from a PyQt4 GraphicsGridLayout example found here:
-http://synapses.awardspace.info/pages-scripts/python/pages/python-pyqt_qgraphicsview-thumbnails-grid.py.html
+Main entrypoint for the VARS Gridview application.
 """
 
 import argparse
-import datetime
 import json
 import logging
 import os
@@ -37,8 +22,8 @@ from sharktopoda_client.dto import Localization
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib import constants, m3, raziel, sql
-from vars_gridview.lib.boxes import BoxHandler
-from vars_gridview.lib.image_mosaic import ImageMosaic
+from vars_gridview.lib.boxes import GraphicalBoundingBoxController
+from vars_gridview.lib.grid_view import GridViewController
 from vars_gridview.lib.log import LOGGER, AppLogger
 from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
@@ -118,10 +103,10 @@ class MainWindow(TemplateBaseClass):
 
         self.last_selected_rect = None  # Last selected ROI
 
-        self.image_mosaic = (
-            None  # Image mosaic (holds the thumbnails as a grid of RectWidgets)
+        self.grid_view_controller = (
+            None  # Grid view controller (holds the thumbnails as a grid of RectWidgets)
         )
-        self.box_handler = None  # Box handler (handles the ROIs and annotations)
+        self.graphical_bounding_box_controller = None  # Box controller (handles the ROIs and annotations)
 
         self.cached_moment_concepts = (
             {}
@@ -150,7 +135,7 @@ class MainWindow(TemplateBaseClass):
 
     @property
     def loaded(self):
-        return self.image_mosaic is not None and self.box_handler is not None
+        return self.grid_view_controller is not None and self.graphical_bounding_box_controller is not None
 
     def _launch(self):
         """
@@ -311,8 +296,8 @@ class MainWindow(TemplateBaseClass):
         if method is None:
             return
         
-        self.image_mosaic.sort_rect_widgets(method)
-        self.image_mosaic.render_mosaic()
+        self.grid_view_controller.sort_rect_widgets(method)
+        self.grid_view_controller.render()
 
     def _do_query(self):
         """
@@ -324,51 +309,42 @@ class MainWindow(TemplateBaseClass):
             return
         else:  # Unload
             self.last_selected_rect = None
-            self.image_mosaic = None
-            self.box_handler = None
+            self.grid_view_controller = None
+            self.graphical_bounding_box_controller = None
 
         # Run the query
         query_data, query_headers = sql.query(constraint_dict)
 
-        # Grab the beholder info
-        beholder_endpoint = next(e for e in self.endpoints if e["name"] == "beholder")
-        beholder_url = beholder_endpoint["url"]
-        beholder_api_key = beholder_endpoint["secret"]
-
-        # Create the image mosaic
-        self.image_mosaic = ImageMosaic(
+        # Create the grid view controller
+        self.grid_view_controller = GridViewController(
             self.ui.roiGraphicsView,
             query_data,
             query_headers,
             self.rect_clicked,
             self.verifier,
-            beholder_url,
-            beholder_api_key,
             zoom=self.ui.zoomSpinBox.value() / 100,
         )
 
-        self.image_mosaic.hide_discarded = False
-        self.image_mosaic.hide_to_review = False
-        self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
+        self.grid_view_controller.hide_discarded = False
+        self.grid_view_controller.hide_to_review = False
+        self.grid_view_controller._hide_labeled = self.ui.hideLabeled.isChecked()
 
         # Render
-        # sort_method = self.ui.sortMethod.currentData()
-        # self.image_mosaic.sort_rect_widgets(sort_method)  # TODO replace this logic
-        self.image_mosaic.render_mosaic()
+        self.grid_view_controller.render()
 
         # Show some stats about the images and annotations
         self.statusBar().showMessage(
             "Loaded "
-            + str(self.image_mosaic.n_images)
+            + str(self.grid_view_controller.n_images)
             + " images and "
-            + str(self.image_mosaic.n_localizations)
+            + str(self.grid_view_controller.n_localizations)
             + " localizations."
         )
 
-        # Create the box handler
-        self.box_handler = BoxHandler(
+        # Create the graphical bounding box controller
+        self.graphical_bounding_box_controller = GraphicalBoundingBoxController(
             self.ui.roiDetailGraphicsView,
-            self.image_mosaic,
+            self.grid_view_controller,
             all_labels=get_kb_concepts(),
             verifier=self.verifier,
         )
@@ -430,7 +406,7 @@ class MainWindow(TemplateBaseClass):
             QtWidgets.QMessageBox.critical(self, "Bad Part", f'Bad part "{part}". Canceling.')
             return
 
-        to_label = self.image_mosaic.get_selected()
+        to_label = self.grid_view_controller.get_selected()
         if len(to_label) > 1:
             opt = QtWidgets.QMessageBox.question(
                 self,
@@ -443,17 +419,17 @@ class MainWindow(TemplateBaseClass):
 
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             # Apply labels to all selected localizations, push to VARS
-            self.image_mosaic.apply_label(concept, part)
+            self.grid_view_controller.apply_label(concept, part)
 
             # Update the label of the selected localization in the image view (if necessary)
-            self.box_handler.update_labels()
+            self.graphical_bounding_box_controller.update_labels()
 
     @QtCore.pyqtSlot()
     def delete(self):
         if not self.loaded:
             return
 
-        to_delete = self.image_mosaic.get_selected()
+        to_delete = self.grid_view_controller.get_selected()
         opt = QtWidgets.QMessageBox.question(
             self,
             "Confirm Deletion",
@@ -463,9 +439,9 @@ class MainWindow(TemplateBaseClass):
             defaultButton=QtWidgets.QMessageBox.StandardButton.No,
         )
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.delete_selected()
-            self.box_handler.roi_detail.clear()
-            self.box_handler.clear()
+            self.grid_view_controller.delete_selected()
+            self.graphical_bounding_box_controller.roi_detail.clear()
+            self.graphical_bounding_box_controller.clear()
             self.ui.annotationXML.clear()
             self.ui.imageInfoList.clear()
             self.ui.varsObservationsLabel.clear()
@@ -475,7 +451,7 @@ class MainWindow(TemplateBaseClass):
         if not self.loaded:
             return
 
-        self.image_mosaic.clear_selected()
+        self.grid_view_controller.clear_selected()
 
     @QtCore.pyqtSlot()
     def update_layout(self):
@@ -483,21 +459,20 @@ class MainWindow(TemplateBaseClass):
             return
 
         # method = self.ui.sortMethod.currentData()
-        self.image_mosaic.hide_discarded = False
-        self.image_mosaic.hide_to_review = False
-        self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
-        # self.image_mosaic.sort_rect_widgets(method)
-        self.image_mosaic.render_mosaic()
+        self.grid_view_controller.hide_discarded = False
+        self.grid_view_controller.hide_to_review = False
+        self.grid_view_controller._hide_labeled = self.ui.hideLabeled.isChecked()
+        self.grid_view_controller.render()
 
     @QtCore.pyqtSlot(int)
     def update_zoom(self, zoom):
         if not self.loaded:
             return
 
-        self.image_mosaic.update_zoom(zoom / 100)
+        self.grid_view_controller.update_zoom(zoom / 100)
 
     @QtCore.pyqtSlot(object, object)
-    def rect_clicked(self, rect: RectWidget, event: QtGui.QMouseEvent):
+    def rect_clicked(self, rect_widget: RectWidget, event: QtGui.QMouseEvent):
         if not self.loaded:
             return
         
@@ -506,62 +481,62 @@ class MainWindow(TemplateBaseClass):
         shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
 
         # Save information to VARS for any moved/resized boxes
-        self.box_handler.save_all(self.verifier)
+        self.graphical_bounding_box_controller.save_all(self.verifier)
 
         # Select the widget
         if shift:
-            self.image_mosaic.select_range(self.last_selected_rect, rect)
-        elif ctrl and rect.is_selected:
-            self.image_mosaic.deselect(rect)
+            self.grid_view_controller.select_range(self.last_selected_rect, rect_widget)
+        elif ctrl and rect_widget.is_selected:
+            self.grid_view_controller.deselect(rect_widget)
         else:
-            self.image_mosaic.select(rect, clear=not ctrl)
+            self.grid_view_controller.select(rect_widget, clear=not ctrl)
 
         # Remove highlight from the last selected ROI
         if self.last_selected_rect is not None:
-            self.box_handler.clear()
+            self.graphical_bounding_box_controller.clear()
             self.last_selected_rect.is_last_selected = False
             self.last_selected_rect.update()
 
         # Update the last selection
-        rect.is_last_selected = True
-        rect.update()
-        self.last_selected_rect = rect
+        rect_widget.is_last_selected = True
+        rect_widget.update()
+        self.last_selected_rect = rect_widget
 
         # Update the image and add the boxes
-        rect_full_image = rect.get_full_image()
+        rect_full_image = rect_widget.get_full_image()
         if rect_full_image is None:
             return
-        self.box_handler.roi_detail.setImage(cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB))
-        self.box_handler.view_box.autoRange()
-        self.box_handler.add_annotation(rect.localization_index, rect)
+        self.graphical_bounding_box_controller.roi_detail.setImage(cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB))
+        self.graphical_bounding_box_controller.view_box.autoRange()
+        self.graphical_bounding_box_controller.add_annotation(rect_widget.localization_index, rect_widget)
 
         # Add localization data to the panel
         self.ui.annotationXML.clear()
         self.ui.annotationXML.insertPlainText(
-            json.dumps(rect.localization.json, indent=2)
+            json.dumps(rect_widget.localization.json, indent=2)
         )
 
         # Add ancillary data to the image info list
         self.ui.imageInfoList.clear()
         self.ui.imageInfoList.addItem(
             "Derived timestamp: {}".format(
-                rect.annotation_datetime().strftime("%Y-%m-%d %H:%M:%S")
+                rect_widget.annotation_datetime().strftime("%Y-%m-%d %H:%M:%S")
             )
         )
         self.ui.imageInfoList.addItems(
             [
                 "{}: {}".format(key.replace("_", " ").capitalize(), value)
-                for key, value in rect.ancillary_data.items()
+                for key, value in rect_widget.ancillary_data.items()
             ]
         )
 
         # Update observations label
-        imaged_moment_uuid = rect.localization.imaged_moment_uuid
+        imaged_moment_uuid = rect_widget.localization.imaged_moment_uuid
         if imaged_moment_uuid in self.cached_moment_concepts:  # cache hit
             concepts = self.cached_moment_concepts[imaged_moment_uuid]
         else:  # cache miss
             vars_moment_data = get_imaged_moment(
-                rect.localization.imaged_moment_uuid
+                rect_widget.localization.imaged_moment_uuid
             )
             concepts = sorted(
                 set(obs["concept"] for obs in vars_moment_data["observations"])
@@ -585,7 +560,7 @@ class MainWindow(TemplateBaseClass):
         imaged_moment_uuid = rect.imaged_moment_uuid
         
         # Get the annotation MP4 video data
-        mp4_video_data = self.image_mosaic.moment_mp4_data.get(imaged_moment_uuid, None)
+        mp4_video_data = self.grid_view_controller.moment_mp4_data.get(imaged_moment_uuid, None)
         if mp4_video_data is None:
             QtWidgets.QMessageBox.warning(
                 self, "Missing Video", "ROI lacks MP4 video."
@@ -599,7 +574,7 @@ class MainWindow(TemplateBaseClass):
         mp4_start_timestamp = parse_iso(mp4_video["start_timestamp"])
 
         # Get the annotation timestamp
-        annotation_datetime = self.image_mosaic.moment_timestamps[imaged_moment_uuid]
+        annotation_datetime = self.grid_view_controller.moment_timestamps[imaged_moment_uuid]
 
         # Compute the timedelta between the annotation and video start
         annotation_timedelta = annotation_datetime - mp4_start_timestamp
@@ -671,7 +646,7 @@ class MainWindow(TemplateBaseClass):
     def closeEvent(self, event):
         self._save_gui()
         if self.loaded:
-            self.box_handler.save_all(self.verifier)
+            self.graphical_bounding_box_controller.save_all(self.verifier)
         QtWidgets.QMainWindow.closeEvent(self, event)
 
     def query(self) -> Optional[dict]:

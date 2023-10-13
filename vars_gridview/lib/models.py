@@ -30,7 +30,19 @@ class BoundingBox:
     height: Union[int, float]
     association: Association
     metadata: dict = field(default_factory=dict)
-    image_source: 'ImageSource' = None
+    
+    @property
+    def label(self):
+        """
+        Get the bounding box label.
+        """
+        part = self.association.to_concept
+        if part == "self":
+            part = ""
+        else:
+            part = f" {part}"
+        
+        return self.association.observation.concept + part
     
     def round(self):
         """
@@ -56,6 +68,20 @@ class BoundingBox:
         """
         self.x += x_offset
         self.y += y_offset
+    
+    @property
+    def x_slice(self) -> slice:
+        """
+        Get the x coordinates as a slice.
+        """
+        return slice(round(self.x), round(self.x + self.width))
+    
+    @property
+    def y_slice(self) -> slice:
+        """
+        Get the y coordinates as a slice.
+        """
+        return slice(round(self.y), round(self.y + self.height))
     
     @classmethod
     def from_association(cls, association: Association) -> 'BoundingBox':
@@ -226,6 +252,14 @@ class ImageSource(ABC):
         Get the image height in pixels, scaled by the y display scale factor.
         """
         return round(self.height * self.display_scale_y)
+    
+    @abstractmethod
+    def __eq__(self, __value: object) -> bool:
+        raise NotImplementedError()
+    
+    @abstractmethod
+    def __hash__(self) -> int:
+        raise NotImplementedError()
 
 
 class ImageReferenceImageSource(ImageSource):
@@ -249,6 +283,15 @@ class ImageReferenceImageSource(ImageSource):
     @property
     def height(self) -> int:
         return self._image_reference.height_pixels
+    
+    def __eq__(self, __value: object) -> bool:
+        if not isinstance(__value, ImageReferenceImageSource):
+            return False
+        
+        return self._image_reference.uuid == __value._image_reference.uuid
+    
+    def __hash__(self) -> int:
+        return hash(self._image_reference.uuid)
 
 
 class BeholderImageSource(ImageSource):
@@ -307,3 +350,12 @@ class BeholderImageSource(ImageSource):
         
         # Capture the frame
         return self._beholder_client.capture_raw(self._video_reference.uri, video_reference_relative_elapsed_time_millis)
+
+    def __eq__(self, __value: object) -> bool:
+        if not isinstance(__value, BeholderImageSource):
+            return False
+        
+        return self._beholder_client._base_url == __value._beholder_client._base_url and self._video_reference.uuid == __value._video_reference.uuid and self._imaged_moment.uuid == __value._imaged_moment.uuid
+
+    def __hash__(self) -> int:
+        return hash((self._beholder_client._base_url, self._video_reference.uuid, self._imaged_moment.uuid))

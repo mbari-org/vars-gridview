@@ -20,6 +20,7 @@ UI_FILE = ASSETS_DIR / "gridview.ui"
 STYLE_DIR = ASSETS_DIR / "style"
 GUI_SETTINGS_FILE = ASSETS_DIR / "gui.ini"
 BASE_QUERY_FILE = ASSETS_DIR / "base_query.sql"
+VIDEO_DATA_QUERY_FILE = ASSETS_DIR / "video_data_query.sql"
 LOG_DIR = ROOT_DIR / "logs"
 
 # Preferred image type

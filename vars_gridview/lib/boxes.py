@@ -14,7 +14,7 @@ from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
 
 
-class BoundingBox(pg.RectROI):
+class GraphicalBoundingBox(pg.RectROI):
     def __init__(
         self,
         view,
@@ -23,7 +23,7 @@ class BoundingBox(pg.RectROI):
         rect,
         localization,
         verifier,
-        image_mosaic,
+        grid_view_controller,
         color=(255, 0, 0),
         label="ROI",
     ):
@@ -64,7 +64,7 @@ class BoundingBox(pg.RectROI):
         self.localization = localization
         self.rect = rect
         
-        self.image_mosaic = image_mosaic
+        self.grid_view_controller = grid_view_controller
         
         self._menu = QtWidgets.QMenu()
         self._setup_menu()
@@ -91,15 +91,15 @@ class BoundingBox(pg.RectROI):
         """
         Delete (clicked from context menu).
         """
-        self.image_mosaic.select(self.rect)
-        self.image_mosaic.delete_selected()
+        self.grid_view_controller.select(self.rect)
+        self.grid_view_controller.delete_selected()
     
     def _do_change_concept(self):
         """
         Change concept (clicked from context menu).
         """
         concept, ok = QtWidgets.QInputDialog.getItem(
-            self.image_mosaic._graphics_view,
+            self.grid_view_controller._graphics_view,
             "Change concept",
             "Concept:",
             get_kb_concepts()
@@ -108,15 +108,15 @@ class BoundingBox(pg.RectROI):
         if not ok:
             return
         
-        self.image_mosaic.select(self.rect)
-        self.image_mosaic.apply_label(concept, "")
+        self.grid_view_controller.select(self.rect)
+        self.grid_view_controller.apply_label(concept, "")
     
     def _do_change_part(self):
         """
         Change part (clicked from context menu).
         """
         part, ok = QtWidgets.QInputDialog.getItem(
-            self.image_mosaic._graphics_view,
+            self.grid_view_controller._graphics_view,
             "Change part",
             "Part:",
             get_kb_parts()
@@ -125,8 +125,8 @@ class BoundingBox(pg.RectROI):
         if not ok:
             return
         
-        self.image_mosaic.select(self.rect)
-        self.image_mosaic.apply_label("", part)
+        self.grid_view_controller.select(self.rect)
+        self.grid_view_controller.apply_label("", part)
 
     def check_bounds(self):
         x, y = self.pos()
@@ -201,11 +201,11 @@ class BoundingBox(pg.RectROI):
             self.textItem.setPos(x, y)
 
 
-class BoxHandler:
+class GraphicalBoundingBoxController:
     def __init__(
         self,
         graphics_view,
-        image_mosaic,
+        grid_view_controller,
         localization=None,
         all_labels=[],
         verifier=None,
@@ -223,7 +223,7 @@ class BoxHandler:
         self.all_labels = all_labels
         self.verifier = verifier
 
-        self.image_mosaic = image_mosaic
+        self.grid_view_controller = grid_view_controller
 
     def update_labels(self):
         for box in self.boxes:
@@ -251,14 +251,14 @@ class BoxHandler:
                 height = rect.image_height
 
                 # Create the bounding box
-                bb = BoundingBox(
+                bb = GraphicalBoundingBox(
                     self.view_box,
                     [xmin, height - ymin],
                     [xmax - xmin, -1 * (ymax - ymin)],
                     localization.rect,
                     localization,
                     self.verifier,
-                    self.image_mosaic,
+                    self.grid_view_controller,
                     color=color,
                     label=label,
                 )

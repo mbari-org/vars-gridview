@@ -223,3 +223,10 @@ class VideoReference:
     
     # Parent entity
     video: Optional[Video] = None
+    
+    # Child entities
+    imaged_moments: List[ImagedMoment] = field(default_factory=list)
+    
+    def add_imaged_moment(self, imaged_moment: ImagedMoment):
+        self.imaged_moments.append(imaged_moment)
+        imaged_moment.video_reference = self

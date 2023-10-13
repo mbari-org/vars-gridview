@@ -93,7 +93,7 @@ class LabelSort(SortMethod):
 
     @staticmethod
     def key(rect: RectWidget) -> str:
-        return rect.text_label
+        return rect.label
 
 
 class WidthSort(SortMethod):

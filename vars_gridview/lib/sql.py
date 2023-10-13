@@ -1,14 +1,15 @@
 import sys
-from typing import Tuple
+from typing import List, Optional, Tuple
 
 import pymssql
 
-from vars_gridview.lib.constants import BASE_QUERY_FILE
+from vars_gridview.lib.constants import BASE_QUERY_FILE, VIDEO_DATA_QUERY_FILE
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.settings import SettingsManager
 
 SQL_CONNECTION = None
 BASE_QUERY = None
+VIDEO_DATA_QUERY = None
 
 
 class ORList:
@@ -80,6 +81,18 @@ def get_base_query() -> str:
     return BASE_QUERY
 
 
+def get_video_data_query() -> str:
+    """
+    Read the video data query.
+    """
+    global VIDEO_DATA_QUERY
+    if not VIDEO_DATA_QUERY:
+        with open(VIDEO_DATA_QUERY_FILE) as f:
+            VIDEO_DATA_QUERY = f.read()
+    
+    return VIDEO_DATA_QUERY
+
+
 def connect(server_url: str, user: str, password: str, database: str):
     """
     Initialize the connection to the SQL server.
@@ -108,18 +121,36 @@ def connect_from_settings():
     )
 
 
-def query(constraint_dict: dict) -> Tuple[list, list]:
+def run_query(query_str: str, values: Optional[tuple] = None) -> Tuple[list, list]:
     if not SQL_CONNECTION:
         raise Exception("No connection to SQL server")
 
-    constraint_spec = ConstraintSpec.from_dict(constraint_dict)
-
     cursor = SQL_CONNECTION.cursor()
     cursor.execute(
-        get_base_query().format(filters=constraint_spec.form),
-        tuple(constraint_spec.values),
+        query_str,
+        values if values is not None else tuple(),
     )
 
     return cursor.fetchall(), [
         i[0] for i in cursor.description
     ]  # Data and column names
+
+
+def query(constraint_dict: dict) -> Tuple[list, list]:
+    """
+    Run the base query with the given constraints.
+    """
+    constraint_spec = ConstraintSpec.from_dict(constraint_dict)
+    
+    return run_query(
+        get_base_query().format(filters=constraint_spec.form), 
+        values=tuple(constraint_spec.values)
+    )
+
+
+def query_video_data(video_reference_uuids: List[str]) -> Tuple[list, list]:
+    """
+    Run the video data query with the given constraints.
+    """
+    formatted_uuids = "(" + ", ".join(["'{}'".format(uuid) for uuid in video_reference_uuids]) + ")"
+    return run_query(get_video_data_query().format(video_reference_uuids=formatted_uuids))
