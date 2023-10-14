@@ -43,7 +43,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.border_size = 4
         self.roi_dimensions = [240, 240]
         self.zoom = 0.5
-        self._boundingRect = QtCore.QRect()
+        self._boundingRect = QtCore.QRectF()
         
         self.background_color = QtCore.Qt.GlobalColor.darkGray
         self.hover_color = QtCore.Qt.GlobalColor.lightGray
@@ -53,6 +53,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         self._pixmap = None
         self.update_pixmap()
+        self.update_zoom(0.5)
 
         self._deleted = False  # Flag to indicate if this rect widget has been deleted. Used to prevent double deletion.
 

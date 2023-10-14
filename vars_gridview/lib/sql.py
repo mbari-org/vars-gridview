@@ -152,5 +152,5 @@ def query_video_data(video_reference_uuids: List[str]) -> Tuple[list, list]:
     """
     Run the video data query with the given constraints.
     """
-    formatted_uuids = "(" + ", ".join(["'{}'".format(uuid) for uuid in video_reference_uuids]) + ")"
+    formatted_uuids = "(" + ", ".join(["'{}'".format(uuid) for uuid in video_reference_uuids]) + ")" if video_reference_uuids else "('')"
     return run_query(get_video_data_query().format(video_reference_uuids=formatted_uuids))

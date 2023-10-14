@@ -3,7 +3,7 @@ SELECT
 	im.elapsed_time_millis AS imaged_moment_elapsed_time_millis,
 	im.recorded_timestamp AS imaged_moment_recorded_timestamp,
 	im.timecode AS imaged_moment_timecode,
-	im.video_reference_uuid AS image_reference_video_reference_uuid,
+	im.video_reference_uuid AS imaged_moment_video_reference_uuid,
 	o.uuid AS observation_uuid,
 	o.concept AS observation_concept,
 	o.observer AS observation_observer,

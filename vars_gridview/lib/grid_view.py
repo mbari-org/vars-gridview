@@ -10,7 +10,7 @@ from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import BEHOLDER_CLIENT, operations
 from vars_gridview.lib.models import BeholderImageSource, BoundingBox, ImageReferenceImageSource
 from vars_gridview.lib.sort_methods import SortMethod
-from vars_gridview.lib.sql import query_video_data
+from vars_gridview.lib.sql import query, query_video_data
 from vars_gridview.lib.util import parse_timestamp
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.lib.constants import IMAGE_TYPE
@@ -21,12 +21,11 @@ class GridViewController(QtCore.QObject):
     Controller for the grid view.
     """
     
+    statusUpdate = QtCore.pyqtSignal(str)
+    
     def __init__(
         self,
         graphics_view: QtWidgets.QGraphicsView,
-        query_data: List[List],
-        query_headers: List[str],
-        rect_clicked_slot: callable,
         verifier: str,
         zoom: float = 1.0,
     ):
@@ -46,42 +45,50 @@ class GridViewController(QtCore.QObject):
         self._init_graphics()
 
         self.verifier = verifier
-
-        self.n_images = 0
-        self.n_localizations = 0
-        
+    
+    def load(self, query_constraint_dict: dict, rect_clicked_slot: callable):
+        """
+        Load the data and populate the view.
+        """
         # Extract the object graph from the query data
+        LOGGER.info("Loading annotation data...")
+        self.statusUpdate.emit("Loading annotation data...")
         (
             self._video_references_by_uuid,
             self._imaged_moments_by_uuid, 
             self._observations_by_uuid, 
             self._associations_by_uuid, 
             self._image_references_by_uuid
-        ) = self._extract_object_graph(query_data, query_headers)
+        ) = self._query_annotation_data(query_constraint_dict)
+        LOGGER.debug(f"Got {len(self._video_references_by_uuid)} video references, {len(self._imaged_moments_by_uuid)} imaged moments, {len(self._observations_by_uuid)} observations, {len(self._associations_by_uuid)} associations, and {len(self._image_references_by_uuid)} image references from query {query_constraint_dict}")
         
         # Get video data
-        with pg.ProgressDialog("Querying video data...", cancelText=None, parent=self._graphics_view) as pd:
-            (
-                self._video_sequences_by_uuid,
-                self._videos_by_uuid,
-                self._video_references_by_uuid
-            ) = self._add_video_data()
+        LOGGER.info("Loading video data...")
+        self.statusUpdate.emit("Loading video data...")
+        (
+            self._video_sequences_by_uuid,
+            self._videos_by_uuid,
+            self._video_references_by_uuid
+        ) = self._query_video_data()
         
         # Populate the rect widgets
-        with pg.ProgressDialog("Populating rect widgets...", cancelText=None, parent=self._graphics_view) as pd:
-            self._bounding_boxes_by_image_source, self._rect_widgets = self._populate_rect_widgets(rect_clicked_slot)
+        LOGGER.info("Loading images...")
+        self.statusUpdate.emit("Loading images...")
+        self._bounding_boxes_by_image_source, self._rect_widgets = self._populate_rect_widgets(rect_clicked_slot)
 
-    def _extract_object_graph(self, query_data: List[tuple], query_headers: List[str]) -> Tuple[Dict[UUID, VideoReference], Dict[UUID, ImagedMoment], Dict[UUID, Observation], Dict[UUID, Association], Dict[UUID, ImageReference]]:
+    def _query_annotation_data(self, query_constraint_dict: dict) -> Tuple[Dict[UUID, VideoReference], Dict[UUID, ImagedMoment], Dict[UUID, Observation], Dict[UUID, Association], Dict[UUID, ImageReference]]:
         """
-        Extract an object graph from the available query data.
+        Build the object graph by querying the database with the given constraints.
         
         Args:
-            query_data: List of query data tuples (database rows)
-            query_headers: List of query headers (column names)
+            query_constraint_dict: The query constraints. See vars_gridview.lib.sql.query() for details.
         
         Returns:
             A tuple of dicts (video references, imaged moments, observations, associations, image references) that are each indexed by UUID.
         """
+        # Run the base query
+        query_data, query_headers = query(query_constraint_dict)
+        
         Row = namedtuple("Row", query_headers)
         rows = [Row(*i) for i in query_data]
         
@@ -207,9 +214,9 @@ class GridViewController(QtCore.QObject):
         
         return video_references_by_uuid, imaged_moments_by_uuid, observations_by_uuid, associations_by_uuid, image_references_by_uuid
 
-    def _add_video_data(self) -> Tuple[Dict[UUID, VideoSequence], Dict[UUID, Video], Dict[UUID, VideoReference]]:
+    def _query_video_data(self) -> Tuple[Dict[UUID, VideoSequence], Dict[UUID, Video], Dict[UUID, VideoReference]]:
         """
-        Get video data for according to the video references in the extracted imaged moments.
+        Extend the object graph with necessary video data.
         
         Returns:
             A tuple of dicts (video sequences, videos, video references) that are each indexed by UUID.
@@ -332,6 +339,7 @@ class GridViewController(QtCore.QObject):
                     try:
                         image_reference_dict = operations.get_image_reference(preferred_image_reference_uuid)
                         image_reference = ImageReference.from_m3_dict(image_reference_dict)
+                        self._image_references_by_uuid[preferred_image_reference_uuid] = image_reference
                     except Exception as e:
                         LOGGER.error(f"Failed to get bounding box preferred image reference {preferred_image_reference_uuid}: {e}")
                         continue
@@ -342,7 +350,7 @@ class GridViewController(QtCore.QObject):
                 
             else:  # We need to use Beholder
                 imaged_moment = bounding_box.association.observation.imaged_moment
-                mp4_video_references = self.find_mp4_video_references(imaged_moment)
+                mp4_video_references = list(self.find_mp4_video_references(imaged_moment))
                 if not mp4_video_references:  # No matches
                     LOGGER.warning(f"Could not find MP4 video reference for imaged moment {imaged_moment.uuid}")
                     continue
@@ -362,14 +370,16 @@ class GridViewController(QtCore.QObject):
         
         # Create the rect widgets
         rect_widgets = []
-        self.n_images = 0
-        self.n_localizations = 0
+        n_images = 0
+        n_localizations = 0
         for image_source, bounding_boxes in bounding_boxes_by_image_source.items():
-            self.n_images += 1
+            n_images += 1
             for bounding_box in bounding_boxes:
-                self.n_localizations += 1
+                n_localizations += 1
                 rect_widget = RectWidget(image_source, bounding_box, rect_clicked_slot)
                 rect_widgets.append(rect_widget)
+        
+        self.statusUpdate.emit(f"Loaded {n_images} images with {n_localizations} localizations")
         
         return bounding_boxes_by_image_source, rect_widgets
 

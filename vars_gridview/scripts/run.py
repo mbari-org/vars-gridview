@@ -312,34 +312,22 @@ class MainWindow(TemplateBaseClass):
             self.grid_view_controller = None
             self.graphical_bounding_box_controller = None
 
-        # Run the query
-        query_data, query_headers = sql.query(constraint_dict)
-
         # Create the grid view controller
         self.grid_view_controller = GridViewController(
             self.ui.roiGraphicsView,
-            query_data,
-            query_headers,
-            self.rect_clicked,
             self.verifier,
             zoom=self.ui.zoomSpinBox.value() / 100,
         )
-
+        self.grid_view_controller.statusUpdate.connect(self.statusBar().showMessage)
         self.grid_view_controller.hide_discarded = False
         self.grid_view_controller.hide_to_review = False
         self.grid_view_controller._hide_labeled = self.ui.hideLabeled.isChecked()
+        
+        # Load data into the controller
+        self.grid_view_controller.load(constraint_dict, self.rect_clicked)
 
-        # Render
+        # Render the view
         self.grid_view_controller.render()
-
-        # Show some stats about the images and annotations
-        self.statusBar().showMessage(
-            "Loaded "
-            + str(self.grid_view_controller.n_images)
-            + " images and "
-            + str(self.grid_view_controller.n_localizations)
-            + " localizations."
-        )
 
         # Create the graphical bounding box controller
         self.graphical_bounding_box_controller = GraphicalBoundingBoxController(
