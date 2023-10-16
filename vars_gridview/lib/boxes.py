@@ -1,34 +1,31 @@
-# -*- coding: utf-8 -*-
-"""
-rectlabel.py -- Tools to implement a labeling UI for bounding boxes in images
-Copyright 2020  Monterey Bay Aquarium Research Institute
-Distributed under MIT license. See license.txt for more information.
-
-"""
-
+from typing import Tuple
 import numpy as np
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtWidgets
+from vars_gridview.lib.grid_view import GridViewController
 
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
+from vars_gridview.lib.models import BoundingBox
+from vars_gridview.lib.widgets import RectWidget
 
 
 class GraphicalBoundingBox(pg.RectROI):
+    """
+    Graphics bounding box for a localization.
+    """
     def __init__(
         self,
-        view,
+        view: pg.GraphicsView,
         pos,
         size,
-        rect,
-        localization,
-        verifier,
-        grid_view_controller,
+        rect_widget: RectWidget,
+        bounding_box: BoundingBox,
+        verifier: str,
+        grid_view_controller: GridViewController,
         color=(255, 0, 0),
-        label="ROI",
     ):
-        pg.RectROI.__init__(
-            self,
+        super().__init__(
             pos,
             size,
             pen=pg.mkPen(color, width=3, style=QtCore.Qt.PenStyle.DashLine),
@@ -37,40 +34,50 @@ class GraphicalBoundingBox(pg.RectROI):
             removable=False,
             sideScalers=True,
         )
-        # GUI things
+        
+        self._bounding_box = bounding_box
+        self._rect_widget = rect_widget
+        self._verifier = verifier
+        self._grid_view_controller = grid_view_controller
+        self._color = color
+        self._text_item = None
+        self._view = view
+        self._dirty = False
+        
+        # Add scale handles (for resizing)
         self.addScaleHandle([1, 0], [0, 1])
         self.addScaleHandle([0, 1], [1, 0])
+        
+        # Add translate handle (for moving)
         self.addTranslateHandle([0.5, 0.5])
-        self.sigRemoveRequested.connect(self.remove)
-        self.sigRegionChanged.connect(self.draw_name)
-
-        self.sigRegionChangeFinished.connect(self.check_bounds)
-
-        self.label = label
-        self.color = color
-        self.textItem = None
-
-        self.view = view
-        self.view.addItem(self)
-        self.draw_name()
-
-        self.verifier = verifier
-
-        self.dirty = False
+        
+        # Connect signals for removal & box change
+        self.sigRemoveRequested.connect(self._remove_view_items)
+        self.sigRegionChanged.connect(self._update_text_item)
+        self.sigRegionChangeFinished.connect(self._update_bounding_box_bounds)
         self.sigRegionChanged.connect(self._dirty)
 
-        self.sigRegionChangeFinished.connect(self.update_localization_box)
 
-        self.localization = localization
-        self.rect = rect
+        # Initialize the text item
+        self._update_text_item()
+
+        # Add the graphical bounding box and its label text item to the view
+        self._add_view_items()
+
         
-        self.grid_view_controller = grid_view_controller
         
         self._menu = QtWidgets.QMenu()
         self._setup_menu()
         
         self.setAcceptedMouseButtons(QtCore.Qt.MouseButton.LeftButton)
-        self.sigClicked.connect(lambda bbox, ev: self.rect.clicked.emit(self.rect, ev))  # Pass click event to rect
+        self.sigClicked.connect(lambda bbox, ev: self._rect_widget.clicked.emit(self._rect_widget, ev))  # Pass click event to rect
+    
+    @property
+    def label(self):
+        """
+        Get the label for the graphical bounding box.
+        """
+        return self._bounding_box.label
     
     def _setup_menu(self):
         """
@@ -91,15 +98,15 @@ class GraphicalBoundingBox(pg.RectROI):
         """
         Delete (clicked from context menu).
         """
-        self.grid_view_controller.select(self.rect)
-        self.grid_view_controller.delete_selected()
+        self._grid_view_controller.select(self._rect_widget)
+        self._grid_view_controller.delete_selected()
     
     def _do_change_concept(self):
         """
         Change concept (clicked from context menu).
         """
         concept, ok = QtWidgets.QInputDialog.getItem(
-            self.grid_view_controller._graphics_view,
+            self._grid_view_controller._graphics_view,
             "Change concept",
             "Concept:",
             get_kb_concepts()
@@ -108,15 +115,15 @@ class GraphicalBoundingBox(pg.RectROI):
         if not ok:
             return
         
-        self.grid_view_controller.select(self.rect)
-        self.grid_view_controller.apply_label(concept, "")
+        self._grid_view_controller.select(self._rect_widget)
+        self._grid_view_controller.apply_label(concept, "")
     
     def _do_change_part(self):
         """
         Change part (clicked from context menu).
         """
         part, ok = QtWidgets.QInputDialog.getItem(
-            self.grid_view_controller._graphics_view,
+            self._grid_view_controller._graphics_view,
             "Change part",
             "Part:",
             get_kb_parts()
@@ -125,87 +132,114 @@ class GraphicalBoundingBox(pg.RectROI):
         if not ok:
             return
         
-        self.grid_view_controller.select(self.rect)
-        self.grid_view_controller.apply_label("", part)
+        self._grid_view_controller.select(self._rect_widget)
+        self._grid_view_controller.apply_label("", part)
 
-    def check_bounds(self):
+    def _keep_in_bounds(self):
+        """
+        Keep the bounding box in the bounds of the image. Will move the box if it is out of bounds.
+        """
         x, y = self.pos()
         w, h = self.size()
         h = -h  # Fix negative height
 
         min_x = 0
-        max_x = self.rect.image_width - w
+        max_x = self._rect_widget.image_width - w
 
         min_y = h
-        max_y = self.rect.image_height
+        max_y = self._rect_widget.image_height
 
         if x < min_x or y < min_y or x > max_x or y > max_y:
             self.setPos(min(max_x, max(min_x, x)), min(max_y, max(min_y, y)))
 
     @property
     def is_selected(self):
-        return self.rect.is_selected
+        return self._rect_widget.is_selected
 
     def _dirty(self):
-        self.dirty = True
+        self._dirty = True
 
-    def update_localization_box(self):
-        x, y, w, h = self.get_box()
-        y = self.rect.image_height - y
+    def _update_bounding_box_bounds(self):
+        # Keep the bounding box in the bounds of the image
+        self._keep_in_bounds()
+        
+        x, y, w, h = self._get_box()
+        y = self._rect_widget.image_height - y
         self.localization.set_box(x, y, w, h)
         self.localization.rect.update_roi_pic()
 
-    def update_label(self):
-        self.label = self.localization.text_label
-        self.draw_name()
+    def _add_view_items(self):
+        """
+        Add the graphical bounding box and its label to the view.
+        """
+        self._view.addItem(self)
+        self._view.addItem(self.text_item)
 
-    def remove(self, dummy):
-        self.view.removeItem(self.textItem)
-        self.view.removeItem(self)
+    def _remove_view_items(self, _):
+        """
+        Remove the graphical bounding box and its label from the view.
+        """
+        self._view.removeItem(self)
+        if self._text_item is not None:
+            self._view.removeItem(self._text_item)
 
-    def get_box(self):
+    def _get_box(self) -> Tuple[int, int, int, int]:
+        """
+        Get the bounding box coordinates.
+        
+        Returns:
+            A tuple (x, y, width, height) where x and y are the top left corner of the box.
+        """
         x, y = self.pos()
         w, h = self.size()
 
-        # need to convert box coordinates to account for positive or
-        # negative width/height values from pyqtgraph roi object
+        # Need to convert box coordinates to account for positive or
+        # negative width/height values from pyqtgraph ROI object
         if h > 0:
             y = y + h
         if w < 0:
             x = x + w
 
-        return [x, y, np.abs(w), np.abs(h)]
+        return x, y, np.abs(w), np.abs(h)
 
-    def draw_name(self):
-        roiSize = self.size()
-        w = roiSize[0]
-        h = roiSize[1]
-        if w < 0:
-            x = self.pos().x() - np.abs(w)
-        else:
-            x = self.pos().x()
-        if h < 0:
-            y = self.pos().y() - np.abs(h)
-        else:
-            y = self.pos().y()
-
-        if self.textItem is None:
-
-            self.textItem = pg.TextItem(
-                text=self.label, color=np.array(self.color) / 2, fill=(200, 200, 200)
+    @property
+    def text_item(self) -> pg.TextItem:
+        """
+        Get the text item for the graphical bounding box. Creates the text item if it doesn't exist.
+        """
+        if self._text_item is None:  # Create the text item
+            self._text_item = pg.TextItem(
+                text=self.label, color=np.array(self._color) / 2, fill=(200, 200, 200)
             )
-            self.textItem.setPos(x, y)
-            self.view.addItem(self.textItem)
-        else:
-            self.textItem.setText(self.label)
-            self.textItem.setPos(x, y)
+        return self._text_item
+
+    def _update_text_item(self):
+        """
+        Update the text item position and text.
+        """
+        pos = self.pos()
+        size = self.size()
+        
+        x = pos.x()
+        y = pos.y()
+        width = size[0]
+        height = size[1]
+        
+        # Keep in bounds
+        if width < 0:
+            x -= np.abs(width)
+        if height < 0:
+            y -= np.abs(height)
+
+        self.text_item.setText(self.label)
+        self.text_item.setPos(x, y)
 
 
 class GraphicalBoundingBoxController:
     def __init__(
         self,
-        graphics_view,
-        grid_view_controller,
+        graphics_view: pg.GraphicsView,
+        grid_view_controller: GridViewController,
         localization=None,
         all_labels=[],
         verifier=None,

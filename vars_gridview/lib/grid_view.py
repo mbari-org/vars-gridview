@@ -27,24 +27,24 @@ class GridViewController(QtCore.QObject):
         self,
         graphics_view: QtWidgets.QGraphicsView,
         verifier: str,
-        zoom: float = 1.0,
     ):
         super().__init__()
         
         self._rect_widgets: List[RectWidget] = []
-        self.roi_map = {}
-        self._hide_labeled = True
+        self.verifier = verifier
+        
+        # Render flags
+        self.hide_labeled = True
         self.hide_discarded = True
         self.hide_to_review = True
-        self.layouts = []
         
-        # Initialize the graphics
+        # Initialize the graphics scene and view
+        self._graphics_layouts = []
         self._graphics_view: QtWidgets.QGraphicsView = graphics_view
         self._graphics_scene: QtWidgets.QGraphicsScene = None
         self._graphics_widget: QtWidgets.QGraphicsWidget = None
         self._init_graphics()
 
-        self.verifier = verifier
     
     def load(self, query_constraint_dict: dict, rect_clicked_slot: callable):
         """
@@ -491,7 +491,7 @@ class GridViewController(QtCore.QObject):
         # Get the subset of rect widgets to render
         rect_widgets_to_render = [
             rw for rw in self._rect_widgets
-            if not (self._hide_labeled and rw.is_verified)
+            if not (self.hide_labeled and rw.is_verified)
         ]
         
         # Hide all rect widgets that we aren't rendering

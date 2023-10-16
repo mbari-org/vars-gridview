@@ -316,12 +316,11 @@ class MainWindow(TemplateBaseClass):
         self.grid_view_controller = GridViewController(
             self.ui.roiGraphicsView,
             self.verifier,
-            zoom=self.ui.zoomSpinBox.value() / 100,
         )
         self.grid_view_controller.statusUpdate.connect(self.statusBar().showMessage)
         self.grid_view_controller.hide_discarded = False
         self.grid_view_controller.hide_to_review = False
-        self.grid_view_controller._hide_labeled = self.ui.hideLabeled.isChecked()
+        self.grid_view_controller.hide_labeled = self.ui.hideLabeled.isChecked()
         
         # Load data into the controller
         self.grid_view_controller.load(constraint_dict, self.rect_clicked)
@@ -449,7 +448,7 @@ class MainWindow(TemplateBaseClass):
         # method = self.ui.sortMethod.currentData()
         self.grid_view_controller.hide_discarded = False
         self.grid_view_controller.hide_to_review = False
-        self.grid_view_controller._hide_labeled = self.ui.hideLabeled.isChecked()
+        self.grid_view_controller.hide_labeled = self.ui.hideLabeled.isChecked()
         self.grid_view_controller.render()
 
     @QtCore.pyqtSlot(int)
