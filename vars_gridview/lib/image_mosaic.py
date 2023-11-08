@@ -199,7 +199,7 @@ class ImageMosaic(QtCore.QObject):
                 self.localization_groups[group_key].append(localization)
                 
                 # Determine if the localization needs video info
-                needs_video_info = localization.image_reference_uuid is None
+                needs_video_info = True  # localization.image_reference_uuid is None
                 
                 # ------------------
                 
