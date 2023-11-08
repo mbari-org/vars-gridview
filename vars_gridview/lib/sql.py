@@ -15,9 +15,9 @@ class ORList:
     @staticmethod
     def typestr(value):
         if isinstance(value, str):
-            return "%s"
+            return f"'{value}'"
         elif isinstance(value, int):
-            return "%d"
+            return f"{value}"
         else:
             raise ValueError("Unsupported type: {}".format(type(value)))
 
@@ -117,7 +117,6 @@ def query(constraint_dict: dict) -> Tuple[list, list]:
     cursor = SQL_CONNECTION.cursor()
     cursor.execute(
         get_base_query().format(filters=constraint_spec.form),
-        tuple(constraint_spec.values),
     )
 
     return cursor.fetchall(), [
