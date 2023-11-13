@@ -173,8 +173,11 @@ class MainWindow(TemplateBaseClass):
         # Set up the menu bar
         self._setup_menu_bar()
         
-        # Set up Sharktopoda client in background thread
-        # Thread(target=self._setup_sharktopoda_client).start()
+        # Set up Sharktopoda client
+        try:
+            self._setup_sharktopoda_client()
+        except Exception as e:
+            LOGGER.warning(f"Could not set up Sharktopoda client: {e}")
 
         LOGGER.info("Launch successful")
 
@@ -279,11 +282,18 @@ class MainWindow(TemplateBaseClass):
         """
         Create the Sharktopoda video player client.
         """
-        self.sharktopoda_client = SharktopodaClient(
-            self._settings.sharktopoda_host.value, 
-            self._settings.sharktopoda_outgoing_port.value, 
-            self._settings.sharktopoda_incoming_port.value
-        )
+        if self.sharktopoda_client is not None:  # stop the sharktopoda client UDP server
+            self.sharktopoda_client.stop_server()
+        
+        try:
+            self.sharktopoda_client = SharktopodaClient(
+                self._settings.sharktopoda_host.value, 
+                self._settings.sharktopoda_outgoing_port.value, 
+                self._settings.sharktopoda_incoming_port.value
+            )
+        except Exception as e:
+            LOGGER.error(f"Could not create Sharktopoda client: {e}")
+            return
         
         for handler in LOGGER.handlers:
             self.sharktopoda_client.logger.addHandler(handler)
