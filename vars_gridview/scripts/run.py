@@ -16,6 +16,7 @@ This was inspired from a PyQt4 GraphicsGridLayout example found here:
 http://synapses.awardspace.info/pages-scripts/python/pages/python-pyqt_qgraphicsview-thumbnails-grid.py.html
 """
 
+import argparse
 import datetime
 import json
 import logging
@@ -38,7 +39,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from vars_gridview.lib import constants, m3, raziel, sql
 from vars_gridview.lib.boxes import BoxHandler
 from vars_gridview.lib.image_mosaic import ImageMosaic
-from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.log import LOGGER, AppLogger
 from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
     get_kb_parts,
@@ -546,6 +547,7 @@ class MainWindow(TemplateBaseClass):
         if rect_full_image is None:
             return
         self.box_handler.roi_detail.setImage(cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB))
+        self.box_handler.view_box.autoRange()
         self.box_handler.add_annotation(rect.localization_index, rect)
 
         # Add localization data to the panel
@@ -649,7 +651,7 @@ class MainWindow(TemplateBaseClass):
         )
         
         def show_localization():
-            sleep(1)
+            sleep(0.5)  # A hack, since Sharktopoda 2 crashes if you send it a command too soon
             self.sharktopoda_client.seek_elapsed_time(video_reference_uuid, annotation_milliseconds)
             self.sharktopoda_client.clear_localizations(video_reference_uuid)
             self.sharktopoda_client.add_localizations(video_reference_uuid, [localization])
@@ -713,7 +715,23 @@ def init_settings():
     settings.sharktopoda_incoming_port = ("video/sharktopoda_incoming_port", int, constants.SHARKTOPODA_INCOMING_PORT_DEFAULT)
 
 
+def parse_args():
+    """
+    Parse command line arguments.
+    """
+    parser = argparse.ArgumentParser(description="VARS Gridview")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging to console")
+    return parser.parse_args()
+
+
 def main():
+    # Parse command line arguments
+    args = parse_args()
+
+    # Set up logging
+    if args.verbose:
+        AppLogger.get_instance().set_stream_level(logging.DEBUG)
+
     # Create the Qt application
     app = QtWidgets.QApplication(sys.argv)
     app.setApplicationName(constants.APP_NAME)

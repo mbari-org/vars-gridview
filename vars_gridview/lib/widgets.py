@@ -17,6 +17,7 @@ from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.settings import SettingsManager
+from vars_gridview.lib.util import get_timestamp
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
@@ -153,22 +154,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         recorded_timestamp = self.video_data.get("index_recorded_timestamp", None)
 
         # Get annotation video time index
-        annotation_datetime = None
-        if recorded_timestamp is not None:
-            annotation_datetime = recorded_timestamp
-        elif elapsed_time_millis is not None:
-            annotation_datetime = video_start_datetime + datetime.timedelta(
-                milliseconds=int(elapsed_time_millis)
-            )
-        elif timecode is not None:
-            hours, minutes, seconds, frames = map(int, timecode.split(":"))
-            annotation_datetime = video_start_datetime + datetime.timedelta(
-                hours=hours, minutes=minutes, seconds=seconds
-            )
-        else:
-            raise ValueError("No video time index found")
-
-        return annotation_datetime
+        return get_timestamp(video_start_datetime, recorded_timestamp, elapsed_time_millis, timecode)
 
     def toqimage(self, img):
         height, width, bytesPerComponent = img.shape
