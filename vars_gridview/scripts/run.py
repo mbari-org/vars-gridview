@@ -531,6 +531,7 @@ class MainWindow(TemplateBaseClass):
         if rect_full_image is None:
             return
         self.box_handler.roi_detail.setImage(cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB))
+        self.box_handler.view_box.autoRange()
         self.box_handler.add_annotation(rect.localization_index, rect)
 
         # Add localization data to the panel

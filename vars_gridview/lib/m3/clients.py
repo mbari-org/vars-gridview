@@ -142,6 +142,9 @@ class AnnosaurusClient(M3Client):
     
     def get_imaged_moment(self, imaged_moment_uuid: str) -> requests.Response:
         return self.get(f"/imagedmoments/{imaged_moment_uuid}")
+    
+    def get_image_reference(self, image_reference_uuid: str) -> requests.Response:
+        return self.get(f"/imagereferences/{image_reference_uuid}")
 
 
 class VampireSquidClient(M3Client):

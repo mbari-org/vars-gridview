@@ -243,13 +243,24 @@ def get_video_sequence_by_name(name: str) -> dict:
     return response.json()
 
 
-def get_imaged_moment(image_reference_uuid: str) -> dict:
+def get_imaged_moment(imaged_moment_uuid: str) -> dict:
     """
     Get an imaged moment by UUID.
     """
-    LOGGER.debug(f"Getting imaged moment {image_reference_uuid}")
-    response = m3.ANNOSAURUS_CLIENT.get_imaged_moment(image_reference_uuid)
+    LOGGER.debug(f"Getting imaged moment {imaged_moment_uuid}")
+    response = m3.ANNOSAURUS_CLIENT.get_imaged_moment(imaged_moment_uuid)
 
+    response.raise_for_status()
+    return response.json()
+
+
+def get_image_reference(image_reference_uuid: str) -> dict:
+    """
+    Get an image reference by UUID.
+    """
+    LOGGER.debug(f"Getting image reference {image_reference_uuid}")
+    response = m3.ANNOSAURUS_CLIENT.get_image_reference(image_reference_uuid)
+    
     response.raise_for_status()
     return response.json()
 
