@@ -187,6 +187,9 @@ class VARSKBServerClient(M3Client):
 
     def get_concepts(self) -> requests.Response:
         return self.get("/concept")
+    
+    def get_concept(self, concept: str) -> requests.Response:
+        return self.get(f"/concept/{concept}")
 
     def get_parts(self) -> requests.Response:
         return self.get("/phylogeny/taxa/organism part")

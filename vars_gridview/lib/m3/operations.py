@@ -4,20 +4,20 @@ M3 operations. Make use of the clients defined in __init__.py.
 
 import json
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import requests
 
 from vars_gridview.lib import m3
 from vars_gridview.lib.log import LOGGER
 
-KB_CONCEPTS = None
-KB_PARTS = None
+KB_CONCEPTS: Dict[str, Optional[str]] = None
+KB_PARTS: List[str] = None
 USERS = None
 VIDEO_SEQUENCE_NAMES = None
 
 
-def get_kb_concepts() -> List[str]:
+def get_kb_concepts() -> Dict[str, Optional[str]]:
     """
     Get a list of all concepts in the KB.
     """
@@ -27,10 +27,28 @@ def get_kb_concepts() -> List[str]:
         response = m3.VARS_KB_SERVER_CLIENT.get_concepts()
 
         response.raise_for_status()
-        KB_CONCEPTS = response.json()
+        concept_names = response.json()
+        KB_CONCEPTS = {concept: None for concept in concept_names}
         LOGGER.debug(f"Got {len(KB_CONCEPTS)} concepts from KB")
 
     return KB_CONCEPTS
+
+
+def get_kb_name(concept: str) -> Optional[str]:
+    """
+    Get the name of a concept in the KB.
+    """
+    kb_concepts = get_kb_concepts()
+    if kb_concepts.get(concept, None) is None:
+        res = m3.VARS_KB_SERVER_CLIENT.get_concept(concept)
+        
+        res.raise_for_status()
+        name = res.json()["name"]
+        LOGGER.debug(f"Got name {name} for concept {concept} from KB")
+        
+        kb_concepts[concept] = name
+    
+    return kb_concepts[concept]
 
 
 def get_kb_parts() -> List[str]:

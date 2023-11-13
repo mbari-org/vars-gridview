@@ -512,6 +512,10 @@ class ImageMosaic(QtCore.QObject):
             # Handle empty concept/part
             if concept.strip() == "":  # No concept specified? Verify as-is
                 concept = rect.localization.concept
+            else:  # map to official KB concept name
+                concept = operations.get_kb_name(concept)
+                LOGGER.debug(f"Mapped concept {rect.localization.concept} -> {concept}")
+            
             if part.strip() == "":  # No part specified? ditto
                 part = rect.localization.part
 

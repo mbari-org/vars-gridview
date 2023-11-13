@@ -17,7 +17,6 @@ http://synapses.awardspace.info/pages-scripts/python/pages/python-pyqt_qgraphics
 """
 
 import argparse
-import datetime
 import json
 import logging
 import os
