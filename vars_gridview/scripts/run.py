@@ -94,6 +94,8 @@ class MainWindow(TemplateBaseClass):
     """
     Main application window.
     """
+    
+    sharktopodaConnected = QtCore.pyqtSignal()
 
     def __init__(self, app):
         QtWidgets.QMainWindow.__init__(self)
@@ -143,7 +145,7 @@ class MainWindow(TemplateBaseClass):
         self._settings = SettingsManager.get_instance()
         self._settings.label_font_size.valueChanged.connect(self.update_layout)
 
-        self.settings_dialog = SettingsDialog(self)
+        self.settings_dialog = SettingsDialog(self._setup_sharktopoda_client, self.sharktopodaConnected, parent=self)
 
         self._launch()
 
@@ -170,8 +172,11 @@ class MainWindow(TemplateBaseClass):
         # Set up the menu bar
         self._setup_menu_bar()
         
-        # Set up Sharktopoda client in background thread
-        Thread(target=self._setup_sharktopoda_client).start()
+        # Set up Sharktopoda client
+        try:
+            self._setup_sharktopoda_client()
+        except Exception as e:
+            LOGGER.warning(f"Could not set up Sharktopoda client: {e}")
 
         LOGGER.info("Launch successful")
 
@@ -276,13 +281,33 @@ class MainWindow(TemplateBaseClass):
         """
         Create the Sharktopoda video player client.
         """
-        self.sharktopoda_client = SharktopodaClient("::1", 8800, 8801)
+        if self.sharktopoda_client is not None:  # stop the sharktopoda client UDP server
+            self.sharktopoda_client.stop_server()
+        
+        try:
+            self.sharktopoda_client = SharktopodaClient(
+                self._settings.sharktopoda_host.value, 
+                self._settings.sharktopoda_outgoing_port.value, 
+                self._settings.sharktopoda_incoming_port.value
+            )
+        except Exception as e:
+            LOGGER.error(f"Could not create Sharktopoda client: {e}")
+            return
+        
+        for handler in LOGGER.handlers:
+            self.sharktopoda_client.logger.addHandler(handler)
+            self.sharktopoda_client._udp_client.logger.addHandler(handler)
+            self.sharktopoda_client._udp_server.logger.addHandler(handler)
+            handler.setLevel(logging.DEBUG)
+        
         ok = self.sharktopoda_client.connect()
         self.sharktopoda_connected = ok
         
         if not ok:
             LOGGER.warning("Could not connect to Sharktopoda")
             return
+        
+        self.sharktopodaConnected.emit()
 
     def _open_settings(self):
         """
@@ -693,6 +718,10 @@ def init_settings():
     settings.raz_url = ("m3/raz_url", str, constants.RAZIEL_URL_DEFAULT)
     
     settings.label_font_size = ("appearance/label_font_size", int, constants.LABEL_FONT_SIZE_DEFAULT)
+    
+    settings.sharktopoda_host = ("video/sharktopoda_host", str, constants.SHARKTOPODA_HOST_DEFAULT)
+    settings.sharktopoda_outgoing_port = ("video/sharktopoda_outgoing_port", int, constants.SHARKTOPODA_OUTGOING_PORT_DEFAULT)
+    settings.sharktopoda_incoming_port = ("video/sharktopoda_incoming_port", int, constants.SHARKTOPODA_INCOMING_PORT_DEFAULT)
 
 
 def parse_args():
