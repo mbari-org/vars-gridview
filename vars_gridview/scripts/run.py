@@ -326,6 +326,10 @@ class MainWindow(TemplateBaseClass):
         """
         Open the sort dialog and apply a sort method to the rect widgets.
         """
+        if not self.loaded:
+            QtWidgets.QMessageBox.warning(self, "Not Loaded", "No results are loaded, so sorting cannot be performed.")
+            return
+        
         # Show a sort dialog
         sort_dialog = SortDialog(parent=self)
         ok = sort_dialog.exec()
@@ -442,6 +446,12 @@ class MainWindow(TemplateBaseClass):
         GUI_SETTINGS.setValue("splitter2state", self.ui.splitter2.saveState())
 
     def update_labels(self):
+        if not self.loaded:
+            QtWidgets.QMessageBox.warning(
+                self, "Not Loaded", "No results are loaded, so labels cannot be applied."
+            )
+            return
+        
         concept = self.ui.labelComboBox.currentText()
         part = self.ui.partComboBox.currentText()
 
@@ -475,6 +485,9 @@ class MainWindow(TemplateBaseClass):
     @QtCore.pyqtSlot()
     def delete(self):
         if not self.loaded:
+            QtWidgets.QMessageBox.warning(
+                self, "Not Loaded", "No results are loaded, so deletions cannot be performed."
+            )
             return
 
         to_delete = self.image_mosaic.get_selected()
