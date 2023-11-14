@@ -379,9 +379,8 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.hide_to_review = False
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
 
-        # Render
-        # sort_method = self.ui.sortMethod.currentData()
-        # self.image_mosaic.sort_rect_widgets(sort_method)  # TODO replace this logic
+        default_sort_method = RecordedTimestampSort
+        self.image_mosaic.sort_rect_widgets(default_sort_method)
         self.image_mosaic.render_mosaic()
 
         # Show some stats about the images and annotations
