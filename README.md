@@ -39,6 +39,10 @@ You will first be prompted to log in. Enter your VARS username and password.
 
 *Note: If you are not using MBARI production VARS, change the "Config server" field to point to your instance of Raziel. This setting is persisted.*
 
+## Credits
+
+Icons courtesy of [Font Awesome](https://fontawesome.com/).
+
 ---
 
 Copyright &copy; 2020&ndash;2023 [Monterey Bay Aquarium Research Institute](https://www.mbari.org)

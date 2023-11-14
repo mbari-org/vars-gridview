@@ -69,6 +69,7 @@ from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
 # Define main window class from template
 CWD = Path(__file__).parent
 ASSETS_DIR = CWD.parent / "assets"
+ICONS_DIR = ASSETS_DIR / "icons"
 UI_FILE_PATH = ASSETS_DIR / "gridview.ui"
 WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(UI_FILE_PATH)
 
@@ -266,6 +267,8 @@ class MainWindow(TemplateBaseClass):
         file_menu = menu_bar.addMenu("&File")
 
         settings_action = QtGui.QAction("&Settings", self)
+        settings_icon = QtGui.QIcon(str(ICONS_DIR / "gear-solid.svg"))
+        settings_action.setIcon(settings_icon)
         settings_action.setShortcut("Ctrl+,")
         settings_action.triggered.connect(self._open_settings)
         file_menu.addAction(settings_action)
@@ -273,9 +276,19 @@ class MainWindow(TemplateBaseClass):
         query_menu = menu_bar.addMenu("&Query")
 
         query_action = QtGui.QAction("&Query", self)
+        query_icon = QtGui.QIcon(str(ICONS_DIR / "magnifying-glass-solid.svg"))
+        query_action.setIcon(query_icon)
         query_action.setShortcut("Ctrl+Q")
         query_action.triggered.connect(self._do_query)
         query_menu.addAction(query_action)
+    
+        # Create a menu with icons on the left-side of the main window
+        toolbar = QtWidgets.QToolBar()
+        toolbar.addAction(settings_action)
+        toolbar.addAction(query_action)
+        toolbar.setIconSize(QtCore.QSize(16, 16))
+        self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
+        
     
     def _setup_sharktopoda_client(self):
         """
@@ -298,7 +311,6 @@ class MainWindow(TemplateBaseClass):
             self.sharktopoda_client.logger.addHandler(handler)
             self.sharktopoda_client._udp_client.logger.addHandler(handler)
             self.sharktopoda_client._udp_server.logger.addHandler(handler)
-            handler.setLevel(logging.DEBUG)
         
         ok = self.sharktopoda_client.connect()
         self.sharktopoda_connected = ok
@@ -419,14 +431,6 @@ class MainWindow(TemplateBaseClass):
             QtWidgets.QCompleter.CompletionMode.PopupCompletion
         )
 
-    # def _setup_sort_methods(self):
-    #     """
-    #     Populate the sort method combo box
-    #     """
-    #     self.ui.sortMethod.clear()
-    #     for method in ENABLED_SORT_METHODS:
-    #         self.ui.sortMethod.addItem(method.NAME, userData=method)
-
     def _restore_gui(self):
         """
         Restore window size and splitter states
@@ -437,12 +441,14 @@ class MainWindow(TemplateBaseClass):
             self.restoreState(GUI_SETTINGS.value("windowState"))
             self.ui.splitter1.restoreState(GUI_SETTINGS.value("splitter1state"))
             self.ui.splitter2.restoreState(GUI_SETTINGS.value("splitter2state"))
+            self.ui.styleComboBox.setCurrentText(GUI_SETTINGS.value("style"))
 
     def _save_gui(self):
         GUI_SETTINGS.setValue("geometry", self.saveGeometry())
         GUI_SETTINGS.setValue("windowState", self.saveState())
         GUI_SETTINGS.setValue("splitter1state", self.ui.splitter1.saveState())
         GUI_SETTINGS.setValue("splitter2state", self.ui.splitter2.saveState())
+        GUI_SETTINGS.setValue("style", self.ui.styleComboBox.currentText())
 
     def update_labels(self):
         if not self.loaded:
