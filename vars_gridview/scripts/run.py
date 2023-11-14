@@ -554,10 +554,14 @@ class MainWindow(TemplateBaseClass):
             self.image_mosaic.select(rect, clear=not ctrl)
 
         # Remove highlight from the last selected ROI
+        needs_autorange = True
         if self.last_selected_rect is not None:
             self.box_handler.clear()
             self.last_selected_rect.is_last_selected = False
             self.last_selected_rect.update()
+
+            # Check if new rect image is different than last rect image
+            needs_autorange = rect.image is not self.last_selected_rect.image
 
         # Update the last selection
         rect.is_last_selected = True
@@ -569,7 +573,8 @@ class MainWindow(TemplateBaseClass):
         if rect_full_image is None:
             return
         self.box_handler.roi_detail.setImage(cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB))
-        self.box_handler.view_box.autoRange()
+        if needs_autorange:
+            self.box_handler.view_box.autoRange()
         self.box_handler.add_annotation(rect.localization_index, rect)
 
         # Add localization data to the panel
