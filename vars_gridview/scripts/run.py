@@ -284,6 +284,7 @@ class MainWindow(TemplateBaseClass):
     
         # Create a menu with icons on the left-side of the main window
         toolbar = QtWidgets.QToolBar()
+        toolbar.setObjectName("toolbar")
         toolbar.addAction(settings_action)
         toolbar.addAction(query_action)
         toolbar.setIconSize(QtCore.QSize(16, 16))
