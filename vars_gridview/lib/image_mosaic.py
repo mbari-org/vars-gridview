@@ -560,17 +560,21 @@ class ImageMosaic(QtCore.QObject):
         """
         for rect in self.get_selected():
             # Handle empty concept/part
-            if concept.strip() == "":  # No concept specified? Verify as-is
-                concept = rect.localization.concept
+            apply_concept = concept
+            if concept.strip() == "":
+                apply_concept = rect.localization.concept
             else:  # map to official KB concept name
-                concept = operations.get_kb_name(concept)
-                LOGGER.debug(f"Mapped concept {rect.localization.concept} -> {concept}")
+                apply_concept = operations.get_kb_name(concept)
+                if concept != apply_concept:
+                    LOGGER.debug(f"Mapped concept {concept} -> {apply_concept}")
             
-            if part.strip() == "":  # No part specified? ditto
-                part = rect.localization.part
+            # No part specified? ditto
+            apply_part = part
+            if part.strip() == "":
+                apply_part = rect.localization.part
 
             # Set the new concept and immediately push to VARS
-            rect.localization.set_verified_concept(concept, part, self.verifier)
+            rect.localization.set_verified_concept(apply_concept, apply_part, self.verifier)
             rect.localization.push_changes(self.verifier)
 
             # Update the widget's text label and deselect it
