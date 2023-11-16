@@ -181,6 +181,16 @@ class ImageMosaic(QtCore.QObject):
                     continue
                 seen_associations.add(association_uuid)
                 
+                # Skip if the video start timestamp is not set
+                if video_start_timestamp is None:
+                    LOGGER.warning(f"Imaged moment {imaged_moment_uuid} has no video start timestamp, skipping")
+                    continue
+                
+                # Skip if the video sequence name is not set
+                if video_sequence_name is None:
+                    LOGGER.warning(f"Imaged moment {imaged_moment_uuid} has no video sequence name, skipping")
+                    continue
+                
                 # Parse the localization from the association link_value
                 localization = VARSLocalization.from_json(link_value)
                 localization.set_concept(concept, to_concept)
@@ -206,11 +216,6 @@ class ImageMosaic(QtCore.QObject):
                 # If the localization needs video info, make sure we have it
                 # LOGGER.debug(f"Localization with {localization.association_uuid=} {needs_video_info=}")
                 if needs_video_info:
-                    # Skip if the video sequence name is not set
-                    if video_sequence_name is None:
-                        LOGGER.warning(f"Imaged moment {imaged_moment_uuid} has no video sequence name, skipping")
-                        continue
-                    
                     # Get full video sequence data if not already fetched
                     if video_sequence_name not in self.video_sequences_by_name:
                         # Try to fetch
