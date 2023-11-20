@@ -20,14 +20,35 @@ class AppearanceTab(AbstractSettingsTab):
             self.label_font_size_spinbox.setValue
         )
 
+        self.selection_highlight_color_button = QtWidgets.QPushButton()
+        self.selection_highlight_color_button.clicked.connect(self.select_color)
+        self._selection_highlight_color = self._settings.selection_highlight_color.value
+        self._update_selection_highlight_color_button()
+        self._settings.selection_highlight_color.valueChanged.connect(
+            self._update_selection_highlight_color_button
+        )
+
         self.arrange()
+
+    def select_color(self):
+        color = QtWidgets.QColorDialog.getColor()
+        if color.isValid():
+            self._selection_highlight_color = color.name()
+            self._settings.selection_highlight_color.value = self._selection_highlight_color
+    
+    def _update_selection_highlight_color_button(self):
+        self.selection_highlight_color_button.setStyleSheet(
+            f"background-color: {self._selection_highlight_color};"
+        )
 
     def arrange(self):
         layout = QtWidgets.QFormLayout()
 
         layout.addRow("Label font size", self.label_font_size_spinbox)
+        layout.addRow("Selection highlight color", self.selection_highlight_color_button)
 
         self.setLayout(layout)
 
     def apply_settings(self):
         self._settings.label_font_size.value = self.label_font_size_spinbox.value()
+        self._settings.selection_highlight_color.value = self._selection_highlight_color

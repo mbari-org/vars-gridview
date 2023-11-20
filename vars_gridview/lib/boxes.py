@@ -8,10 +8,11 @@ Distributed under MIT license. See license.txt for more information.
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtWidgets, QtGui
 
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
+from vars_gridview.lib.settings import SettingsManager
 
 
 class BoundingBox(pg.RectROI):
@@ -192,7 +193,7 @@ class BoundingBox(pg.RectROI):
         if self.textItem is None:
 
             self.textItem = pg.TextItem(
-                text=self.label, color=np.array(self.color) / 2, fill=(200, 200, 200)
+                text=self.label, color=(255, 255, 255), fill=(70, 70, 70)
             )
             self.textItem.setPos(x, y)
             self.view.addItem(self.textItem)
@@ -231,13 +232,15 @@ class BoxHandler:
                 box.update_label()
 
     def add_annotation(self, obj_idx, rect):
+        settings = SettingsManager.get_instance()
+        q_color = QtGui.QColor.fromString(settings.selection_highlight_color.value)
         for idx, localization in enumerate(rect.localizations):
             if localization.deleted:
                 continue
             selected_loc = idx == obj_idx
 
             # Set color of the box
-            color = (52, 161, 235)  # Nice light blue
+            color = q_color.getRgb()
             if not selected_loc:
                 avg = int(sum(color) / len(color))
                 color = (avg, avg, avg)  # Grayscale equivalent of original color

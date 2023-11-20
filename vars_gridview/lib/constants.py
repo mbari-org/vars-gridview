@@ -27,6 +27,7 @@ IMAGE_TYPE = "image/png"
 
 # Appearance defaults
 LABEL_FONT_SIZE_DEFAULT = 8
+SELECTION_HIGHLIGHT_COLOR_DEFAULT = "#34a1eb"
 
 # Video player defaults
 SHARKTOPODA_HOST_DEFAULT = "::1"

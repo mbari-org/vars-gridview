@@ -742,6 +742,7 @@ def init_settings():
     settings.raz_url = ("m3/raz_url", str, constants.RAZIEL_URL_DEFAULT)
     
     settings.label_font_size = ("appearance/label_font_size", int, constants.LABEL_FONT_SIZE_DEFAULT)
+    settings.selection_highlight_color = ("appearance/selection_highlight_color", str, constants.SELECTION_HIGHLIGHT_COLOR_DEFAULT)
     
     settings.sharktopoda_host = ("video/sharktopoda_host", str, constants.SHARKTOPODA_HOST_DEFAULT)
     settings.sharktopoda_outgoing_port = ("video/sharktopoda_outgoing_port", int, constants.SHARKTOPODA_OUTGOING_PORT_DEFAULT)

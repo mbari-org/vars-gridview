@@ -216,18 +216,13 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         return orpixmap
 
     def paint(self, painter, option, widget):
+        # Get app settings
+        settings = SettingsManager.get_instance()
+        
         pen = QtGui.QPen()
         pen.setWidth(1)
         pen.setBrush(QtCore.Qt.GlobalColor.black)
         painter.setPen(pen)
-
-        # very simple selection and annotation logic
-        if self.is_selected:
-            fill_color = QtCore.Qt.GlobalColor.green
-        elif self.is_verified:
-            fill_color = QtCore.Qt.GlobalColor.yellow
-        else:
-            fill_color = QtCore.Qt.GlobalColor.darkGray
 
         def color_for_concept(concept: str):
             hash = sum(map(ord, concept)) << 5
@@ -244,7 +239,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
                     int(self.boundingRect().width() + 4),
                     int(self.boundingRect().height() + 4),
                 ),
-                QtGui.QColor(61, 174, 233, 255),
+                QtGui.QColor.fromString(settings.selection_highlight_color.value),
             )
 
         # Fill background if verified
@@ -292,10 +287,6 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         )
         
         # Set font
-        # font = QtGui.QFont(
-        #     'Arial', int(self.zoom * self.labelheight * 0.5), QtGui.QFont.Weight.Bold, False
-        # )
-        settings = SettingsManager.get_instance()
         font = QtGui.QFont(
             'Arial', settings.label_font_size.value, QtGui.QFont.Weight.Bold, False
         )
