@@ -15,6 +15,8 @@ RAZIEL_URL_DEFAULT = "http://m3.shore.mbari.org/config"
 
 # Asset paths
 ROOT_DIR = Path(__file__).parent.parent
+if not ROOT_DIR.exists():  # pyinstaller
+    ROOT_DIR = ROOT_DIR.parent
 ASSETS_DIR = ROOT_DIR / "assets"
 UI_FILE = ASSETS_DIR / "gridview.ui"
 STYLE_DIR = ASSETS_DIR / "style"
