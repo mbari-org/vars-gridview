@@ -15,6 +15,7 @@ import numpy as np
 import pyqtgraph as pg
 import requests
 from PyQt6 import QtCore, QtWidgets
+from vars_gridview.lib import m3
 
 from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.log import LOGGER
@@ -37,8 +38,6 @@ class ImageMosaic(QtCore.QObject):
         query_headers: List[str],
         rect_clicked_slot: callable,
         verifier: str,
-        beholder_url: str,
-        beholder_api_key: str,
         zoom: float = 1.0,
     ):
         super().__init__()
@@ -71,9 +70,6 @@ class ImageMosaic(QtCore.QObject):
 
         self.localization_groups = {}
         self.moment_ancillary_data = {}
-
-        self.beholder_url = beholder_url
-        self.beholder_api_key = beholder_api_key
 
         self.n_images = 0
         self.n_localizations = 0
@@ -270,6 +266,7 @@ class ImageMosaic(QtCore.QObject):
                 scale_x = 1.0
                 scale_y = 1.0
 
+                img_raw = None
                 if image_reference_uuid is None:
                     # No image reference, need to use beholder
                     video_data = self.moment_video_data[imaged_moment_uuid]
@@ -301,15 +298,7 @@ class ImageMosaic(QtCore.QObject):
                     # Get the capture from beholder
                     LOGGER.debug(f"Getting capture from beholder for moment: {imaged_moment_uuid} ({mp4_video_reference_uri} @ {elapsed_time_millis} ms)")
                     try:
-                        res = requests.post(
-                            beholder_url + "/capture",
-                            json={
-                                "videoUrl": mp4_video_reference_uri,
-                                "elapsedTimeMillis": int(elapsed_time_millis),
-                            },
-                            headers={"X-Api-Key": self.beholder_api_key},
-                        )
-                        res.raise_for_status()
+                        img_raw = m3.BEHOLDER_CLIENT.capture_raw(mp4_video_reference_uri, elapsed_time_millis)
                     except Exception as e:
                         LOGGER.error(
                             "Error getting capture from beholder for moment: {}, skipping".format(
@@ -354,8 +343,9 @@ class ImageMosaic(QtCore.QObject):
                             )
                         )
                         continue
+                    
+                    img_raw = res.content
 
-                img_raw = res.content
                 img_arr = np.fromstring(img_raw, np.uint8)
                 img = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
                 
@@ -569,7 +559,14 @@ class ImageMosaic(QtCore.QObject):
             if concept.strip() == "":
                 apply_concept = rect.localization.concept
             else:  # map to official KB concept name
-                apply_concept = operations.get_kb_name(concept)
+                try:
+                    apply_concept = operations.get_kb_name(concept)
+                except Exception as e:
+                    LOGGER.error(f"Error getting KB name for concept {concept}: {e}")
+                    QtWidgets.QMessageBox.warning(
+                        self._graphics_view, "Error", f"An error occurred while getting the KB name for concept {concept}.\n\nThe label will not be applied."
+                    )
+                    continue
                 if concept != apply_concept:
                     LOGGER.debug(f"Mapped concept {concept} -> {apply_concept}")
             
@@ -580,7 +577,13 @@ class ImageMosaic(QtCore.QObject):
 
             # Set the new concept and immediately push to VARS
             rect.localization.set_verified_concept(apply_concept, apply_part, self.verifier)
-            rect.localization.push_changes(self.verifier)
+            try:
+                rect.localization.push_changes(self.verifier)
+            except Exception as e:
+                LOGGER.error(f"Error pushing changes for localization {rect.localization.association_uuid}: {e}")
+                QtWidgets.QMessageBox.critical(
+                    self._graphics_view, "Error", f"An error occurred while pushing changes for localization {rect.localization.association_uuid}."
+                )
 
             # Update the widget's text label and deselect it
             rect.text_label = rect.localization.text_label

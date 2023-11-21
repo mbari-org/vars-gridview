@@ -26,7 +26,12 @@ def get_kb_concepts() -> Dict[str, Optional[str]]:
         LOGGER.debug("Getting concepts from KB")
         response = m3.VARS_KB_SERVER_CLIENT.get_concepts()
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            LOGGER.debug(f"Error getting concepts from KB: {e}")
+            raise e
+
         concept_names = response.json()
         KB_CONCEPTS = {concept: None for concept in concept_names}
         LOGGER.debug(f"Got {len(KB_CONCEPTS)} concepts from KB")
@@ -40,10 +45,15 @@ def get_kb_name(concept: str) -> Optional[str]:
     """
     kb_concepts = get_kb_concepts()
     if kb_concepts.get(concept, None) is None:
-        res = m3.VARS_KB_SERVER_CLIENT.get_concept(concept)
+        response = m3.VARS_KB_SERVER_CLIENT.get_concept(concept)
         
-        res.raise_for_status()
-        name = res.json()["name"]
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            LOGGER.debug(f"Error getting concept name for {concept} from KB: {e}")
+            raise e
+        
+        name = response.json()["name"]
         LOGGER.debug(f"Got name {name} for concept {concept} from KB")
         
         kb_concepts[concept] = name
@@ -60,7 +70,12 @@ def get_kb_parts() -> List[str]:
         LOGGER.debug("Getting parts from KB")
         response = m3.VARS_KB_SERVER_CLIENT.get_parts()
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            LOGGER.debug(f"Error getting parts from KB: {e}")
+            raise e
+        
         KB_PARTS = [part["name"] for part in response.json()]
         LOGGER.debug(f"Got {len(KB_PARTS)} parts from KB")
 
@@ -77,7 +92,11 @@ def get_kb_descendants(concept: str) -> List[str]:
     if response.status_code == 404:
         return []  # concept not found, so no descendants
     else:
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            LOGGER.debug(f"Error getting descendants of {concept} from KB: {e}")
+            raise e
 
     parsed_response = response.json()
     taxa_names = [taxa["name"] for taxa in parsed_response]
@@ -94,7 +113,12 @@ def get_users() -> List[dict]:
         LOGGER.debug("Getting users from VARS user server")
         response = m3.VARS_USER_SERVER_CLIENT.get_all_users()
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            LOGGER.debug(f"Error getting users from VARS user server: {e}")
+            raise e
+        
         USERS = response.json()
         LOGGER.debug(f"Got {len(USERS)} users from VARS user server")
 
@@ -111,7 +135,12 @@ def update_bounding_box_data(association_uuid: str, box_dict: dict) -> dict:
 
     LOGGER.debug(f"Updating bounding box data for {association_uuid}:\n{request_data}")
     response = m3.ANNOSAURUS_CLIENT.update_association(association_uuid, request_data)
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error updating bounding box data for {association_uuid}: {e}")
+        raise e
+
     return response.json()
 
 
@@ -125,7 +154,12 @@ def update_bounding_box_part(association_uuid: str, part: str) -> dict:
 
     LOGGER.debug(f"Updating bounding box part for {association_uuid}:\n{request_data}")
     response = m3.ANNOSAURUS_CLIENT.update_association(association_uuid, request_data)
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error updating bounding box part for {association_uuid}: {e}")
+        raise e
+    
     return response.json()
 
 
@@ -143,7 +177,12 @@ def update_observation_concept(
     LOGGER.debug(f"Updating observation concept for {observation_uuid}:\n{request_data}")
     response = m3.ANNOSAURUS_CLIENT.update_observation(observation_uuid, request_data)
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error updating observation concept for {observation_uuid}: {e}")
+        raise e
+    
     return response.json()
 
 
@@ -154,7 +193,12 @@ def create_association(association: dict) -> requests.Response:
     LOGGER.debug(f"Creating association:\n{association}")
     response = m3.ANNOSAURUS_CLIENT.create_association(association)
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error creating association: {e}")
+        raise e
+    
     return response
 
 
@@ -168,7 +212,11 @@ def delete_association(association_uuid: str):
     LOGGER.debug(f"Deleting association {association_uuid}")
     response = m3.ANNOSAURUS_CLIENT.delete_association(association_uuid)
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error deleting association {association_uuid}: {e}")
+        raise e
 
 
 def get_observation(observation_uuid: str) -> requests.Response:
@@ -178,7 +226,12 @@ def get_observation(observation_uuid: str) -> requests.Response:
     LOGGER.debug(f"Getting observation {observation_uuid}")
     response = m3.ANNOSAURUS_CLIENT.get_observation(observation_uuid)
     
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error getting observation {observation_uuid}: {e}")
+        raise e
+    
     return response.json()
 
 
@@ -189,7 +242,12 @@ def create_observation(observation: dict) -> requests.Response:
     LOGGER.debug(f"Creating observation:\n{observation}")
     response = m3.ANNOSAURUS_CLIENT.create_observation(observation)
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error creating observation: {e}")
+        raise e
+    
     return response
 
 
@@ -203,7 +261,11 @@ def delete_observation(observation_uuid: str):
     LOGGER.debug(f"Deleting observation {observation_uuid}")
     response = m3.ANNOSAURUS_CLIENT.delete_observation(observation_uuid)
     
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error deleting observation {observation_uuid}: {e}")
+        raise e
 
 
 def get_videos_at_datetime(dt: datetime) -> List[dict]:
@@ -215,7 +277,12 @@ def get_videos_at_datetime(dt: datetime) -> List[dict]:
     LOGGER.debug(f"Getting videos at {timestamp}")
     response = m3.VAMPIRE_SQUID_CLIENT.get_videos_at_timestamp(timestamp)
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error getting videos at {timestamp}: {e}")
+        raise e
+    
     return response.json()
 
 
@@ -228,7 +295,12 @@ def get_video_by_video_reference_uuid(video_reference_uuid: str) -> dict:
         video_reference_uuid
     )
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error getting video by video reference UUID {video_reference_uuid}: {e}")
+        raise e
+
     return response.json()
 
 
@@ -239,7 +311,12 @@ def get_video_sequence_by_name(name: str) -> dict:
     LOGGER.debug(f"Getting video sequence by name {name}")
     response = m3.VAMPIRE_SQUID_CLIENT.get_video_sequence_by_name(name)
     
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error getting video sequence by name {name}: {e}")
+        raise e
+
     return response.json()
 
 
@@ -250,7 +327,12 @@ def get_imaged_moment(imaged_moment_uuid: str) -> dict:
     LOGGER.debug(f"Getting imaged moment {imaged_moment_uuid}")
     response = m3.ANNOSAURUS_CLIENT.get_imaged_moment(imaged_moment_uuid)
 
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error getting imaged moment {imaged_moment_uuid}: {e}")
+        raise e
+    
     return response.json()
 
 
@@ -261,7 +343,12 @@ def get_image_reference(image_reference_uuid: str) -> dict:
     LOGGER.debug(f"Getting image reference {image_reference_uuid}")
     response = m3.ANNOSAURUS_CLIENT.get_image_reference(image_reference_uuid)
     
-    response.raise_for_status()
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error getting image reference {image_reference_uuid}: {e}")
+        raise e
+    
     return response.json()
 
 
@@ -274,7 +361,12 @@ def get_video_sequence_names() -> List[str]:
         LOGGER.debug("Getting video sequence names from Vampire Squid")
         response = m3.VAMPIRE_SQUID_CLIENT.get_video_sequence_names()
 
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            LOGGER.debug(f"Error getting video sequence names: {e}")
+            raise e
+        
         VIDEO_SEQUENCE_NAMES = response.json()
         LOGGER.debug(f"Got {len(VIDEO_SEQUENCE_NAMES)} video sequence names")
     

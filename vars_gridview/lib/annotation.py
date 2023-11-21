@@ -10,7 +10,6 @@ from typing import Optional, Union
 import numpy as np
 
 from vars_gridview.lib.m3.operations import (
-    delete_association,
     update_bounding_box_data,
     update_bounding_box_part,
     update_observation_concept,

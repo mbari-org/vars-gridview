@@ -23,6 +23,7 @@ import os
 import sys
 from threading import Thread
 from time import sleep
+import traceback
 from uuid import UUID, uuid4
 import webbrowser
 from pathlib import Path
@@ -219,7 +220,19 @@ class MainWindow(TemplateBaseClass):
             return False
 
         # Connect to the database
-        sql.connect_from_settings()
+        while True:
+            try:
+                sql.connect_from_settings()
+                break
+            except Exception as e:
+                LOGGER.error(f"Could not connect to SQL server: {e}")
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    "SQL connection failed",
+                    f"Could not connect to the SQL server. Check the database URL and your username and password.\n\n{e}",
+                )
+                if self.settings_dialog.exec() == QtWidgets.QDialog.DialogCode.Rejected:
+                    return False
 
         # Set the verifier and endpoint data
         self.verifier = username
@@ -231,11 +244,11 @@ class MainWindow(TemplateBaseClass):
         """
         Authenticate with Raziel. Return endpoints list on success, None on fail.
         """
-        LOGGER.debug(
-            f"Attempting to authenticate user {username} with Raziel at {raziel_url}"
-        )
         try:
             endpoints = raziel.authenticate(raziel_url, username, password)
+            LOGGER.info(
+                f"Authenticated user {username} at {raziel_url}"
+            )
             return endpoints
         except Exception as e:
             LOGGER.error(f"Raziel authentication failed: {e}")
@@ -249,9 +262,9 @@ class MainWindow(TemplateBaseClass):
         """
         Setup the M3 modules from a list of authenticated Raziel endpoint dicts. Return True on success, False on fail.
         """
-        LOGGER.debug("Attempting to set up M3")
         try:
             m3.setup_from_endpoint_data(endpoints)
+            LOGGER.info("M3 setup successful")
             return True
         except ValueError as e:
             LOGGER.error(f"M3 setup failed: {e}")
@@ -328,13 +341,6 @@ class MainWindow(TemplateBaseClass):
         """
         self.settings_dialog.show()
 
-    def _setup_from_settings(self):
-        """
-        Propagate the settings to the app.
-        """
-        m3.setup_from_settings()
-        sql.connect_from_settings()
-
     def _sort_widgets(self):
         """
         Open the sort dialog and apply a sort method to the rect widgets.
@@ -371,11 +377,6 @@ class MainWindow(TemplateBaseClass):
         # Run the query
         query_data, query_headers = sql.query(constraint_dict)
 
-        # Grab the beholder info
-        beholder_endpoint = next(e for e in self.endpoints if e["name"] == "beholder")
-        beholder_url = beholder_endpoint["url"]
-        beholder_api_key = beholder_endpoint["secret"]
-
         # Create the image mosaic
         self.image_mosaic = ImageMosaic(
             self.ui.roiGraphicsView,
@@ -383,8 +384,6 @@ class MainWindow(TemplateBaseClass):
             query_headers,
             self.rect_clicked,
             self.verifier,
-            beholder_url,
-            beholder_api_key,
             zoom=self.ui.zoomSpinBox.value() / 100,
         )
 
@@ -406,10 +405,15 @@ class MainWindow(TemplateBaseClass):
         )
 
         # Create the box handler
+        try:
+            kb_concepts = get_kb_concepts()
+        except Exception as e:
+            LOGGER.error(f"Could not get KB concepts: {e}")
+            return
         self.box_handler = BoxHandler(
             self.ui.roiDetailGraphicsView,
             self.image_mosaic,
-            all_labels=get_kb_concepts(),
+            all_labels=kb_concepts,
             verifier=self.verifier,
         )
 
@@ -417,16 +421,23 @@ class MainWindow(TemplateBaseClass):
         """
         Populate the label combo boxes
         """
+        try:
+            kb_concepts = get_kb_concepts()
+            kb_parts = get_kb_parts()
+        except Exception as e:
+            LOGGER.error(f"Could not get KB concepts or parts: {e}")
+            return
+        
         # Set up the combo boxes
         self.ui.labelComboBox.clear()
-        concepts = [""] + sorted([c for c in get_kb_concepts() if c != ""])
+        concepts = [""] + sorted([c for c in kb_concepts if c != ""])
         self.ui.labelComboBox.addItems(concepts)
         self.ui.labelComboBox.completer().setCompletionMode(
             QtWidgets.QCompleter.CompletionMode.PopupCompletion
         )
 
         self.ui.partComboBox.clear()
-        parts = [""] + sorted([p for p in get_kb_parts() if p != ""])
+        parts = [""] + sorted([p for p in kb_parts if p != ""])
         self.ui.partComboBox.addItems(parts)
         self.ui.partComboBox.completer().setCompletionMode(
             QtWidgets.QCompleter.CompletionMode.PopupCompletion
@@ -460,13 +471,20 @@ class MainWindow(TemplateBaseClass):
         
         concept = self.ui.labelComboBox.currentText()
         part = self.ui.partComboBox.currentText()
+        
+        try:
+            kb_concepts = get_kb_concepts()
+            kb_parts = get_kb_parts()
+        except Exception as e:
+            LOGGER.error(f"Could not get KB concepts or parts: {e}")
+            return
 
-        if concept not in get_kb_concepts() and concept != "":
+        if concept not in kb_concepts and concept != "":
             QtWidgets.QMessageBox.critical(
                 self, "Bad Concept", f'Bad concept "{concept}". Canceling.'
             )
             return
-        if part not in get_kb_parts() and part != "":
+        if part not in kb_parts and part != "":
             QtWidgets.QMessageBox.critical(self, "Bad Part", f'Bad part "{part}". Canceling.')
             return
 
@@ -775,11 +793,22 @@ def main():
     init_settings()
 
     # Create the main window and show it
-    main = MainWindow(app)
-    main.show()
+    try:
+        main = MainWindow(app)
+        main.show()
+    except Exception as e:
+        LOGGER.critical(f"Could not create main window: {e}")
+        LOGGER.debug(traceback.format_exc())  # Log the full traceback
+        sys.exit(1)
 
     # Exit after app is finished
-    status = app.exec()
+    try:
+        status = app.exec()
+    except Exception as e:
+        LOGGER.critical(f"Fatal exception: {e}")
+        LOGGER.debug(traceback.format_exc())  # Log the full traceback
+        status = 1
+    
     sys.exit(status)
 
 

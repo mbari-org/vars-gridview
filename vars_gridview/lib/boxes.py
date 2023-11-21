@@ -99,11 +99,17 @@ class BoundingBox(pg.RectROI):
         """
         Change concept (clicked from context menu).
         """
+        try:
+            kb_concepts = get_kb_concepts()
+        except Exception as e:
+            LOGGER.error(f"Could not get KB concepts: {e}")
+            return
+        
         concept, ok = QtWidgets.QInputDialog.getItem(
             self.image_mosaic._graphics_view,
             "Change concept",
             "Concept:",
-            get_kb_concepts()
+            kb_concepts
         )
         
         if not ok:
@@ -116,11 +122,17 @@ class BoundingBox(pg.RectROI):
         """
         Change part (clicked from context menu).
         """
+        try:
+            kb_parts = get_kb_parts()
+        except Exception as e:
+            LOGGER.error(f"Could not get KB parts: {e}")
+            return
+        
         part, ok = QtWidgets.QInputDialog.getItem(
             self.image_mosaic._graphics_view,
             "Change part",
             "Part:",
-            get_kb_parts()
+            kb_parts
         )
         
         if not ok:

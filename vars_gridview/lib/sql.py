@@ -85,13 +85,9 @@ def connect(server_url: str, user: str, password: str, database: str):
     Initialize the connection to the SQL server.
     """
     global SQL_CONNECTION
-    try:
-        SQL_CONNECTION = pymssql.connect(
-            server=server_url, user=user, password=password, database=database
-        )
-    except pymssql.DatabaseError as e:
-        LOGGER.error(f"Failed to connect to SQL server: {e}")
-        sys.exit(1)
+    SQL_CONNECTION = pymssql.connect(
+        server=server_url, user=user, password=password, database=database
+    )
 
 
 def connect_from_settings():
@@ -100,12 +96,13 @@ def connect_from_settings():
     """
     settings = SettingsManager.get_instance()
 
-    connect(
-        settings.sql_url.value,
-        settings.sql_user.value,
-        settings.sql_password.value,
-        settings.sql_database.value,
-    )
+    url = settings.sql_url.value
+    user = settings.sql_user.value
+    password = settings.sql_password.value
+    database = settings.sql_database.value
+
+    connect(url, user, password, database)
+    LOGGER.info(f"Connected to SQL server at {url}")
 
 
 def query(constraint_dict: dict) -> Tuple[list, list]:
