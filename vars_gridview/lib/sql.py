@@ -86,7 +86,11 @@ def connect(server_url: str, user: str, password: str, database: str):
     """
     global SQL_CONNECTION
     SQL_CONNECTION = pymssql.connect(
-        server=server_url, user=user, password=password, database=database
+        server=server_url, 
+        user=user, 
+        password=password, 
+        database=database, 
+        tds_version="7.0"
     )
 
 
