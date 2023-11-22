@@ -37,6 +37,7 @@ class SQLTab(AbstractSettingsTab):
 
     def arrange(self):
         layout = QtWidgets.QFormLayout()
+        layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         
         layout.addRow(
             "",

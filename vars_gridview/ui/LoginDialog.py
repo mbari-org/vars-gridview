@@ -40,6 +40,7 @@ class LoginDialog(QtWidgets.QDialog):
 
         def _arrange(self):
             layout = QtWidgets.QFormLayout()
+            layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
             layout.addRow("Username:", self._username_line_edit)
             layout.addRow("Password:", self._password_line_edit)

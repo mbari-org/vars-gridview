@@ -21,6 +21,7 @@ class M3Tab(AbstractSettingsTab):
 
     def arrange(self):
         layout = QtWidgets.QFormLayout()
+        layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
         layout.addRow("Raziel URL", self.raziel_url_edit)
 
