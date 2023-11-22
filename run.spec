@@ -13,7 +13,6 @@ a = Analysis(
     excludes=[],
     noarchive=False,
 )
-
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -26,7 +25,7 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -41,4 +40,10 @@ coll = COLLECT(
     upx=True,
     upx_exclude=[],
     name='run',
+)
+app = BUNDLE(
+    coll,
+    name='VARS GridView.app',
+    icon=None,
+    bundle_identifier=None,
 )
