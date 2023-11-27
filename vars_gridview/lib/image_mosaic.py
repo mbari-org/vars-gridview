@@ -96,6 +96,7 @@ class ImageMosaic(QtCore.QObject):
                 image_format = query_item["image_format"]
                 image_url = query_item["image_url"]
 
+                observer = query_item["observer"]
                 concept = query_item["concept"]
 
                 link_name = query_item["link_name"]
@@ -395,6 +396,7 @@ class ImageMosaic(QtCore.QObject):
                         img,
                         ancillary_data,
                         video_data,
+                        observer,
                         len(other_locs),
                     )
                     rw.text_label = localization.text_label

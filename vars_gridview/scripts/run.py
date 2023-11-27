@@ -618,6 +618,9 @@ class MainWindow(TemplateBaseClass):
                 rect.annotation_datetime().strftime("%Y-%m-%d %H:%M:%S")
             )
         )
+        self.ui.imageInfoList.addItem(
+            "Observation observer: {}".format(rect.observer)
+        )
         self.ui.imageInfoList.addItems(
             [
                 "{}: {}".format(key.replace("_", " ").capitalize(), value)

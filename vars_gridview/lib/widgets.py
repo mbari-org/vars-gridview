@@ -31,6 +31,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         image: np.ndarray,
         ancillary_data: dict,
         video_data: dict,
+        observer: str,
         localization_index: int,
         parent=None,
         text_label="rect widget",
@@ -41,6 +42,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.image = image
         self.ancillary_data = ancillary_data
         self.video_data = video_data
+        self.observer = observer
         self.localization_index = localization_index
 
         self.labelheight = 30
