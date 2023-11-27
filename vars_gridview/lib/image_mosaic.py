@@ -47,7 +47,8 @@ class ImageMosaic(QtCore.QObject):
         self._hide_labeled = True
         self.hide_discarded = True
         self.hide_to_review = True
-        self.layouts = []
+        self.n_columns = 0
+        self._rect_clicked_slot = rect_clicked_slot
         
         # Initialize the graphics
         self._graphics_view: QtWidgets.QGraphicsView = graphics_view
@@ -548,6 +549,8 @@ class ImageMosaic(QtCore.QObject):
             columns * rect_widget_width, rect_widget_height * len(self._rect_widgets)
         )
         self._graphics_scene.setSceneRect(self._graphics_widget.boundingRect())
+        
+        self.n_columns = columns
 
     def apply_label(self, concept, part):
         """
@@ -743,7 +746,44 @@ class ImageMosaic(QtCore.QObject):
             rect.update_zoom(zoom)
         self.render_mosaic()
     
+    def select_relative(self, key: QtCore.Qt.Key):
+        """
+        Select a rect widget relative to the currently selected one.
+        
+        Args:
+            key: The key pressed
+        """
+        selected = self.get_selected()
+        if len(selected) == 0:
+            return
+        
+        # Get the first selected widget
+        first = selected[0]
+        
+        # Get the index of the first selected widget
+        first_idx = self._rect_widgets.index(first)
+        
+        # Get the index of the next widget
+        if key == QtCore.Qt.Key.Key_Left:
+            next_idx = first_idx - 1
+        elif key == QtCore.Qt.Key.Key_Right:
+            next_idx = first_idx + 1
+        elif key == QtCore.Qt.Key.Key_Up:
+            next_idx = first_idx - self.n_columns
+        elif key == QtCore.Qt.Key.Key_Down:
+            next_idx = first_idx + self.n_columns
+        else:
+            return
+        
+        # Select the next widget if it's in bounds
+        if 0 <= next_idx < len(self._rect_widgets):
+            self.clear_selected()
+            self._rect_clicked_slot(self._rect_widgets[next_idx], None)
+            self.render_mosaic()
+    
     def eventFilter(self, source, event):
         if source is self._graphics_view and event.type() == QtCore.QEvent.Type.Resize:
             self.render_mosaic()  # Re-render when the view is resized
+        if source is self._graphics_view and event.type() == QtCore.QEvent.Type.KeyPress:
+            self.select_relative(event.key())
         return super().eventFilter(source, event)

@@ -558,13 +558,17 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.update_zoom(zoom / 100)
 
     @QtCore.pyqtSlot(object, object)
-    def rect_clicked(self, rect: RectWidget, event: QtGui.QMouseEvent):
+    def rect_clicked(self, rect: RectWidget, event: Optional[QtGui.QMouseEvent]):
         if not self.loaded:
             return
         
         # Get modifier (ctrl, shift) states
-        ctrl = event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
-        shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+        if event is not None:
+            ctrl = event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
+            shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+        else:
+            ctrl = False
+            shift = False
 
         # Save information to VARS for any moved/resized boxes
         self.box_handler.save_all(self.verifier)
