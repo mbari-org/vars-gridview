@@ -529,7 +529,6 @@ class MainWindow(TemplateBaseClass):
             self.box_handler.clear()
             self.ui.annotationXML.clear()
             self.ui.imageInfoList.clear()
-            self.ui.varsObservationsLabel.clear()
 
     @QtCore.pyqtSlot()
     def clear_selected(self):
@@ -627,21 +626,6 @@ class MainWindow(TemplateBaseClass):
                 for key, value in rect.ancillary_data.items()
             ]
         )
-
-        # Update observations label
-        imaged_moment_uuid = rect.localization.imaged_moment_uuid
-        if imaged_moment_uuid in self.cached_moment_concepts:  # cache hit
-            concepts = self.cached_moment_concepts[imaged_moment_uuid]
-        else:  # cache miss
-            vars_moment_data = get_imaged_moment(
-                rect.localization.imaged_moment_uuid
-            )
-            concepts = sorted(
-                set(obs["concept"] for obs in vars_moment_data["observations"])
-            )
-            self.cached_moment_concepts[imaged_moment_uuid] = concepts
-        observed_concepts_str = ", ".join(concepts)
-        self.ui.varsObservationsLabel.setText(observed_concepts_str)
 
     @QtCore.pyqtSlot()
     def open_video(self):
