@@ -688,6 +688,14 @@ class MainWindow(TemplateBaseClass):
         rescale_x = mp4_width / rect.image.shape[1]
         rescale_y = mp4_height / rect.image.shape[0]
         
+        # Show warning if rescale dimensions are different
+        if abs(rescale_x / rescale_y - 1) > 0.01:  # 1% tolerance
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Different MP4 Aspect Ratio",
+                "MP4 video has different aspect ratio than ROI source image. The bounding box may not be displayed correctly.",
+            )
+        
         localization = Localization(
             uuid=uuid4(),
             concept=rect.localization.concept,
