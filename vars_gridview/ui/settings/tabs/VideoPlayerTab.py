@@ -30,6 +30,10 @@ class VideoPlayerTab(AbstractSettingsTab):
         self.sharktopoda_incoming_port_edit.valueChanged.connect(self.settingsChanged.emit)
         self._settings.sharktopoda_incoming_port.valueChanged.connect(self.sharktopoda_incoming_port_edit.setValue)
         
+        self.sharktopoda_host_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.sharktopoda_outgoing_port_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        self.sharktopoda_incoming_port_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+        
         self.connect_button = QtWidgets.QPushButton("Connect")
         def apply_then_connect():
             self.apply_settings()

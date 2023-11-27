@@ -30,12 +30,17 @@ class LoginDialog(QtWidgets.QDialog):
             self._raziel_url_line_edit.setText(raziel_url)
             self._raziel_url_line_edit.setPlaceholderText(raziel_url)
             
+            self._username_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            self._password_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            self._raziel_url_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+            
             self._raziel_url_line_edit.textChanged.connect(self._update_raziel_url_setting)
 
             self._arrange()
 
         def _arrange(self):
             layout = QtWidgets.QFormLayout()
+            layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
 
             layout.addRow("Username:", self._username_line_edit)
             layout.addRow("Password:", self._password_line_edit)
