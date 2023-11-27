@@ -31,6 +31,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon=['vars_gridview/assets/icons/VARSGridView.icns'],
 )
 coll = COLLECT(
     exe,
@@ -44,6 +45,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='VARS GridView.app',
-    icon=None,
+    icon='vars_gridview/assets/icons/VARSGridView.icns',
     bundle_identifier=None,
 )

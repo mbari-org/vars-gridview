@@ -109,7 +109,7 @@ class MainWindow(TemplateBaseClass):
 
         # Set the window title
         self.setWindowTitle(constants.APP_NAME)
-        self.setWindowIcon(QtGui.QIcon(str(ICONS_DIR / "magnifying-glass-solid.svg")))
+        self.setWindowIcon(QtGui.QIcon(str(ICONS_DIR / "VARSGridView.iconset" / "icon_256x256.png")))
 
         # Restore and style GUI
         self._restore_gui()
