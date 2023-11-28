@@ -14,15 +14,15 @@ import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib.annotation import VARSLocalization
-from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.util import get_timestamp
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
     rectHover = QtCore.pyqtSignal(object)
-    
+
     clicked = QtCore.pyqtSignal(object, object)  # self, event
 
     def __init__(
@@ -53,7 +53,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self._boundingRect = QtCore.QRect()
         self.background_color = QtCore.Qt.GlobalColor.darkGray
         self.hover_color = QtCore.Qt.GlobalColor.lightGray
-        
+
         self.is_last_selected = False
         self.is_selected = False
 
@@ -69,7 +69,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         Check if this rect widget has been deleted.
         """
         return self._deleted
-    
+
     @deleted.setter
     def deleted(self, value: bool) -> None:
         """
@@ -81,29 +81,33 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def delete(self, observation: bool = False) -> bool:
         """
         Delete this rect widget and its associated localization. If observation is True, delete the entire observation instead.
-        
+
         Args:
             observation: If True, delete the entire observation instead of just the association.
-        
+
         Returns:
             True if the rect widget was deleted successfully, False otherwise.
         """
         if self.deleted:  # Don't delete twice
             raise ValueError("This rect widget has already been deleted")
-        
+
         if observation:
             try:
                 operations.delete_observation(self.observation_uuid)
                 self.deleted = True
             except Exception as e:
-                LOGGER.error(f"Error deleting observation {self.observation_uuid} from rect widget: {e}")
+                LOGGER.error(
+                    f"Error deleting observation {self.observation_uuid} from rect widget: {e}"
+                )
         else:
             try:
                 operations.delete_association(self.association_uuid)
                 self.deleted = True
             except Exception as e:
-                LOGGER.error(f"Error deleting association {self.association_uuid} from rect widget: {e}")
-        
+                LOGGER.error(
+                    f"Error deleting association {self.association_uuid} from rect widget: {e}"
+                )
+
         return self.deleted
 
     @property
@@ -119,7 +123,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         Get the UUID of the observation associated with this rect widget.
         """
         return self.localization.observation_uuid
-    
+
     @property
     def association_uuid(self) -> str:
         """
@@ -156,7 +160,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         recorded_timestamp = self.video_data.get("index_recorded_timestamp", None)
 
         # Get annotation video time index
-        return get_timestamp(video_start_datetime, recorded_timestamp, elapsed_time_millis, timecode)
+        return get_timestamp(
+            video_start_datetime, recorded_timestamp, elapsed_time_millis, timecode
+        )
 
     def toqimage(self, img):
         height, width, bytesPerComponent = img.shape
@@ -220,7 +226,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def paint(self, painter, option, widget):
         # Get app settings
         settings = SettingsManager.get_instance()
-        
+
         pen = QtGui.QPen()
         pen.setWidth(1)
         pen.setBrush(QtCore.Qt.GlobalColor.black)
@@ -231,7 +237,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             color = QtGui.QColor()
             color.setHsl(round((hash % 360) / 360 * 255), 255, 217, 255)
             return color
-        
+
         # Fill outline if selected
         if self.is_selected:
             painter.fillRect(
@@ -255,7 +261,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
                 ),
                 color_for_concept(self.text_label),
             )
-            
+
         # Fill label
         painter.fillRect(
             QtCore.QRect(
@@ -287,10 +293,10 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             int(self.zoom * self.pic.rect().width()),
             int(self.zoom * self.labelheight),
         )
-        
+
         # Set font
         font = QtGui.QFont(
-            'Arial', settings.label_font_size.value, QtGui.QFont.Weight.Bold, False
+            "Arial", settings.label_font_size.value, QtGui.QFont.Weight.Bold, False
         )
         painter.setFont(font)
 

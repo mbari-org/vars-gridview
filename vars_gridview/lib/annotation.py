@@ -54,7 +54,7 @@ class VARSLocalization:
 
     @staticmethod
     def from_json(data: Union[str, dict]):
-        if type(data) == str:
+        if isinstance(data, str):
             data = json.loads(data)
 
         return VARSLocalization(**data)
@@ -124,7 +124,7 @@ class VARSLocalization:
     @property
     def deleted(self):
         return self._deleted
-    
+
     @deleted.setter
     def deleted(self, value):
         self._deleted = value
@@ -171,7 +171,7 @@ class VARSLocalization:
     def push_changes(self, verifier: str):
         if self._deleted:
             return
-        
+
         do_modify_box = False
 
         if self._dirty_concept:

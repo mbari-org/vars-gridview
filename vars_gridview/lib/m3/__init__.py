@@ -1,6 +1,6 @@
 from beholder_client import BeholderClient
-from vars_gridview.lib.log import LOGGER
 
+from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.clients import (
     AnnosaurusClient,
     VampireSquidClient,
@@ -47,7 +47,7 @@ def setup_from_endpoint_data(endpoints: list):
     global VARS_KB_SERVER_CLIENT
     VARS_KB_SERVER_CLIENT = VARSKBServerClient(kb_url)
     LOGGER.debug(f"Configured VARS KB Server client at {kb_url}")
-    
+
     beholder_url, beholder_api_key = get_client_url_secret("beholder")
     global BEHOLDER_CLIENT
     BEHOLDER_CLIENT = BeholderClient(beholder_url, beholder_api_key)

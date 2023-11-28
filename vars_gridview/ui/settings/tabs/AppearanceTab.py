@@ -27,9 +27,13 @@ class AppearanceTab(AbstractSettingsTab):
         self._settings.selection_highlight_color.valueChanged.connect(
             self._update_selection_highlight_color_button
         )
-        
-        self.label_font_size_spinbox.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.selection_highlight_color_button.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+
+        self.label_font_size_spinbox.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.selection_highlight_color_button.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
 
         self.arrange()
 
@@ -37,8 +41,10 @@ class AppearanceTab(AbstractSettingsTab):
         color = QtWidgets.QColorDialog.getColor()
         if color.isValid():
             self._selection_highlight_color = color.name()
-            self._settings.selection_highlight_color.value = self._selection_highlight_color
-    
+            self._settings.selection_highlight_color.value = (
+                self._selection_highlight_color
+            )
+
     def _update_selection_highlight_color_button(self):
         self.selection_highlight_color_button.setStyleSheet(
             f"background-color: {self._selection_highlight_color};"
@@ -46,10 +52,14 @@ class AppearanceTab(AbstractSettingsTab):
 
     def arrange(self):
         layout = QtWidgets.QFormLayout()
-        layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        layout.setFieldGrowthPolicy(
+            QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
+        )
 
         layout.addRow("Label font size", self.label_font_size_spinbox)
-        layout.addRow("Selection highlight color", self.selection_highlight_color_button)
+        layout.addRow(
+            "Selection highlight color", self.selection_highlight_color_button
+        )
 
         self.setLayout(layout)
 

@@ -27,23 +27,33 @@ class SQLTab(AbstractSettingsTab):
         self.database_edit = QtWidgets.QLineEdit(self._settings.sql_database.value)
         self.database_edit.textChanged.connect(self.settingsChanged.emit)
         self._settings.sql_database.valueChanged.connect(self.database_edit.setText)
-        
-        self.sql_url_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.user_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.password_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.database_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+
+        self.sql_url_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.user_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.password_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.database_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
 
         self.arrange()
 
     def arrange(self):
         layout = QtWidgets.QFormLayout()
-        layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        
+        layout.setFieldGrowthPolicy(
+            QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
+        )
+
         layout.addRow(
             "",
             QtWidgets.QLabel(
                 "Changes in this tab will only take effect after restarting the application."
-            )
+            ),
         )
 
         layout.addRow("Server URL", self.sql_url_edit)

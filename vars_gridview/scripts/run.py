@@ -21,30 +21,25 @@ import json
 import logging
 import os
 import sys
-from threading import Thread
-from time import sleep
 import traceback
-from uuid import UUID, uuid4
 import webbrowser
 from pathlib import Path
+from time import sleep
 from typing import Optional, Tuple
+from uuid import UUID, uuid4
 
 import cv2
 import pyqtgraph as pg
 import qdarkstyle
+from PyQt6 import QtCore, QtGui, QtWidgets
 from sharktopoda_client.client import SharktopodaClient
 from sharktopoda_client.dto import Localization
-from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib import constants, m3, raziel, sql
 from vars_gridview.lib.boxes import BoxHandler
 from vars_gridview.lib.image_mosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER, AppLogger
-from vars_gridview.lib.m3.operations import (
-    get_kb_concepts,
-    get_kb_parts,
-    get_imaged_moment,
-)
+from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import (
     AreaSort,
@@ -64,8 +59,8 @@ from vars_gridview.lib.util import parse_iso
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.LoginDialog import LoginDialog
 from vars_gridview.ui.QueryDialog import QueryDialog
-from vars_gridview.ui.SortDialog import SortDialog
 from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
+from vars_gridview.ui.SortDialog import SortDialog
 
 # Define main window class from template
 CWD = Path(__file__).parent
@@ -74,7 +69,9 @@ ICONS_DIR = ASSETS_DIR / "icons"
 UI_FILE_PATH = ASSETS_DIR / "gridview.ui"
 WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(UI_FILE_PATH)
 
-GUI_SETTINGS = QtCore.QSettings(str(constants.GUI_SETTINGS_FILE), QtCore.QSettings.Format.IniFormat)
+GUI_SETTINGS = QtCore.QSettings(
+    str(constants.GUI_SETTINGS_FILE), QtCore.QSettings.Format.IniFormat
+)
 
 ENABLED_SORT_METHODS = [
     RecordedTimestampSort,
@@ -96,7 +93,7 @@ class MainWindow(TemplateBaseClass):
     """
     Main application window.
     """
-    
+
     sharktopodaConnected = QtCore.pyqtSignal()
 
     def __init__(self, app):
@@ -129,9 +126,11 @@ class MainWindow(TemplateBaseClass):
         self.cached_moment_concepts = (
             {}
         )  # Cache for imaged moment -> set of observed concepts
-        
+
         self.sharktopoda_client = None  # Sharktopoda client
-        self.sharktopoda_connected = False  # Whether the Sharktopoda client is connected
+        self.sharktopoda_connected = (
+            False  # Whether the Sharktopoda client is connected
+        )
 
         # Connect signals to slots
         self.ui.discardButton.clicked.connect(self.delete)
@@ -143,11 +142,13 @@ class MainWindow(TemplateBaseClass):
         self.ui.styleComboBox.currentTextChanged.connect(self._style_gui)
         self.ui.openVideo.clicked.connect(self.open_video)
         self.ui.sortButton.clicked.connect(self._sort_widgets)
-        
+
         self._settings = SettingsManager.get_instance()
         self._settings.label_font_size.valueChanged.connect(self.update_layout)
 
-        self.settings_dialog = SettingsDialog(self._setup_sharktopoda_client, self.sharktopodaConnected, parent=self)
+        self.settings_dialog = SettingsDialog(
+            self._setup_sharktopoda_client, self.sharktopodaConnected, parent=self
+        )
 
         self._launch()
 
@@ -165,7 +166,9 @@ class MainWindow(TemplateBaseClass):
         login_ok = self._login_procedure()
         if not login_ok:
             LOGGER.error("Login failed")
-            QtWidgets.QMessageBox.critical(self, "Login failed", "Login failed, exiting.")
+            QtWidgets.QMessageBox.critical(
+                self, "Login failed", "Login failed, exiting."
+            )
             sys.exit(1)
 
         # Set up the label combo boxes
@@ -173,7 +176,7 @@ class MainWindow(TemplateBaseClass):
 
         # Set up the menu bar
         self._setup_menu_bar()
-        
+
         # Set up Sharktopoda client
         try:
             self._setup_sharktopoda_client()
@@ -246,9 +249,7 @@ class MainWindow(TemplateBaseClass):
         """
         try:
             endpoints = raziel.authenticate(raziel_url, username, password)
-            LOGGER.info(
-                f"Authenticated user {username} at {raziel_url}"
-            )
+            LOGGER.info(f"Authenticated user {username} at {raziel_url}")
             return endpoints
         except Exception as e:
             LOGGER.error(f"Raziel authentication failed: {e}")
@@ -268,7 +269,9 @@ class MainWindow(TemplateBaseClass):
             return True
         except ValueError as e:
             LOGGER.error(f"M3 setup failed: {e}")
-            QtWidgets.QMessageBox.critical(self, "M3 setup failed", f"M3 setup failed: {e}")
+            QtWidgets.QMessageBox.critical(
+                self, "M3 setup failed", f"M3 setup failed: {e}"
+            )
             return False
 
     def _setup_menu_bar(self):
@@ -294,7 +297,7 @@ class MainWindow(TemplateBaseClass):
         query_action.setShortcut("Ctrl+Q")
         query_action.triggered.connect(self._do_query)
         query_menu.addAction(query_action)
-    
+
         # Create a menu with icons on the left-side of the main window
         toolbar = QtWidgets.QToolBar()
         toolbar.setObjectName("toolbar")
@@ -302,37 +305,38 @@ class MainWindow(TemplateBaseClass):
         toolbar.addAction(query_action)
         toolbar.setIconSize(QtCore.QSize(16, 16))
         self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
-        
-    
+
     def _setup_sharktopoda_client(self):
         """
         Create the Sharktopoda video player client.
         """
-        if self.sharktopoda_client is not None:  # stop the sharktopoda client UDP server
+        if (
+            self.sharktopoda_client is not None
+        ):  # stop the sharktopoda client UDP server
             self.sharktopoda_client.stop_server()
-        
+
         try:
             self.sharktopoda_client = SharktopodaClient(
-                self._settings.sharktopoda_host.value, 
-                self._settings.sharktopoda_outgoing_port.value, 
-                self._settings.sharktopoda_incoming_port.value
+                self._settings.sharktopoda_host.value,
+                self._settings.sharktopoda_outgoing_port.value,
+                self._settings.sharktopoda_incoming_port.value,
             )
         except Exception as e:
             LOGGER.error(f"Could not create Sharktopoda client: {e}")
             return
-        
+
         for handler in LOGGER.handlers:
             self.sharktopoda_client.logger.addHandler(handler)
             self.sharktopoda_client._udp_client.logger.addHandler(handler)
             self.sharktopoda_client._udp_server.logger.addHandler(handler)
-        
+
         ok = self.sharktopoda_client.connect()
         self.sharktopoda_connected = ok
-        
+
         if not ok:
             LOGGER.warning("Could not connect to Sharktopoda")
             return
-        
+
         self.sharktopodaConnected.emit()
 
     def _open_settings(self):
@@ -346,9 +350,13 @@ class MainWindow(TemplateBaseClass):
         Open the sort dialog and apply a sort method to the rect widgets.
         """
         if not self.loaded:
-            QtWidgets.QMessageBox.warning(self, "Not Loaded", "No results are loaded, so sorting cannot be performed.")
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Not Loaded",
+                "No results are loaded, so sorting cannot be performed.",
+            )
             return
-        
+
         # Show a sort dialog
         sort_dialog = SortDialog(parent=self)
         ok = sort_dialog.exec()
@@ -357,7 +365,7 @@ class MainWindow(TemplateBaseClass):
         method = sort_dialog.method
         if method is None:
             return
-        
+
         self.image_mosaic.sort_rect_widgets(method)
         self.image_mosaic.render_mosaic()
 
@@ -427,7 +435,7 @@ class MainWindow(TemplateBaseClass):
         except Exception as e:
             LOGGER.error(f"Could not get KB concepts or parts: {e}")
             return
-        
+
         # Set up the combo boxes
         self.ui.labelComboBox.clear()
         concepts = [""] + sorted([c for c in kb_concepts if c != ""])
@@ -465,13 +473,15 @@ class MainWindow(TemplateBaseClass):
     def update_labels(self):
         if not self.loaded:
             QtWidgets.QMessageBox.warning(
-                self, "Not Loaded", "No results are loaded, so labels cannot be applied."
+                self,
+                "Not Loaded",
+                "No results are loaded, so labels cannot be applied.",
             )
             return
-        
+
         concept = self.ui.labelComboBox.currentText()
         part = self.ui.partComboBox.currentText()
-        
+
         try:
             kb_concepts = get_kb_concepts()
             kb_parts = get_kb_parts()
@@ -485,7 +495,9 @@ class MainWindow(TemplateBaseClass):
             )
             return
         if part not in kb_parts and part != "":
-            QtWidgets.QMessageBox.critical(self, "Bad Part", f'Bad part "{part}". Canceling.')
+            QtWidgets.QMessageBox.critical(
+                self, "Bad Part", f'Bad part "{part}". Canceling.'
+            )
             return
 
         to_label = self.image_mosaic.get_selected()
@@ -510,7 +522,9 @@ class MainWindow(TemplateBaseClass):
     def delete(self):
         if not self.loaded:
             QtWidgets.QMessageBox.warning(
-                self, "Not Loaded", "No results are loaded, so deletions cannot be performed."
+                self,
+                "Not Loaded",
+                "No results are loaded, so deletions cannot be performed.",
             )
             return
 
@@ -560,7 +574,7 @@ class MainWindow(TemplateBaseClass):
     def rect_clicked(self, rect: RectWidget, event: Optional[QtGui.QMouseEvent]):
         if not self.loaded:
             return
-        
+
         # Get modifier (ctrl, shift) states
         if event is not None:
             ctrl = event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
@@ -599,7 +613,9 @@ class MainWindow(TemplateBaseClass):
         rect_full_image = rect.get_full_image()
         if rect_full_image is None:
             return
-        self.box_handler.roi_detail.setImage(cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB))
+        self.box_handler.roi_detail.setImage(
+            cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB)
+        )
         if needs_autorange:
             self.box_handler.view_box.autoRange()
         self.box_handler.add_annotation(rect.localization_index, rect)
@@ -617,9 +633,7 @@ class MainWindow(TemplateBaseClass):
                 rect.annotation_datetime().strftime("%Y-%m-%d %H:%M:%S")
             )
         )
-        self.ui.imageInfoList.addItem(
-            "Observation observer: {}".format(rect.observer)
-        )
+        self.ui.imageInfoList.addItem("Observation observer: {}".format(rect.observer))
         self.ui.imageInfoList.addItems(
             [
                 "{}: {}".format(key.replace("_", " ").capitalize(), value)
@@ -635,20 +649,18 @@ class MainWindow(TemplateBaseClass):
         if not self.last_selected_rect:
             QtWidgets.QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
             return
-        
+
         rect = self.last_selected_rect
 
         # Get the annotation imaged moment UUID
         imaged_moment_uuid = rect.imaged_moment_uuid
-        
+
         # Get the annotation MP4 video data
         mp4_video_data = self.image_mosaic.moment_mp4_data.get(imaged_moment_uuid, None)
         if mp4_video_data is None:
-            QtWidgets.QMessageBox.warning(
-                self, "Missing Video", "ROI lacks MP4 video."
-            )
+            QtWidgets.QMessageBox.warning(self, "Missing Video", "ROI lacks MP4 video.")
             return
-        
+
         mp4_video = mp4_video_data["video"]
         mp4_video_reference = mp4_video_data["video_reference"]
 
@@ -669,34 +681,38 @@ class MainWindow(TemplateBaseClass):
             )  # "pause" at the annotation
             webbrowser.open(url)
             return
-        
+
         # Open the video in Sharktopoda 2
         annotation_milliseconds = max(annotation_timedelta.total_seconds() * 1000, 0)
         video_reference_uuid = UUID(mp4_video_reference["uuid"])
-        
+
         def color_for_concept(concept: str):
             hash = sum(map(ord, concept)) << 5
             color = QtGui.QColor()
             color.setHsl(round((hash % 360) / 360 * 255), 255, 217, 255)
             return color
-        
+
         mp4_width = mp4_video.get("width", None)
         mp4_height = mp4_video.get("height", None)
-        
+
         if mp4_width is None or mp4_height is None:
             QtWidgets.QMessageBox.warning(
-                self, "Bad MP4 Metadata", "MP4 video metadata is missing width or height."
+                self,
+                "Bad MP4 Metadata",
+                "MP4 video metadata is missing width or height.",
             )
             return
         elif mp4_width == 0 or mp4_height == 0:
             QtWidgets.QMessageBox.warning(
-                self, "Bad MP4 Metadata", f"MP4 video metadata has resolution: {mp4_width}x{mp4_height}."
+                self,
+                "Bad MP4 Metadata",
+                f"MP4 video metadata has resolution: {mp4_width}x{mp4_height}.",
             )
             return
-        
+
         rescale_x = mp4_width / rect.image.shape[1]
         rescale_y = mp4_height / rect.image.shape[0]
-        
+
         # Show warning if rescale dimensions are different
         if abs(rescale_x / rescale_y - 1) > 0.01:  # 1% tolerance
             QtWidgets.QMessageBox.warning(
@@ -704,7 +720,7 @@ class MainWindow(TemplateBaseClass):
                 "Different MP4 Aspect Ratio",
                 "MP4 video has different aspect ratio than ROI source image. The bounding box may not be displayed correctly.",
             )
-        
+
         localization = Localization(
             uuid=uuid4(),
             concept=rect.localization.concept,
@@ -714,19 +730,23 @@ class MainWindow(TemplateBaseClass):
             width=rescale_x * rect.localization.width,
             height=rescale_y * rect.localization.height,
             duration_millis=1000,
-            color=color_for_concept(rect.localization.concept).name()
+            color=color_for_concept(rect.localization.concept).name(),
         )
-        
+
         def show_localization():
-            sleep(0.5)  # A hack, since Sharktopoda 2 crashes if you send it a command too soon
-            self.sharktopoda_client.seek_elapsed_time(video_reference_uuid, annotation_milliseconds)
+            sleep(
+                0.5
+            )  # A hack, since Sharktopoda 2 crashes if you send it a command too soon
+            self.sharktopoda_client.seek_elapsed_time(
+                video_reference_uuid, annotation_milliseconds
+            )
             self.sharktopoda_client.clear_localizations(video_reference_uuid)
-            self.sharktopoda_client.add_localizations(video_reference_uuid, [localization])
-        
+            self.sharktopoda_client.add_localizations(
+                video_reference_uuid, [localization]
+            )
+
         self.sharktopoda_client.open(
-            video_reference_uuid, 
-            mp4_video_url, 
-            callback=show_localization
+            video_reference_uuid, mp4_video_url, callback=show_localization
         )
 
     @QtCore.pyqtSlot()
@@ -744,7 +764,9 @@ class MainWindow(TemplateBaseClass):
             )
         elif self.ui.styleComboBox.currentText().lower() == "darkbreeze":
             file = QtCore.QFile(str(ASSETS_DIR / "style" / "dark.qss"))
-            file.open(QtCore.QFile.OpenModeFlag.ReadOnly | QtCore.QFile.OpenModeFlag.Text)
+            file.open(
+                QtCore.QFile.OpenModeFlag.ReadOnly | QtCore.QFile.OpenModeFlag.Text
+            )
             stream = QtCore.QTextStream(file)
             self._app.setStyleSheet(stream.readAll())
         elif self.ui.styleComboBox.currentText().lower() == "default":
@@ -774,13 +796,33 @@ def init_settings():
     settings.sql_database = ("sql/database", str, constants.SQL_DATABASE_DEFAULT)
 
     settings.raz_url = ("m3/raz_url", str, constants.RAZIEL_URL_DEFAULT)
-    
-    settings.label_font_size = ("appearance/label_font_size", int, constants.LABEL_FONT_SIZE_DEFAULT)
-    settings.selection_highlight_color = ("appearance/selection_highlight_color", str, constants.SELECTION_HIGHLIGHT_COLOR_DEFAULT)
-    
-    settings.sharktopoda_host = ("video/sharktopoda_host", str, constants.SHARKTOPODA_HOST_DEFAULT)
-    settings.sharktopoda_outgoing_port = ("video/sharktopoda_outgoing_port", int, constants.SHARKTOPODA_OUTGOING_PORT_DEFAULT)
-    settings.sharktopoda_incoming_port = ("video/sharktopoda_incoming_port", int, constants.SHARKTOPODA_INCOMING_PORT_DEFAULT)
+
+    settings.label_font_size = (
+        "appearance/label_font_size",
+        int,
+        constants.LABEL_FONT_SIZE_DEFAULT,
+    )
+    settings.selection_highlight_color = (
+        "appearance/selection_highlight_color",
+        str,
+        constants.SELECTION_HIGHLIGHT_COLOR_DEFAULT,
+    )
+
+    settings.sharktopoda_host = (
+        "video/sharktopoda_host",
+        str,
+        constants.SHARKTOPODA_HOST_DEFAULT,
+    )
+    settings.sharktopoda_outgoing_port = (
+        "video/sharktopoda_outgoing_port",
+        int,
+        constants.SHARKTOPODA_OUTGOING_PORT_DEFAULT,
+    )
+    settings.sharktopoda_incoming_port = (
+        "video/sharktopoda_incoming_port",
+        int,
+        constants.SHARKTOPODA_INCOMING_PORT_DEFAULT,
+    )
 
 
 def parse_args():
@@ -788,7 +830,9 @@ def parse_args():
     Parse command line arguments.
     """
     parser = argparse.ArgumentParser(description="VARS Gridview")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose logging to console")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Verbose logging to console"
+    )
     return parser.parse_args()
 
 
@@ -824,7 +868,7 @@ def main():
         LOGGER.critical(f"Fatal exception: {e}")
         LOGGER.debug(traceback.format_exc())  # Log the full traceback
         status = 1
-    
+
     sys.exit(status)
 
 

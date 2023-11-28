@@ -8,7 +8,6 @@ from PyQt6 import QtCore
 
 
 class SettingProxy(QtCore.QObject):
-
     valueChanged = QtCore.pyqtSignal(object)
 
     def __init__(self, settings: QtCore.QSettings, key: str, type=str, default=None):

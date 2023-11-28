@@ -124,10 +124,15 @@ class VideoSequenceNameFilter(Filter):
 
         def __str__(self) -> str:
             return "Video sequence name: {}".format(self.video_sequence_name)
-    
+
     def __call__(self) -> Optional[Result]:
         video_sequence_name, ok = QInputDialog.getItem(
-            self.parent, "Video sequence name", "Video sequence name", get_video_sequence_names(), 0, True
+            self.parent,
+            "Video sequence name",
+            "Video sequence name",
+            get_video_sequence_names(),
+            0,
+            True,
         )
         if ok:
             return VideoSequenceNameFilter.Result(video_sequence_name)
@@ -352,14 +357,14 @@ class ActivityFilter(Filter):
     class Result(Filter.Result):
         def __init__(self, activity: str):
             self.activity = activity
-        
+
         @property
         def constraints(self) -> Iterable[Constraint]:
             yield Constraint("activity", self.activity)
-        
+
         def __str__(self) -> str:
             return "Activity: {}".format(self.activity)
-    
+
     def __call__(self) -> Optional[Result]:
         activity, ok = QInputDialog.getText(
             self.parent,
@@ -376,14 +381,14 @@ class ObservationGroupFilter(Filter):
     class Result(Filter.Result):
         def __init__(self, observation_group: str):
             self.observation_group = observation_group
-        
+
         @property
         def constraints(self) -> Iterable[Constraint]:
             yield Constraint("observation_group", self.observation_group)
-        
+
         def __str__(self) -> str:
             return "Observation group: {}".format(self.observation_group)
-    
+
     def __call__(self) -> Optional[Result]:
         observation_group, ok = QInputDialog.getText(
             self.parent,
@@ -400,14 +405,16 @@ class GeneratorFilter(Filter):
     class Result(Filter.Result):
         def __init__(self, generator: str):
             self.generator = generator
-        
+
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("JSON_VALUE(assoc.link_value, '$.generator')", self.generator)
+            yield Constraint(
+                "JSON_VALUE(assoc.link_value, '$.generator')", self.generator
+            )
 
         def __str__(self) -> str:
             return "Generator: {}".format(self.generator)
-    
+
     def __call__(self) -> Optional[Result]:
         generator, ok = QInputDialog.getText(
             self.parent,

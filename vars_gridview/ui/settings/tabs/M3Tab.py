@@ -14,14 +14,18 @@ class M3Tab(AbstractSettingsTab):
         self.raziel_url_edit = QtWidgets.QLineEdit(self._settings.raz_url.value)
         self.raziel_url_edit.textChanged.connect(self.settingsChanged.emit)
         self._settings.raz_url.valueChanged.connect(self.raziel_url_edit.setText)
-        
-        self.raziel_url_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
+
+        self.raziel_url_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
 
         self.arrange()
 
     def arrange(self):
         layout = QtWidgets.QFormLayout()
-        layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        layout.setFieldGrowthPolicy(
+            QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
+        )
 
         layout.addRow("Raziel URL", self.raziel_url_edit)
 

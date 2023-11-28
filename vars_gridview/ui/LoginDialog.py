@@ -1,4 +1,4 @@
-from PyQt6 import QtWidgets, QtCore
+from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.settings import SettingsManager
 
@@ -29,18 +29,31 @@ class LoginDialog(QtWidgets.QDialog):
             self._raziel_url_line_edit = QtWidgets.QLineEdit()
             self._raziel_url_line_edit.setText(raziel_url)
             self._raziel_url_line_edit.setPlaceholderText(raziel_url)
-            
-            self._username_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-            self._password_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-            self._raziel_url_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-            
-            self._raziel_url_line_edit.textChanged.connect(self._update_raziel_url_setting)
+
+            self._username_line_edit.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            self._password_line_edit.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            self._raziel_url_line_edit.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+
+            self._raziel_url_line_edit.textChanged.connect(
+                self._update_raziel_url_setting
+            )
 
             self._arrange()
 
         def _arrange(self):
             layout = QtWidgets.QFormLayout()
-            layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+            layout.setFieldGrowthPolicy(
+                QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
+            )
 
             layout.addRow("Username:", self._username_line_edit)
             layout.addRow("Password:", self._password_line_edit)
@@ -65,7 +78,7 @@ class LoginDialog(QtWidgets.QDialog):
         super().__init__(parent)
 
         self.setWindowTitle("Login")
-        
+
         self.setMinimumWidth(400)
 
         self._login_form = LoginDialog.LoginForm(self, completer)

@@ -8,7 +8,7 @@ Distributed under MIT license. See license.txt for more information.
 
 import numpy as np
 import pyqtgraph as pg
-from PyQt6 import QtCore, QtWidgets, QtGui
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
@@ -64,15 +64,17 @@ class BoundingBox(pg.RectROI):
 
         self.localization = localization
         self.rect = rect
-        
+
         self.image_mosaic = image_mosaic
-        
+
         self._menu = QtWidgets.QMenu()
         self._setup_menu()
-        
+
         self.setAcceptedMouseButtons(QtCore.Qt.MouseButton.LeftButton)
-        self.sigClicked.connect(lambda bbox, ev: self.rect.clicked.emit(self.rect, ev))  # Pass click event to rect
-    
+        self.sigClicked.connect(
+            lambda bbox, ev: self.rect.clicked.emit(self.rect, ev)
+        )  # Pass click event to rect
+
     def _setup_menu(self):
         """
         Set up the context menu for the bounding box.
@@ -81,7 +83,7 @@ class BoundingBox(pg.RectROI):
         self._menu.addAction("Change part", self._do_change_part)
         self._menu.addSeparator()
         self._menu.addAction("Delete", self._do_delete)
-    
+
     def contextMenuEvent(self, ev):
         """
         Show the context menu.
@@ -94,7 +96,7 @@ class BoundingBox(pg.RectROI):
         """
         self.image_mosaic.select(self.rect)
         self.image_mosaic.delete_selected()
-    
+
     def _do_change_concept(self):
         """
         Change concept (clicked from context menu).
@@ -104,20 +106,17 @@ class BoundingBox(pg.RectROI):
         except Exception as e:
             LOGGER.error(f"Could not get KB concepts: {e}")
             return
-        
+
         concept, ok = QtWidgets.QInputDialog.getItem(
-            self.image_mosaic._graphics_view,
-            "Change concept",
-            "Concept:",
-            kb_concepts
+            self.image_mosaic._graphics_view, "Change concept", "Concept:", kb_concepts
         )
-        
+
         if not ok:
             return
-        
+
         self.image_mosaic.select(self.rect)
         self.image_mosaic.apply_label(concept, "")
-    
+
     def _do_change_part(self):
         """
         Change part (clicked from context menu).
@@ -127,17 +126,14 @@ class BoundingBox(pg.RectROI):
         except Exception as e:
             LOGGER.error(f"Could not get KB parts: {e}")
             return
-        
+
         part, ok = QtWidgets.QInputDialog.getItem(
-            self.image_mosaic._graphics_view,
-            "Change part",
-            "Part:",
-            kb_parts
+            self.image_mosaic._graphics_view, "Change part", "Part:", kb_parts
         )
-        
+
         if not ok:
             return
-        
+
         self.image_mosaic.select(self.rect)
         self.image_mosaic.apply_label("", part)
 
@@ -203,7 +199,6 @@ class BoundingBox(pg.RectROI):
             y = self.pos().y()
 
         if self.textItem is None:
-
             self.textItem = pg.TextItem(
                 text=self.label, color=(255, 255, 255), fill=(70, 70, 70)
             )

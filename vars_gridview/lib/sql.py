@@ -1,4 +1,3 @@
-import sys
 from typing import Tuple
 
 import pymssql
@@ -56,12 +55,14 @@ class ConstraintSpec:
         if len(self._lists) == 0:
             return "1=1"  # Accept anything
         return " AND ".join(
-            [list.form for list in self._lists]
+            [list_.form for list_ in self._lists]
         )  # AND together all forms
 
     @property
     def values(self):
-        return [value for l in self._lists for value in l.values]  # Flatten all values
+        return [
+            value for list_ in self._lists for value in list_.values
+        ]  # Flatten all values
 
     @classmethod
     def from_dict(cls, d):
@@ -86,11 +87,11 @@ def connect(server_url: str, user: str, password: str, database: str):
     """
     global SQL_CONNECTION
     SQL_CONNECTION = pymssql.connect(
-        server=server_url, 
-        user=user, 
-        password=password, 
-        database=database, 
-        tds_version="7.0"
+        server=server_url,
+        user=user,
+        password=password,
+        database=database,
+        tds_version="7.0",
     )
 
 

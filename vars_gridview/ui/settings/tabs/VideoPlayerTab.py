@@ -10,38 +10,64 @@ class VideoPlayerTab(AbstractSettingsTab):
 
     def __init__(self, connect_slot, connected_signal, parent=None):
         super().__init__("Video player", parent=parent)
-        
+
         self.sharktopoda_host_edit = QtWidgets.QLineEdit()
         self.sharktopoda_host_edit.setText(self._settings.sharktopoda_host.value)
         self.sharktopoda_host_edit.textChanged.connect(self.settingsChanged.emit)
-        self._settings.sharktopoda_host.valueChanged.connect(self.sharktopoda_host_edit.setText)
-        
+        self._settings.sharktopoda_host.valueChanged.connect(
+            self.sharktopoda_host_edit.setText
+        )
+
         self.sharktopoda_outgoing_port_edit = QtWidgets.QSpinBox()
         self.sharktopoda_outgoing_port_edit.setMinimum(0)
         self.sharktopoda_outgoing_port_edit.setMaximum(65535)
-        self.sharktopoda_outgoing_port_edit.setValue(self._settings.sharktopoda_outgoing_port.value)
-        self.sharktopoda_outgoing_port_edit.valueChanged.connect(self.settingsChanged.emit)
-        self._settings.sharktopoda_outgoing_port.valueChanged.connect(self.sharktopoda_outgoing_port_edit.setValue)
-        
+        self.sharktopoda_outgoing_port_edit.setValue(
+            self._settings.sharktopoda_outgoing_port.value
+        )
+        self.sharktopoda_outgoing_port_edit.valueChanged.connect(
+            self.settingsChanged.emit
+        )
+        self._settings.sharktopoda_outgoing_port.valueChanged.connect(
+            self.sharktopoda_outgoing_port_edit.setValue
+        )
+
         self.sharktopoda_incoming_port_edit = QtWidgets.QSpinBox()
         self.sharktopoda_incoming_port_edit.setMinimum(0)
         self.sharktopoda_incoming_port_edit.setMaximum(65535)
-        self.sharktopoda_incoming_port_edit.setValue(self._settings.sharktopoda_incoming_port.value)
-        self.sharktopoda_incoming_port_edit.valueChanged.connect(self.settingsChanged.emit)
-        self._settings.sharktopoda_incoming_port.valueChanged.connect(self.sharktopoda_incoming_port_edit.setValue)
-        
-        self.sharktopoda_host_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.sharktopoda_outgoing_port_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.sharktopoda_incoming_port_edit.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        
+        self.sharktopoda_incoming_port_edit.setValue(
+            self._settings.sharktopoda_incoming_port.value
+        )
+        self.sharktopoda_incoming_port_edit.valueChanged.connect(
+            self.settingsChanged.emit
+        )
+        self._settings.sharktopoda_incoming_port.valueChanged.connect(
+            self.sharktopoda_incoming_port_edit.setValue
+        )
+
+        self.sharktopoda_host_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.sharktopoda_outgoing_port_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.sharktopoda_incoming_port_edit.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+
         self.connect_button = QtWidgets.QPushButton("Connect")
+
         def apply_then_connect():
             self.apply_settings()
             connect_slot()
+
         self.connect_button.clicked.connect(apply_then_connect)
-        
+
         self.connected_icon = QtWidgets.QLabel()
-        self.connected_icon.setPixmap(self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogApplyButton).pixmap(16, 16))
+        self.connected_icon.setPixmap(
+            self.style()
+            .standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogApplyButton)
+            .pixmap(16, 16)
+        )
         self.connected_icon.setVisible(False)
         connected_signal.connect(lambda: self.connected_icon.setVisible(True))
 
@@ -49,22 +75,26 @@ class VideoPlayerTab(AbstractSettingsTab):
 
     def arrange(self):
         layout = QtWidgets.QGridLayout()
-        
+
         layout.addWidget(QtWidgets.QLabel("Sharktopoda host"), 0, 0)
         layout.addWidget(self.sharktopoda_host_edit, 0, 1)
-        
+
         layout.addWidget(QtWidgets.QLabel("Sharktopoda outgoing port"), 1, 0)
         layout.addWidget(self.sharktopoda_outgoing_port_edit, 1, 1)
-        
+
         layout.addWidget(QtWidgets.QLabel("Sharktopoda incoming port"), 2, 0)
         layout.addWidget(self.sharktopoda_incoming_port_edit, 2, 1)
-        
+
         layout.addWidget(self.connect_button, 3, 0, 1, 2)
         layout.addWidget(self.connected_icon, 3, 2)
-        
+
         self.setLayout(layout)
 
     def apply_settings(self):
         self._settings.sharktopoda_host.value = self.sharktopoda_host_edit.text()
-        self._settings.sharktopoda_outgoing_port.value = self.sharktopoda_outgoing_port_edit.value()
-        self._settings.sharktopoda_incoming_port.value = self.sharktopoda_incoming_port_edit.value()
+        self._settings.sharktopoda_outgoing_port.value = (
+            self.sharktopoda_outgoing_port_edit.value()
+        )
+        self._settings.sharktopoda_incoming_port.value = (
+            self.sharktopoda_incoming_port_edit.value()
+        )

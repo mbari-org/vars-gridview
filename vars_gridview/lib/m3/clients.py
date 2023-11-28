@@ -112,7 +112,7 @@ class AnnosaurusClient(M3Client):
     @needs_auth
     def create_association(self, data: dict) -> requests.Response:
         return self.post("/associations", data=data)
-    
+
     @needs_auth
     def update_association(
         self, association_uuid: str, data: dict
@@ -122,10 +122,10 @@ class AnnosaurusClient(M3Client):
     @needs_auth
     def delete_association(self, association_uuid: str) -> requests.Response:
         return self.delete(f"/associations/{association_uuid}")
-    
+
     def get_observation(self, observation_uuid: str) -> requests.Response:
         return self.get(f"/observations/{observation_uuid}")
-    
+
     @needs_auth
     def create_observation(self, data: dict) -> requests.Response:
         return self.post("/annotations", data=data)
@@ -135,14 +135,14 @@ class AnnosaurusClient(M3Client):
         self, observation_uuid: str, data: dict
     ) -> requests.Response:
         return self.put(f"/observations/{observation_uuid}", data=data)
-    
+
     @needs_auth
     def delete_observation(self, observation_uuid: str) -> requests.Response:
-        return self.delete(f'/observations/{observation_uuid}')
-    
+        return self.delete(f"/observations/{observation_uuid}")
+
     def get_imaged_moment(self, imaged_moment_uuid: str) -> requests.Response:
         return self.get(f"/imagedmoments/{imaged_moment_uuid}")
-    
+
     def get_image_reference(self, image_reference_uuid: str) -> requests.Response:
         return self.get(f"/imagereferences/{image_reference_uuid}")
 
@@ -157,13 +157,15 @@ class VampireSquidClient(M3Client):
 
     def get_videos_at_timestamp(self, timestamp: str) -> requests.Response:
         return self.get(f"/videos/timestamp/{timestamp}")
-    
-    def get_video_by_video_reference_uuid(self, video_reference_uuid: str) -> requests.Response:
+
+    def get_video_by_video_reference_uuid(
+        self, video_reference_uuid: str
+    ) -> requests.Response:
         return self.get(f"/videos/videoreference/{video_reference_uuid}")
-    
+
     def get_video_sequence_names(self) -> requests.Response:
         return self.get("/videosequences/names")
-    
+
     def get_video_sequence_by_name(self, name: str) -> requests.Response:
         return self.get(f"/videosequences/name/{name}")
 
@@ -190,7 +192,7 @@ class VARSKBServerClient(M3Client):
 
     def get_concepts(self) -> requests.Response:
         return self.get("/concept")
-    
+
     def get_concept(self, concept: str) -> requests.Response:
         return self.get(f"/concept/{concept}")
 

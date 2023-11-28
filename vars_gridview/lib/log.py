@@ -13,7 +13,6 @@ from vars_gridview.lib.constants import LOG_DIR
 
 
 class AppLogger:
-    
     @staticmethod
     def get_instance():
         if not hasattr(AppLogger, "_instance"):
@@ -23,24 +22,28 @@ class AppLogger:
     def __init__(self):
         if hasattr(AppLogger, "_instance"):
             raise Exception("This class is a singleton! Use get_instance() instead.")
-        
+
         # Create logger
         self._logger = logging.getLogger("vars-gridview")
         self._logger.setLevel(logging.DEBUG)
-        
+
         # Create formatter
-        self._formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        
+        self._formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+
         # Create stream handler
         self._stream_handler = logging.StreamHandler()
         self._stream_handler.setLevel(logging.WARN)
         self._stream_handler.setFormatter(self._formatter)
-        
+
         # Create file handler
-        self._file_handler = logging.FileHandler(str(LOG_DIR / (datetime.now().strftime("%Y-%m-%d") + ".txt")))
+        self._file_handler = logging.FileHandler(
+            str(LOG_DIR / (datetime.now().strftime("%Y-%m-%d") + ".txt"))
+        )
         self._file_handler.setLevel(logging.DEBUG)
         self._file_handler.setFormatter(self._formatter)
-        
+
         # Add handlers
         self._logger.addHandler(self._stream_handler)
         self._logger.addHandler(self._file_handler)
