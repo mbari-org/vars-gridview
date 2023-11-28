@@ -13,7 +13,7 @@ license = "MIT"
 include = ["LICENSE"]
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = ">=3.8,<3.13"
 pyqt6 = "^6.4.0"
 pymssql = "^2.2.4"
 requests = "^2.27.1"
@@ -22,6 +22,7 @@ opencv-python = "^4.5.5.62"
 qdarkstyle = "^3.0.3"
 beholder-client = "^0.1.0"
 sharktopoda-client = "^0.4.5"
+platformdirs = "^4.0.0"
 
 [tool.poetry.scripts]
 vars-gridview = "vars_gridview.scripts.run:main"
@@ -30,6 +31,7 @@ vars-gridview = "vars_gridview.scripts.run:main"
 black = "^23.1.0"
 isort = "^5.12.0"
 pre-commit = "^3.5.0"
+pyinstaller = "^6.2.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

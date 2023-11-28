@@ -1,4 +1,5 @@
 from pathlib import Path
+from platformdirs import user_log_dir
 
 # Application
 APP_NAME = "VARS GridView"
@@ -15,12 +16,14 @@ RAZIEL_URL_DEFAULT = "http://m3.shore.mbari.org/config"
 
 # Asset paths
 ROOT_DIR = Path(__file__).parent.parent
+if not ROOT_DIR.exists():  # pyinstaller
+    ROOT_DIR = ROOT_DIR.parent
 ASSETS_DIR = ROOT_DIR / "assets"
 UI_FILE = ASSETS_DIR / "gridview.ui"
 STYLE_DIR = ASSETS_DIR / "style"
 GUI_SETTINGS_FILE = ASSETS_DIR / "gui.ini"
 BASE_QUERY_FILE = ASSETS_DIR / "base_query.sql"
-LOG_DIR = ROOT_DIR / "logs"
+LOG_DIR = Path(user_log_dir(APP_NAME, APP_ORGANIZATION))
 
 # Preferred image type
 IMAGE_TYPE = "image/png"

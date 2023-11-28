@@ -64,10 +64,8 @@ from vars_gridview.ui.SortDialog import SortDialog
 
 # Define main window class from template
 CWD = Path(__file__).parent
-ASSETS_DIR = CWD.parent / "assets"
-ICONS_DIR = ASSETS_DIR / "icons"
-UI_FILE_PATH = ASSETS_DIR / "gridview.ui"
-WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(UI_FILE_PATH)
+ICONS_DIR = constants.ASSETS_DIR / "icons"
+WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(constants.UI_FILE)
 
 GUI_SETTINGS = QtCore.QSettings(
     str(constants.GUI_SETTINGS_FILE), QtCore.QSettings.Format.IniFormat
@@ -108,6 +106,9 @@ class MainWindow(TemplateBaseClass):
 
         # Set the window title
         self.setWindowTitle(constants.APP_NAME)
+        self.setWindowIcon(
+            QtGui.QIcon(str(ICONS_DIR / "VARSGridView.iconset" / "icon_256x256.png"))
+        )
 
         # Restore and style GUI
         self._restore_gui()
@@ -763,7 +764,7 @@ class MainWindow(TemplateBaseClass):
                 qdarkstyle.load_stylesheet(qt_api=os.environ["PYQTGRAPH_QT_LIB"])
             )
         elif self.ui.styleComboBox.currentText().lower() == "darkbreeze":
-            file = QtCore.QFile(str(ASSETS_DIR / "style" / "dark.qss"))
+            file = QtCore.QFile(str(constants.STYLE_DIR / "dark.qss"))
             file.open(
                 QtCore.QFile.OpenModeFlag.ReadOnly | QtCore.QFile.OpenModeFlag.Text
             )
