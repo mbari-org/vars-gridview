@@ -86,7 +86,6 @@ jobs:
       - name: Build distributable
         run: |
           poetry run pyinstaller run.spec
-          poetry version -s >> $POETRY_VERSION
       
       - name: Upload macOS app
         uses: actions/upload-artifact@v3
@@ -122,7 +121,7 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: macos-latest-app-${{ github.sha }}
-          path: "dist/VARS GridView v${{ env.POETRY_VERSION }}.app"
+          path: "dist/VARS GridView.app"
       
       - name: Python semantic release
         uses: python-semantic-release/python-semantic-release@master
