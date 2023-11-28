@@ -680,14 +680,39 @@ class MainWindow(TemplateBaseClass):
             color.setHsl(round((hash % 360) / 360 * 255), 255, 217, 255)
             return color
         
+        mp4_width = mp4_video.get("width", None)
+        mp4_height = mp4_video.get("height", None)
+        
+        if mp4_width is None or mp4_height is None:
+            QtWidgets.QMessageBox.warning(
+                self, "Bad MP4 Metadata", "MP4 video metadata is missing width or height."
+            )
+            return
+        elif mp4_width == 0 or mp4_height == 0:
+            QtWidgets.QMessageBox.warning(
+                self, "Bad MP4 Metadata", f"MP4 video metadata has resolution: {mp4_width}x{mp4_height}."
+            )
+            return
+        
+        rescale_x = mp4_width / rect.image.shape[1]
+        rescale_y = mp4_height / rect.image.shape[0]
+        
+        # Show warning if rescale dimensions are different
+        if abs(rescale_x / rescale_y - 1) > 0.01:  # 1% tolerance
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Different MP4 Aspect Ratio",
+                "MP4 video has different aspect ratio than ROI source image. The bounding box may not be displayed correctly.",
+            )
+        
         localization = Localization(
             uuid=uuid4(),
             concept=rect.localization.concept,
             elapsed_time_millis=annotation_milliseconds,
-            x=rect.localization.x,
-            y=rect.localization.y,
-            width=rect.localization.width,
-            height=rect.localization.height,
+            x=rescale_x * rect.localization.x,
+            y=rescale_y * rect.localization.y,
+            width=rescale_x * rect.localization.width,
+            height=rescale_y * rect.localization.height,
             duration_millis=1000,
             color=color_for_concept(rect.localization.concept).name()
         )
