@@ -87,12 +87,19 @@ jobs:
         run: |
           poetry run pyinstaller run.spec
       
-      - name: Upload macOS app
+      - name: Zip macOS app
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd dist
+          zip -r VARS\ GridView.zip VARS\ GridView.app
+          cd ..
+
+      - name: Upload zipped macOS app
         uses: actions/upload-artifact@v3
         if: matrix.os == 'macos-latest'
         with:
           name: macos-latest-app-${{ github.sha }}
-          path: "dist/VARS GridView.app"
+          path: "dist/VARS GridView.zip"
 
   semantic-release-publish:
     runs-on: ubuntu-latest
@@ -117,11 +124,11 @@ jobs:
       #   with:
       #     name: windows-latest-dist
       
-      - name: Download macOS app
+      - name: Download zipped macOS app
         uses: actions/download-artifact@v3
         with:
           name: macos-latest-app-${{ github.sha }}
-          path: "dist/VARS GridView.app"
+          path: "dist/VARS GridView.zip"
       
       - name: Python semantic release
         uses: python-semantic-release/python-semantic-release@master
