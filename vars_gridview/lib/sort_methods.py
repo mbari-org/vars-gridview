@@ -184,3 +184,11 @@ class DepthSort(SortMethod):
             depth = 0.0
 
         return depth
+
+
+class VerifierSort(SortMethod):
+    NAME = "Verifier"
+
+    @staticmethod
+    def key(rect: RectWidget) -> str:
+        return rect.localization.meta.get("verifier", "")

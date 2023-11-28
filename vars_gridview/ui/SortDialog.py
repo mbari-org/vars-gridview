@@ -31,7 +31,8 @@ class SortDialog(QDialog):
             sm.MeanIntensitySort,
             sm.MeanHueSort,
             sm.RegionMeanHueSort,
-            sm.DepthSort
+            sm.DepthSort,
+            sm.VerifierSort,
         ]
 
         self.setWindowTitle("Sort")

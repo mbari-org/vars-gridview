@@ -46,20 +46,6 @@ from vars_gridview.lib.m3.operations import (
     get_imaged_moment,
 )
 from vars_gridview.lib.settings import SettingsManager
-from vars_gridview.lib.sort_methods import (
-    AreaSort,
-    AssociationUUIDSort,
-    DepthSort,
-    HeightSort,
-    ImageReferenceUUIDSort,
-    LabelSort,
-    MeanHueSort,
-    MeanIntensitySort,
-    ObservationUUIDSort,
-    RecordedTimestampSort,
-    RegionMeanHueSort,
-    WidthSort,
-)
 from vars_gridview.lib.util import parse_iso
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.LoginDialog import LoginDialog
@@ -75,21 +61,6 @@ UI_FILE_PATH = ASSETS_DIR / "gridview.ui"
 WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(UI_FILE_PATH)
 
 GUI_SETTINGS = QtCore.QSettings(str(constants.GUI_SETTINGS_FILE), QtCore.QSettings.Format.IniFormat)
-
-ENABLED_SORT_METHODS = [
-    RecordedTimestampSort,
-    AssociationUUIDSort,
-    ObservationUUIDSort,
-    ImageReferenceUUIDSort,
-    LabelSort,
-    WidthSort,
-    HeightSort,
-    AreaSort,
-    MeanIntensitySort,
-    MeanHueSort,
-    RegionMeanHueSort,
-    DepthSort,
-]
 
 
 class MainWindow(TemplateBaseClass):
