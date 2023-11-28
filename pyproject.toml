@@ -21,7 +21,7 @@ pyqtgraph = "^0.13.0"
 opencv-python = "^4.5.5.62"
 qdarkstyle = "^3.0.3"
 beholder-client = "^0.1.0"
-sharktopoda-client = "^0.4.4"
+sharktopoda-client = "^0.4.5"
 
 [tool.poetry.scripts]
 vars-gridview = "vars_gridview.scripts.run:main"
