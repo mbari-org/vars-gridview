@@ -693,8 +693,8 @@ class MainWindow(TemplateBaseClass):
             color.setHsl(round((hash % 360) / 360 * 255), 255, 217, 255)
             return color
 
-        mp4_width = mp4_video.get("width", None)
-        mp4_height = mp4_video.get("height", None)
+        mp4_width = mp4_video_reference.get("width", None)
+        mp4_height = mp4_video_reference.get("height", None)
 
         if mp4_width is None or mp4_height is None:
             QtWidgets.QMessageBox.warning(
