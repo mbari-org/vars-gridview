@@ -91,7 +91,7 @@ def connect(server_url: str, user: str, password: str, database: str):
         user=user,
         password=password,
         database=database,
-        tds_version="7.0",
+        tds_version="7.3",
     )
 
 
