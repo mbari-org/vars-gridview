@@ -1,6 +1,6 @@
 from typing import Tuple
 
-import pymssql
+import pyodbc
 
 from vars_gridview.lib.constants import BASE_QUERY_FILE
 from vars_gridview.lib.log import LOGGER
@@ -86,12 +86,14 @@ def connect(server_url: str, user: str, password: str, database: str):
     Initialize the connection to the SQL server.
     """
     global SQL_CONNECTION
-    SQL_CONNECTION = pymssql.connect(
+    SQL_CONNECTION = pyodbc.connect(
+        driver="ODBC Driver 18 for SQL Server",
         server=server_url,
+        database=database,
         user=user,
         password=password,
-        database=database,
-        tds_version="7.3",
+        encrypt="no",
+        trustservercertificate="yes",
     )
 
 
