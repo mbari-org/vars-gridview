@@ -52,15 +52,13 @@ jobs:
         uses: python-semantic-release/python-semantic-release@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          vcs_release: false
-
-  pyinstaller-build:
-    runs-on: ${{ matrix.os }}
+          vcs_release: true
+  
+  poetry-publish:
+    runs-on: ubuntu-latest
     needs: semantic-release-version
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.11"]
+    if: ${{ needs.semantic-release-version.outputs.released == 'true' }}
+    concurrency: poetry-publish
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -68,7 +66,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v3
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
       
       - name: Cache Poetry
         uses: actions/cache@v3
@@ -78,60 +76,89 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-poetry-
       
-      - name: Install dependencies
+      - name: Publish package
         run: |
           pip install poetry
-          poetry install
-      
-      - name: Build distributable
-        run: |
-          poetry run pyinstaller run.spec
-      
-      - name: Zip macOS app
-        if: matrix.os == 'macos-latest'
-        run: |
-          cd dist
-          zip -r VARS\ GridView.zip VARS\ GridView.app
-          cd ..
+          poetry publish --build
 
-      - name: Upload zipped macOS app
-        uses: actions/upload-artifact@v3
-        if: matrix.os == 'macos-latest'
-        with:
-          name: macos-latest-app-${{ github.sha }}
-          path: "dist/VARS GridView.zip"
+  # pyinstaller-build:
+  #   runs-on: ${{ matrix.os }}
+  #   needs: semantic-release-version
+  #   strategy:
+  #     matrix:
+  #       os: [ubuntu-latest, windows-latest, macos-latest]
+  #       python-version: ["3.11"]
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v3
+      
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v3
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+      
+  #     - name: Cache Poetry
+  #       uses: actions/cache@v3
+  #       with:
+  #         path: ~/.cache/pypoetry
+  #         key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-poetry-
+      
+  #     - name: Install dependencies
+  #       run: |
+  #         pip install poetry
+  #         poetry install
+      
+  #     - name: Build distributable
+  #       run: |
+  #         poetry run pyinstaller run.spec
+      
+  #     - name: Zip macOS app
+  #       if: matrix.os == 'macos-latest'
+  #       run: |
+  #         cd dist
+  #         zip -r VARS\ GridView.zip VARS\ GridView.app
+  #         cd ..
 
-  semantic-release-publish:
-    runs-on: ubuntu-latest
-    needs: pyinstaller-build
-    concurrency: semantic-release-publish
-    permissions:
-      id-token: write
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+  #     - name: Upload zipped macOS app
+  #       uses: actions/upload-artifact@v3
+  #       if: matrix.os == 'macos-latest'
+  #       with:
+  #         name: macos-latest-app-${{ github.sha }}
+  #         path: "dist/VARS GridView.zip"
+
+  # semantic-release-publish:
+  #   runs-on: ubuntu-latest
+  #   needs: pyinstaller-build
+  #   concurrency: semantic-release-publish
+  #   permissions:
+  #     id-token: write
+  #     contents: write
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v3
+  #       with:
+  #         fetch-depth: 0
       
-      # - name: Download Ubuntu artifact
-      #   uses: actions/download-artifact@v3
-      #   with:
-      #     name: ubuntu-latest-dist
+  #     # - name: Download Ubuntu artifact
+  #     #   uses: actions/download-artifact@v3
+  #     #   with:
+  #     #     name: ubuntu-latest-dist
       
-      # - name: Download Windows artifact
-      #   uses: actions/download-artifact@v3
-      #   with:
-      #     name: windows-latest-dist
+  #     # - name: Download Windows artifact
+  #     #   uses: actions/download-artifact@v3
+  #     #   with:
+  #     #     name: windows-latest-dist
       
-      - name: Download zipped macOS app
-        uses: actions/download-artifact@v3
-        with:
-          name: macos-latest-app-${{ github.sha }}
-          path: "dist/VARS GridView.zip"
+  #     - name: Download zipped macOS app
+  #       uses: actions/download-artifact@v3
+  #       with:
+  #         name: macos-latest-app-${{ github.sha }}
+  #         path: "dist/VARS GridView.zip"
       
-      - name: Python semantic release
-        uses: python-semantic-release/python-semantic-release@master
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          vcs_release: true
+  #     - name: Python semantic release
+  #       uses: python-semantic-release/python-semantic-release@master
+  #       with:
+  #         github_token: ${{ secrets.GITHUB_TOKEN }}
+  #         vcs_release: true
