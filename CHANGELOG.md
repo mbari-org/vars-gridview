@@ -2,6 +2,19 @@
 
 
 
+## v0.5.2 (2023-11-29)
+
+### Chore
+
+* chore: Update CI workflow to include poetry publishing
+
+Remove pyinstaller build/release for now ([`777066d`](https://github.com/mbari-org/vars-gridview/commit/777066d042a026e732aa8a7299766b48310128c9))
+
+### Fix
+
+* fix: Pin TDS version to 7.3 ([`12af446`](https://github.com/mbari-org/vars-gridview/commit/12af44648a3f2653deec53aa973ebb5f8a7663da))
+
+
 ## v0.5.1 (2023-11-28)
 
 ### Fix
