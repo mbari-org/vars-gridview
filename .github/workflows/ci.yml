@@ -42,6 +42,8 @@ jobs:
     permissions:
       id-token: write
       contents: write
+    outputs:
+      released: ${{ steps.semantic_release.outputs.released }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -49,6 +51,7 @@ jobs:
           fetch-depth: 0
       
       - name: Python semantic release
+        id: semantic_release
         uses: python-semantic-release/python-semantic-release@master
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -79,6 +82,7 @@ jobs:
       - name: Publish package
         run: |
           pip install poetry
+          poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
           poetry publish --build
 
   # pyinstaller-build:
