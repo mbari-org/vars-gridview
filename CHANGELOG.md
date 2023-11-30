@@ -2,6 +2,26 @@
 
 
 
+## v0.5.4 (2023-11-30)
+
+### Chore
+
+* chore: Fix Poetry publish in CI ([`d4cefba`](https://github.com/mbari-org/vars-gridview/commit/d4cefba3aa03af3079254242c9ee9a44e9eab7cf))
+
+### Fix
+
+* fix: Fix observation observer value parsing
+
+Previously, the &#34;Observation observer&#34; field in the details list was
+being incorrectly populated. ([`06802fd`](https://github.com/mbari-org/vars-gridview/commit/06802fde1ac2261f77885907569b9f7bb5d1de7d))
+
+### Style
+
+* style: Update window title to include version
+
+e.g. &#34;VARS GridView v0.5.4&#34; ([`c6a50d5`](https://github.com/mbari-org/vars-gridview/commit/c6a50d5eb47f058b8f52a3a9d27f4203c1d465fa))
+
+
 ## v0.5.3 (2023-11-30)
 
 ### Fix
