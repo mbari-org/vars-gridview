@@ -64,7 +64,7 @@ class ImageMosaic(QtCore.QObject):
         self.moment_video_data = {}
         self.moment_mp4_data = {}
         self.moment_timestamps = {}
-        self.observation_data = {}
+        self.observation_observer = {}
         self.images_by_group = {}  # Big
 
         self.video_reference_uuid_to_mp4_video_reference = {}
@@ -108,6 +108,9 @@ class ImageMosaic(QtCore.QObject):
                 # Fill image_reference_uuid -> image_url
                 if image_reference_uuid not in self.image_reference_urls:
                     self.image_reference_urls[image_reference_uuid] = image_url
+
+                # Fill observation_uuid -> observer
+                self.observation_observer[observation_uuid] = observer
 
                 # Tag in ancillary data
                 # Note: this assumes a single imaged moment UUID will not have multiple ancillary data entries. This is a safe assumption for now but is not strictly necessary
@@ -451,6 +454,9 @@ class ImageMosaic(QtCore.QObject):
 
                 # Create the widgets
                 for localization in localizations:
+                    observer = self.observation_observer.get(
+                        localization.observation_uuid, None
+                    )
                     other_locs = list(localizations)
                     other_locs.remove(localization)
                     rw = RectWidget(
