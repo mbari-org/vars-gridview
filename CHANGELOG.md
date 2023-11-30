@@ -2,6 +2,17 @@
 
 
 
+## v0.5.3 (2023-11-30)
+
+### Fix
+
+* fix: Pin TDS version back to 7.0
+
+pymssql with TDS 7.3 parses datetime2 as datetime, leading
+to a drop in timestamp resolution (100 ns -&gt; ~3 ms). This causes
+incorrect frames to occasionally be grabbed from Beholder. ([`dd64838`](https://github.com/mbari-org/vars-gridview/commit/dd64838db9944a69ce2ccc3265c0997acead2d32))
+
+
 ## v0.5.2 (2023-11-29)
 
 ### Chore
