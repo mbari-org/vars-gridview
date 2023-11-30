@@ -23,6 +23,7 @@ import os
 import sys
 import traceback
 import webbrowser
+from importlib import metadata
 from pathlib import Path
 from time import sleep
 from typing import Optional, Tuple
@@ -105,7 +106,9 @@ class MainWindow(TemplateBaseClass):
         self.ui.setupUi(self)
 
         # Set the window title
-        self.setWindowTitle(constants.APP_NAME)
+        self.setWindowTitle(
+            f"{constants.APP_NAME} v{metadata.version('vars_gridview')}"
+        )
         self.setWindowIcon(
             QtGui.QIcon(str(ICONS_DIR / "VARSGridView.iconset" / "icon_256x256.png"))
         )
