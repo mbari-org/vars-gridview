@@ -38,6 +38,7 @@ from sharktopoda_client.dto import Localization
 
 from vars_gridview.lib import constants, m3, raziel, sql
 from vars_gridview.lib.boxes import BoxHandler
+from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.image_mosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER, AppLogger
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
@@ -58,6 +59,7 @@ from vars_gridview.lib.sort_methods import (
 )
 from vars_gridview.lib.util import parse_iso
 from vars_gridview.lib.widgets import RectWidget
+from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
 from vars_gridview.ui.LoginDialog import LoginDialog
 from vars_gridview.ui.QueryDialog import QueryDialog
 from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
@@ -136,6 +138,8 @@ class MainWindow(TemplateBaseClass):
             False  # Whether the Sharktopoda client is connected
         )
 
+        self.cache_controller = CacheController()
+
         # Connect signals to slots
         self.ui.discardButton.clicked.connect(self.delete)
         self.ui.clearSelections.clicked.connect(self.clear_selected)
@@ -151,7 +155,10 @@ class MainWindow(TemplateBaseClass):
         self._settings.label_font_size.valueChanged.connect(self.update_layout)
 
         self.settings_dialog = SettingsDialog(
-            self._setup_sharktopoda_client, self.sharktopodaConnected, parent=self
+            self._setup_sharktopoda_client,
+            self.sharktopodaConnected,
+            self._clear_cache,
+            parent=self,
         )
 
         self._launch()
@@ -342,6 +349,35 @@ class MainWindow(TemplateBaseClass):
             return
 
         self.sharktopodaConnected.emit()
+
+    @QtCore.pyqtSlot()
+    def _clear_cache(self):
+        """
+        Clear the cache.
+        """
+        # Confirm
+        confirm = ConfirmationDialog.confirm(
+            self,
+            "Clear Cache",
+            "Are you sure you want to clear the cache? This will delete all cached data.",
+        )
+
+        if confirm:
+            try:
+                self.cache_controller.clear()
+                LOGGER.info("Cache cleared")
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Cache Cleared",
+                    "Cache cleared successfully.",
+                )
+            except Exception as e:
+                LOGGER.error(f"Could not clear cache: {e}")
+                QtWidgets.QMessageBox.critical(
+                    self,
+                    "Cache Clear Failed",
+                    f"Could not clear cache: {e}",
+                )
 
     def _open_settings(self):
         """
@@ -826,6 +862,17 @@ def init_settings():
         "video/sharktopoda_incoming_port",
         int,
         constants.SHARKTOPODA_INCOMING_PORT_DEFAULT,
+    )
+
+    settings.cache_dir = (
+        "cache/dir",
+        str,
+        str(constants.CACHE_DIR_DEFAULT),
+    )
+    settings.cache_size_mb = (
+        "cache/size_mb",
+        int,
+        1000,
     )
 
 

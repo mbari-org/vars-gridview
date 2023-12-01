@@ -1,5 +1,6 @@
 from pathlib import Path
-from platformdirs import user_log_dir
+
+from platformdirs import user_cache_dir, user_log_dir
 
 # Application
 APP_NAME = "VARS GridView"
@@ -36,3 +37,6 @@ SELECTION_HIGHLIGHT_COLOR_DEFAULT = "#34a1eb"
 SHARKTOPODA_HOST_DEFAULT = "::1"
 SHARKTOPODA_OUTGOING_PORT_DEFAULT = 8800
 SHARKTOPODA_INCOMING_PORT_DEFAULT = 8801
+
+# Data cache
+CACHE_DIR_DEFAULT = Path(user_cache_dir(APP_NAME))
