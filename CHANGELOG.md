@@ -2,6 +2,23 @@
 
 
 
+## v0.6.0 (2023-12-01)
+
+### Chore
+
+* chore: Pin poetry-publish to semantic-release tag ([`eb8cb62`](https://github.com/mbari-org/vars-gridview/commit/eb8cb62180d62f672d4a93c7f18560639ecb3c0e))
+
+### Feature
+
+* feat: Integrate initial image caching ([`62637f5`](https://github.com/mbari-org/vars-gridview/commit/62637f5ba38ff2816c2d384cb1447a143ff69d7a))
+
+* feat: add cache controller and settings UI ([`22a0e15`](https://github.com/mbari-org/vars-gridview/commit/22a0e15f5d31619b860d4fa6cc67ce57e62afb8c))
+
+### Fix
+
+* fix: Enable manifest file indentation ([`94f9541`](https://github.com/mbari-org/vars-gridview/commit/94f9541dbfeebda8a6922d3a47b65d35c6e94d10))
+
+
 ## v0.5.4 (2023-11-30)
 
 ### Chore
