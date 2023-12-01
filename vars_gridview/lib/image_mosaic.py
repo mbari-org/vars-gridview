@@ -18,6 +18,7 @@ from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib import m3
 from vars_gridview.lib.annotation import VARSLocalization
+from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.sort_methods import SortMethod
@@ -35,6 +36,7 @@ class ImageMosaic(QtCore.QObject):
     def __init__(
         self,
         graphics_view: QtWidgets.QGraphicsView,
+        cache_controller: CacheController,
         query_data: List[List],
         query_headers: List[str],
         rect_clicked_slot: callable,
@@ -56,6 +58,8 @@ class ImageMosaic(QtCore.QObject):
         self._graphics_scene: QtWidgets.QGraphicsScene = None
         self._graphics_widget: QtWidgets.QGraphicsWidget = None
         self._init_graphics()
+
+        self.cache_controller = cache_controller
 
         self.verifier = verifier
 
@@ -342,21 +346,42 @@ class ImageMosaic(QtCore.QObject):
                         * 1000
                     )
 
-                    # Get the capture from beholder
-                    LOGGER.debug(
-                        f"Getting capture from beholder for moment: {imaged_moment_uuid} ({mp4_video_reference_uri} @ {elapsed_time_millis} ms)"
+                    cache_key = (
+                        f"beholder | {mp4_video_reference_uri} | {elapsed_time_millis}"
                     )
                     try:
-                        img_raw = m3.BEHOLDER_CLIENT.capture_raw(
-                            mp4_video_reference_uri, elapsed_time_millis
-                        )
+                        img_raw = self.cache_controller.get(cache_key)
                     except Exception:
-                        LOGGER.error(
-                            "Error getting capture from beholder for moment: {}, skipping".format(
-                                imaged_moment_uuid
-                            )
+                        pass
+
+                    if img_raw is not None:
+                        LOGGER.debug(
+                            f"Found image for moment {imaged_moment_uuid} in cache"
                         )
-                        continue
+                    else:
+                        # Get the capture from beholder
+                        LOGGER.debug(
+                            f"Getting capture from beholder for moment: {imaged_moment_uuid} ({mp4_video_reference_uri} @ {elapsed_time_millis} ms)"
+                        )
+                        try:
+                            img_raw = m3.BEHOLDER_CLIENT.capture_raw(
+                                mp4_video_reference_uri, elapsed_time_millis
+                            )
+                        except Exception:
+                            LOGGER.error(
+                                "Error getting capture from beholder for moment: {}, skipping".format(
+                                    imaged_moment_uuid
+                                )
+                            )
+                            continue
+
+                        try:
+                            self.cache_controller.insert(
+                                cache_key, img_raw
+                            )  # Cache the image
+                            LOGGER.debug(f"Cached image with key {cache_key}")
+                        except Exception as e:
+                            LOGGER.error(f"Error caching image: {e}")
 
                     scale_x = source_width / mp4_width
                     scale_y = source_height / mp4_height
@@ -391,19 +416,38 @@ class ImageMosaic(QtCore.QObject):
                             )
                             continue
 
-                    # Fetch the image from the URL
-                    res = requests.get(url)
+                    cache_key = f"url | {url}"
+                    try:
+                        img_raw = self.cache_controller.get(cache_key)
+                    except Exception:
+                        pass
 
-                    # Check the status code and skip if not 200
-                    if res.status_code != 200:
-                        LOGGER.warn(
-                            "Unable to fetch image (status {}) at url: {}, skipping".format(
-                                res.status_code, url
-                            )
+                    if img_raw is not None:
+                        LOGGER.debug(
+                            f"Found image for moment {imaged_moment_uuid} in cache"
                         )
-                        continue
+                    else:
+                        # Fetch the image from the URL
+                        res = requests.get(url)
 
-                    img_raw = res.content
+                        # Check the status code and skip if not 200
+                        if res.status_code != 200:
+                            LOGGER.warn(
+                                "Unable to fetch image (status {}) at url: {}, skipping".format(
+                                    res.status_code, url
+                                )
+                            )
+                            continue
+
+                        img_raw = res.content
+
+                        try:
+                            self.cache_controller.insert(
+                                cache_key, img_raw
+                            )  # Cache the image
+                            LOGGER.debug(f"Cached image with key {cache_key}")
+                        except Exception as e:
+                            LOGGER.error(f"Error caching image: {e}")
 
                 img_arr = np.fromstring(img_raw, np.uint8)
                 img = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)

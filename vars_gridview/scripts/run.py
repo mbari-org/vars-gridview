@@ -428,6 +428,7 @@ class MainWindow(TemplateBaseClass):
         # Create the image mosaic
         self.image_mosaic = ImageMosaic(
             self.ui.roiGraphicsView,
+            self.cache_controller,
             query_data,
             query_headers,
             self.rect_clicked,
