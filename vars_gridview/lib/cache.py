@@ -85,7 +85,7 @@ class CacheController(QtCore.QObject):
             manifest: The manifest.
         """
         with open(self.manifest_path, "w") as f:
-            json.dump(manifest, f)
+            json.dump(manifest, f, indent=2)
 
     def _current_timestamp(self) -> int:
         """
