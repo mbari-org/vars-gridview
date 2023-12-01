@@ -44,6 +44,7 @@ jobs:
       contents: write
     outputs:
       released: ${{ steps.semantic_release.outputs.released }}
+      tag: ${{ steps.semantic_release.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -65,6 +66,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.semantic-release-version.outputs.tag }}
       
       - name: Set up Python
         uses: actions/setup-python@v3
