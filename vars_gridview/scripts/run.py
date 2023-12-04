@@ -194,10 +194,11 @@ class MainWindow(TemplateBaseClass):
         self._setup_menu_bar()
 
         # Set up Sharktopoda client
-        try:
-            self._setup_sharktopoda_client()
-        except Exception as e:
-            LOGGER.warning(f"Could not set up Sharktopoda client: {e}")
+        if self._settings.sharktopoda_autoconnect.value:
+            try:
+                self._setup_sharktopoda_client()
+            except Exception as e:
+                LOGGER.warning(f"Could not set up Sharktopoda client: {e}")
 
         LOGGER.info("Launch successful")
 
@@ -953,6 +954,11 @@ def init_settings():
         "video/sharktopoda_incoming_port",
         int,
         constants.SHARKTOPODA_INCOMING_PORT_DEFAULT,
+    )
+    settings.sharktopoda_autoconnect = (
+        "video/sharktopoda_autoconnect",
+        bool,
+        True,
     )
 
     settings.cache_dir = (

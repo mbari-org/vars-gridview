@@ -11,6 +11,17 @@ class VideoPlayerTab(AbstractSettingsTab):
     def __init__(self, connect_slot, connected_signal, parent=None):
         super().__init__("Video player", parent=parent)
 
+        self.sharktopoda_autoconnect_checkbox = QtWidgets.QCheckBox()
+        self.sharktopoda_autoconnect_checkbox.setChecked(
+            self._settings.sharktopoda_autoconnect.value
+        )
+        self.sharktopoda_autoconnect_checkbox.stateChanged.connect(
+            self.settingsChanged.emit
+        )
+        self._settings.sharktopoda_autoconnect.valueChanged.connect(
+            self.sharktopoda_autoconnect_checkbox.setChecked
+        )
+
         self.sharktopoda_host_edit = QtWidgets.QLineEdit()
         self.sharktopoda_host_edit.setText(self._settings.sharktopoda_host.value)
         self.sharktopoda_host_edit.textChanged.connect(self.settingsChanged.emit)
@@ -88,6 +99,9 @@ class VideoPlayerTab(AbstractSettingsTab):
         layout.addWidget(self.connect_button, 3, 0, 1, 2)
         layout.addWidget(self.connected_icon, 3, 2)
 
+        layout.addWidget(QtWidgets.QLabel("Autoconnect"), 4, 0)
+        layout.addWidget(self.sharktopoda_autoconnect_checkbox, 4, 1)
+
         self.setLayout(layout)
 
     def apply_settings(self):
@@ -97,4 +111,7 @@ class VideoPlayerTab(AbstractSettingsTab):
         )
         self._settings.sharktopoda_incoming_port.value = (
             self.sharktopoda_incoming_port_edit.value()
+        )
+        self._settings.sharktopoda_autoconnect.value = (
+            self.sharktopoda_autoconnect_checkbox.isChecked()
         )
