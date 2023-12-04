@@ -18,7 +18,7 @@ class SettingProxy(QtCore.QObject):
         self._type = type
         self._default = default
 
-        if default and not self.value:
+        if default is not None and self.value is None:
             self.value = default
 
     @property

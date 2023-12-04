@@ -673,38 +673,22 @@ class ImageMosaic(QtCore.QObject):
 
         self.n_columns = columns
 
-    def apply_label(self, concept, part):
+    def label_selected(self, concept: Optional[str], part: Optional[str]):
         """
         Apply a label to the selected rect widgets.
+
+        Args:
+            concept: The concept to apply. If None, the existing concept will be used.
+            part: The part to apply. If None, the existing part will be used.
         """
         for rect in self.get_selected():
-            # Handle empty concept/part
-            apply_concept = concept
-            if concept.strip() == "":
-                apply_concept = rect.localization.concept
-            else:  # map to official KB concept name
-                try:
-                    apply_concept = operations.get_kb_name(concept)
-                except Exception as e:
-                    LOGGER.error(f"Error getting KB name for concept {concept}: {e}")
-                    QtWidgets.QMessageBox.warning(
-                        self._graphics_view,
-                        "Error",
-                        f"An error occurred while getting the KB name for concept {concept}.\n\nThe label will not be applied.",
-                    )
-                    continue
-                if concept != apply_concept:
-                    LOGGER.debug(f"Mapped concept {concept} -> {apply_concept}")
-
-            # No part specified? ditto
-            apply_part = part
-            if part.strip() == "":
-                apply_part = rect.localization.part
-
             # Set the new concept and immediately push to VARS
             rect.localization.set_verified_concept(
-                apply_concept, apply_part, self.verifier
+                concept if concept is not None else rect.localization.concept,
+                part if part is not None else rect.localization.part,
+                self.verifier,
             )
+
             try:
                 rect.localization.push_changes(self.verifier)
             except Exception as e:
@@ -725,6 +709,39 @@ class ImageMosaic(QtCore.QObject):
             rect.update()
 
         self.render_mosaic()
+
+    def verify_selected(self):
+        """
+        Verify the selected rect widgets.
+        """
+        self.label_selected(None, None)  # Use existing concept and part
+
+    def unverify_selected(self):
+        """
+        Unverify the selected rect widgets.
+        """
+        for rect in self.get_selected():
+            # Unverify the localization and immediately push to VARS
+            rect.localization.unverify()
+
+            try:
+                rect.localization.push_changes(self.verifier)
+            except Exception as e:
+                LOGGER.error(
+                    f"Error pushing changes for localization {rect.localization.association_uuid}: {e}"
+                )
+                QtWidgets.QMessageBox.critical(
+                    self._graphics_view,
+                    "Error",
+                    f"An error occurred while pushing changes for localization {rect.localization.association_uuid}.",
+                )
+
+            # Update the widget's text label and deselect it
+            rect.text_label = rect.localization.text_label
+            rect.is_selected = False
+
+            # Propagate visual changes
+            rect.update()
 
     def get_selected(self) -> List[RectWidget]:
         """

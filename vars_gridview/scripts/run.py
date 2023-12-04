@@ -41,7 +41,7 @@ from vars_gridview.lib.boxes import BoxHandler
 from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.image_mosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER, AppLogger
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
+from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_name, get_kb_parts
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import (
     AreaSort,
@@ -115,6 +115,9 @@ class MainWindow(TemplateBaseClass):
             QtGui.QIcon(str(ICONS_DIR / "VARSGridView.iconset" / "icon_256x256.png"))
         )
 
+        # Style buttons
+        self._style_buttons()
+
         # Restore and style GUI
         self._restore_gui()
         self._style_gui()
@@ -143,7 +146,9 @@ class MainWindow(TemplateBaseClass):
         # Connect signals to slots
         self.ui.discardButton.clicked.connect(self.delete)
         self.ui.clearSelections.clicked.connect(self.clear_selected)
-        self.ui.labelSelectedButton.clicked.connect(self.update_labels)
+        self.ui.labelSelectedButton.clicked.connect(self.label_selected)
+        self.ui.verifySelectedButton.clicked.connect(self.verify_selected)
+        self.ui.unverifySelectedButton.clicked.connect(self.unverify_selected)
         self.ui.zoomSpinBox.valueChanged.connect(self.update_zoom)
         # self.ui.sortMethod.currentTextChanged.connect(self.update_layout)
         self.ui.hideLabeled.stateChanged.connect(self.update_layout)
@@ -189,10 +194,11 @@ class MainWindow(TemplateBaseClass):
         self._setup_menu_bar()
 
         # Set up Sharktopoda client
-        try:
-            self._setup_sharktopoda_client()
-        except Exception as e:
-            LOGGER.warning(f"Could not set up Sharktopoda client: {e}")
+        if self._settings.sharktopoda_autoconnect.value:
+            try:
+                self._setup_sharktopoda_client()
+            except Exception as e:
+                LOGGER.warning(f"Could not set up Sharktopoda client: {e}")
 
         LOGGER.info("Launch successful")
 
@@ -479,18 +485,22 @@ class MainWindow(TemplateBaseClass):
 
         # Set up the combo boxes
         self.ui.labelComboBox.clear()
-        concepts = [""] + sorted([c for c in kb_concepts if c != ""])
+        concepts = sorted([c for c in kb_concepts if c != ""])
         self.ui.labelComboBox.addItems(concepts)
         self.ui.labelComboBox.completer().setCompletionMode(
             QtWidgets.QCompleter.CompletionMode.PopupCompletion
         )
+        self.ui.labelComboBox.setCurrentIndex(-1)
+        self.ui.labelComboBox.lineEdit().setPlaceholderText("Concept")
 
         self.ui.partComboBox.clear()
-        parts = [""] + sorted([p for p in kb_parts if p != ""])
+        parts = sorted([p for p in kb_parts if p != ""])
         self.ui.partComboBox.addItems(parts)
         self.ui.partComboBox.completer().setCompletionMode(
             QtWidgets.QCompleter.CompletionMode.PopupCompletion
         )
+        self.ui.partComboBox.setCurrentIndex(-1)
+        self.ui.partComboBox.lineEdit().setPlaceholderText("Part")
 
     def _restore_gui(self):
         """
@@ -511,7 +521,31 @@ class MainWindow(TemplateBaseClass):
         GUI_SETTINGS.setValue("splitter2state", self.ui.splitter2.saveState())
         GUI_SETTINGS.setValue("style", self.ui.styleComboBox.currentText())
 
-    def update_labels(self):
+    def _style_buttons(self):
+        """
+        Style the main window buttons.
+        """
+        style = self.style()
+
+        self.ui.verifySelectedButton.setIcon(
+            style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogYesButton)
+        )
+        self.ui.unverifySelectedButton.setIcon(
+            style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogNoButton)
+        )
+        self.ui.discardButton.setIcon(
+            style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_TrashIcon)
+        )
+
+        self.ui.labelSelectedButton.setStyleSheet("background-color: #085d8e;")
+        self.ui.verifySelectedButton.setStyleSheet("background-color: #088e0d;")
+        self.ui.unverifySelectedButton.setStyleSheet("background-color: #8e4708;")
+        self.ui.discardButton.setStyleSheet("background-color: #8f0808;")
+
+    def label_selected(self):
+        """
+        Label selected localizations. Uses the concept & part from the respective combo boxes. If the part is empty, "self" is used.
+        """
         if not self.loaded:
             QtWidgets.QMessageBox.warning(
                 self,
@@ -520,33 +554,54 @@ class MainWindow(TemplateBaseClass):
             )
             return
 
+        # Get the concept and part from the combo boxes
         concept = self.ui.labelComboBox.currentText()
         part = self.ui.partComboBox.currentText()
 
-        try:
-            kb_concepts = get_kb_concepts()
-            kb_parts = get_kb_parts()
-        except Exception as e:
-            LOGGER.error(f"Could not get KB concepts or parts: {e}")
+        if part.strip() == "":  # remap empty part to "self"
+            part = "self"
+
+        if concept.strip() == "":
+            QtWidgets.QMessageBox.critical(
+                self, "Empty Concept", "Concept cannot be empty."
+            )
             return
 
-        if concept not in kb_concepts and concept != "":
+        if concept not in get_kb_concepts():
             QtWidgets.QMessageBox.critical(
-                self, "Bad Concept", f'Bad concept "{concept}". Canceling.'
+                self, "Bad Concept", f'Bad concept "{concept}".'
             )
             return
-        if part not in kb_parts and part != "":
+        if part not in get_kb_parts() and part != "self":
+            QtWidgets.QMessageBox.critical(self, "Bad Part", f'Bad part "{part}".')
+            return
+
+        # Remap concept name
+        try:
+            remapped_concept = get_kb_name(concept)
+        except Exception as e:
             QtWidgets.QMessageBox.critical(
-                self, "Bad Part", f'Bad part "{part}". Canceling.'
+                self, "Error", f'Could not get KB name for concept "{concept}": {e}'
             )
             return
+
+        if remapped_concept != concept:  # show dialog if remapped
+            QtWidgets.QMessageBox.information(
+                self,
+                "Remapped name",
+                f"Remapped concept from '{concept}' to '{remapped_concept}'.",
+            )
 
         to_label = self.image_mosaic.get_selected()
         if len(to_label) > 1:
             opt = QtWidgets.QMessageBox.question(
                 self,
                 "Confirm Label",
-                "Label {} localizations?".format(len(to_label)),
+                "Label {} localizations as {}?".format(
+                    len(to_label),
+                    f"'{remapped_concept}'"
+                    + (f" with part '{part}'" if part != "self" else ""),
+                ),
                 defaultButton=QtWidgets.QMessageBox.StandardButton.No,
             )
         else:
@@ -554,10 +609,46 @@ class MainWindow(TemplateBaseClass):
 
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             # Apply labels to all selected localizations, push to VARS
-            self.image_mosaic.apply_label(concept, part)
+            self.image_mosaic.label_selected(remapped_concept, part)
 
             # Update the label of the selected localization in the image view (if necessary)
             self.box_handler.update_labels()
+
+    def verify_selected(self):
+        """
+        Verify the selected localizations.
+        """
+        to_verify = self.image_mosaic.get_selected()
+        if len(to_verify) > 1:
+            opt = QtWidgets.QMessageBox.question(
+                self,
+                "Confirm Verification",
+                "Verify {} localizations?".format(len(to_verify)),
+                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
+            )
+        else:
+            opt = QtWidgets.QMessageBox.StandardButton.Yes
+
+        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
+            self.image_mosaic.verify_selected()
+
+    def unverify_selected(self):
+        """
+        Unverify the selected localizations.
+        """
+        to_unverify = self.image_mosaic.get_selected()
+        if len(to_unverify) > 1:
+            opt = QtWidgets.QMessageBox.question(
+                self,
+                "Confirm Unverification",
+                "Unverify {} localizations?".format(len(to_unverify)),
+                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
+            )
+        else:
+            opt = QtWidgets.QMessageBox.StandardButton.Yes
+
+        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
+            self.image_mosaic.unverify_selected()
 
     @QtCore.pyqtSlot()
     def delete(self):
@@ -863,6 +954,11 @@ def init_settings():
         "video/sharktopoda_incoming_port",
         int,
         constants.SHARKTOPODA_INCOMING_PORT_DEFAULT,
+    )
+    settings.sharktopoda_autoconnect = (
+        "video/sharktopoda_autoconnect",
+        bool,
+        True,
     )
 
     settings.cache_dir = (
