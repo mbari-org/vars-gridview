@@ -2,6 +2,31 @@
 
 
 
+## v0.7.0 (2023-12-04)
+
+### Chore
+
+* chore: reindent gridview.ui ([`04b5b11`](https://github.com/mbari-org/vars-gridview/commit/04b5b11e3f18dc0dbe9b9be8febe0f9f6aaa53d4))
+
+### Feature
+
+* feat: add Sharktopoda autoconnect setting
+
+Defaults to on. ([`4ab6463`](https://github.com/mbari-org/vars-gridview/commit/4ab646324743ac07b38f2fc9dfd7d001937e7827))
+
+* feat: add un/verify buttons, refactor label logic ([`551857c`](https://github.com/mbari-org/vars-gridview/commit/551857cd23c078048b48cf23c9d513f3599d2635))
+
+### Fix
+
+* fix: fix default value assign in SettingProxy init ([`e7b27e8`](https://github.com/mbari-org/vars-gridview/commit/e7b27e8be053d9fb1ccf2e824906cae8b09cc45a))
+
+* fix: make annotation detail info read-only ([`45516f0`](https://github.com/mbari-org/vars-gridview/commit/45516f0941dfceb277ea9d1a4c7ac75afb1efecb))
+
+### Unknown
+
+* Merge branch &#39;develop&#39; ([`eb6e38c`](https://github.com/mbari-org/vars-gridview/commit/eb6e38ca791d61175a31804c1b8b835194129317))
+
+
 ## v0.6.0 (2023-12-01)
 
 ### Chore
