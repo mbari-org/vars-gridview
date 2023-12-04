@@ -153,6 +153,11 @@ class VARSLocalization:
         self.meta["verifier"] = verifier
         self._dirty_verifier = True
 
+    def unverify(self):
+        if self.verified:
+            del self.meta["verifier"]
+            self._dirty_verifier = True
+
     def get_roi(self, image: np.ndarray):
         return image[self._y : self.yf, self._x : self.xf]
 

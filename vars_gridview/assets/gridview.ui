@@ -324,31 +324,11 @@
                   </font>
                 </property>
                 <property name="toolTip">
-                  <string>The class label to apply to annotations (edit label.txt to add / remove classes)</string>
+                  <string>The concept label to apply to annotations</string>
                 </property>
                 <property name="editable">
                   <bool>true</bool>
                 </property>
-                <item>
-                  <property name="text">
-                    <string>Bathochordaeus</string>
-                  </property>
-                </item>
-                <item>
-                  <property name="text">
-                    <string>Bathochordaeus House</string>
-                  </property>
-                </item>
-                <item>
-                  <property name="text">
-                    <string>Solmissus</string>
-                  </property>
-                </item>
-                <item>
-                  <property name="text">
-                    <string>Bathocyroe</string>
-                  </property>
-                </item>
               </widget>
             </item>
             <item>
@@ -360,31 +340,11 @@
                     <bold>true</bold>
                   </font>
                 </property>
+                <property name="toolTip">
+                  <string>The part label to apply to annotations</string>
+                </property>
                 <property name="editable">
                   <bool>true</bool>
-                </property>
-                <property name="currentText">
-                  <string>self</string>
-                </property>
-              </widget>
-            </item>
-            <item>
-              <widget class="QPushButton" name="clearSelections">
-                <property name="font">
-                  <font>
-                    <pointsize>10</pointsize>
-                    <weight>75</weight>
-                    <bold>true</bold>
-                  </font>
-                </property>
-                <property name="toolTip">
-                  <string>Clear all current selections (Ctrl-C)</string>
-                </property>
-                <property name="text">
-                  <string>CLEAR SELECTIONS</string>
-                </property>
-                <property name="shortcut">
-                  <string>Ctrl+C</string>
                 </property>
               </widget>
             </item>
@@ -398,13 +358,64 @@
                   </font>
                 </property>
                 <property name="toolTip">
-                  <string>Apply Class Label to selected rois (Ctrl-S)</string>
+                  <string>Apply concept and part labels to selected localizations</string>
                 </property>
                 <property name="text">
                   <string>LABEL</string>
                 </property>
+              </widget>
+            </item>
+            <item>
+              <widget class="QPushButton" name="clearSelections">
+                <property name="font">
+                  <font>
+                    <pointsize>10</pointsize>
+                    <weight>75</weight>
+                    <bold>true</bold>
+                  </font>
+                </property>
+                <property name="toolTip">
+                  <string>Clear all current selections</string>
+                </property>
+                <property name="text">
+                  <string>CLEAR SELECTIONS</string>
+                </property>
                 <property name="shortcut">
-                  <string>Ctrl+S</string>
+                  <string>Ctrl+C</string>
+                </property>
+              </widget>
+            </item>
+            <item>
+              <widget class="QPushButton" name="verifySelectedButton">
+                <property name="font">
+                  <font>
+                    <pointsize>10</pointsize>
+                    <weight>75</weight>
+                    <bold>true</bold>
+                  </font>
+                </property>
+                <property name="toolTip">
+                  <string>Verify selected localizations</string>
+                </property>
+                <property name="text">
+                  <string>VERIFY</string>
+                </property>
+              </widget>
+            </item>
+            <item>
+              <widget class="QPushButton" name="unverifySelectedButton">
+                <property name="font">
+                  <font>
+                    <pointsize>10</pointsize>
+                    <weight>75</weight>
+                    <bold>true</bold>
+                  </font>
+                </property>
+                <property name="toolTip">
+                  <string>Unverify selected localizations</string>
+                </property>
+                <property name="text">
+                  <string>UNVERIFY</string>
                 </property>
               </widget>
             </item>
@@ -418,7 +429,7 @@
                   </font>
                 </property>
                 <property name="toolTip">
-                  <string>Delete selected localizations (Ctrl-D)</string>
+                  <string>Delete selected localizations</string>
                 </property>
                 <property name="text">
                   <string>DELETE</string>

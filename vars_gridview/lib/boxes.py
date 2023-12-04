@@ -115,7 +115,7 @@ class BoundingBox(pg.RectROI):
             return
 
         self.image_mosaic.select(self.rect)
-        self.image_mosaic.apply_label(concept, "")
+        self.image_mosaic.label_selected(concept, None)
 
     def _do_change_part(self):
         """
@@ -135,7 +135,7 @@ class BoundingBox(pg.RectROI):
             return
 
         self.image_mosaic.select(self.rect)
-        self.image_mosaic.apply_label("", part)
+        self.image_mosaic.label_selected(None, part)
 
     def check_bounds(self):
         x, y = self.pos()
