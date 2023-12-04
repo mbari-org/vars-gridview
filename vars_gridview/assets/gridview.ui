@@ -85,6 +85,10 @@
               <verstretch>0</verstretch>
              </sizepolicy>
             </property>
+            <!-- Set read-only -->
+            <property name="readOnly">
+             <bool>true</bool>
+            </property>
             <property name="font">
              <font>
               <family>MS Shell Dlg 2</family>
