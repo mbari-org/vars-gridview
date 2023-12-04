@@ -43,20 +43,7 @@ from vars_gridview.lib.image_mosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER, AppLogger
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_name, get_kb_parts
 from vars_gridview.lib.settings import SettingsManager
-from vars_gridview.lib.sort_methods import (
-    AreaSort,
-    AssociationUUIDSort,
-    DepthSort,
-    HeightSort,
-    ImageReferenceUUIDSort,
-    LabelSort,
-    MeanHueSort,
-    MeanIntensitySort,
-    ObservationUUIDSort,
-    RecordedTimestampSort,
-    RegionMeanHueSort,
-    WidthSort,
-)
+from vars_gridview.lib.sort_methods import RecordedTimestampSort
 from vars_gridview.lib.util import parse_iso
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
@@ -73,21 +60,6 @@ WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(constants.UI_FILE)
 GUI_SETTINGS = QtCore.QSettings(
     str(constants.GUI_SETTINGS_FILE), QtCore.QSettings.Format.IniFormat
 )
-
-ENABLED_SORT_METHODS = [
-    RecordedTimestampSort,
-    AssociationUUIDSort,
-    ObservationUUIDSort,
-    ImageReferenceUUIDSort,
-    LabelSort,
-    WidthSort,
-    HeightSort,
-    AreaSort,
-    MeanIntensitySort,
-    MeanHueSort,
-    RegionMeanHueSort,
-    DepthSort,
-]
 
 
 class MainWindow(TemplateBaseClass):
