@@ -608,7 +608,9 @@ class ImageMosaic(QtCore.QObject):
         layout = QtWidgets.QGraphicsGridLayout()
 
         # Set layout properties
-        layout.setContentsMargins(50, 50, 50, 50)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setHorizontalSpacing(0)
+        layout.setVerticalSpacing(0)
 
         self._graphics_view.installEventFilter(self)
 
@@ -631,7 +633,7 @@ class ImageMosaic(QtCore.QObject):
 
         # Get the viewport width (without margins) and compute the number of columns
         left, top, right, bottom = self._graphics_widget.layout().getContentsMargins()
-        width = self._graphics_view.viewport().width() - left - right - 50
+        width = self._graphics_view.viewport().width() - left - right
         if self._rect_widgets:
             rect_widget_width = self._rect_widgets[0].boundingRect().width()
             rect_widget_height = self._rect_widgets[0].boundingRect().height()
