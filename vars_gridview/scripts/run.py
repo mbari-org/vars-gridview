@@ -848,6 +848,7 @@ class MainWindow(TemplateBaseClass):
             self.sharktopoda_client.add_localizations(
                 video_reference_uuid, [localization]
             )
+            self.sharktopoda_client.show(video_reference_uuid)
 
         self.sharktopoda_client.open(
             video_reference_uuid, mp4_video_url, callback=show_localization
