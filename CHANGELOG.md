@@ -2,6 +2,29 @@
 
 
 
+## v0.8.0 (2023-12-05)
+
+### Feature
+
+* feat: add sort by verifier
+
+Closes #53 ([`d785f04`](https://github.com/mbari-org/vars-gridview/commit/d785f0403eccd046644a44685e25efb4082e7bbb))
+
+### Fix
+
+* fix: bring S2 video window top-level
+
+Invoke the `show` command in Sharktopoda 2
+when a localization is shown.
+Closes #42 ([`340601a`](https://github.com/mbari-org/vars-gridview/commit/340601a65f6220058bdfea7cf53a44f222044e5c))
+
+### Style
+
+* style: improve spacing, borders in grid view
+
+Closes #41 ([`f95787a`](https://github.com/mbari-org/vars-gridview/commit/f95787ab88b10543eb1d556bc2d0436ca65c2f94))
+
+
 ## v0.7.0 (2023-12-04)
 
 ### Chore
@@ -127,6 +150,9 @@ The commit adds the following files:
 88 and extended ignore rules.
 - `.pre-commit-config.yaml`: Configuration file for pre-commit with
 hooks for isort, black, and flake8. ([`cf7486b`](https://github.com/mbari-org/vars-gridview/commit/cf7486bfa953f7a40313d6a224c1997218091b88))
+
+* Add sort by verifier
+Fixes #53 ([`cbd9ba9`](https://github.com/mbari-org/vars-gridview/commit/cbd9ba90b268f7ec90ce96558a4398926b5d30a9))
 
 
 ## v0.5.0 (2023-11-28)
