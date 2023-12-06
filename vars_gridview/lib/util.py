@@ -81,7 +81,10 @@ def parse_sqlserver_native(timestamp: str) -> datetime:
         return timestamp
 
     datetime_part, *decimal_part = timestamp.split(".")
+    decimal_part = decimal_part[0] if decimal_part else None
+    if "+" in decimal_part:
+        decimal_part, _ = decimal_part.split("+")
     subsecond_timedelta = (
-        timedelta(seconds=float(f".{decimal_part[0]}")) if decimal_part else timedelta()
+        timedelta(seconds=float(f".{decimal_part}")) if decimal_part else timedelta()
     )
     return datetime.strptime(datetime_part, "%Y-%m-%d %H:%M:%S") + subsecond_timedelta
