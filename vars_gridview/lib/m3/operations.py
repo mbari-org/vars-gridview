@@ -4,7 +4,7 @@ M3 operations. Make use of the clients defined in __init__.py.
 
 import json
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import requests
 
@@ -183,6 +183,54 @@ def update_observation_concept(
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         LOGGER.debug(f"Error updating observation concept for {observation_uuid}: {e}")
+        raise e
+
+    return response.json()
+
+
+def update_observation_concepts_bulk(
+    observation_uuid_concept_pairs: List[Tuple[str, str]], observer: str
+) -> List[dict]:
+    """
+    Update several observations' concepts and observers in bulk.
+    """
+    request_data = [
+        {
+            "uuid": observation_uuid,
+            "concept": concept,
+            "observer": observer,
+        }
+        for observation_uuid, concept in observation_uuid_concept_pairs
+    ]
+
+    LOGGER.debug(f"Updating observation concepts in bulk:\n{request_data}")
+    response = m3.ANNOSAURUS_CLIENT.update_observations_bulk(request_data)
+
+    print(response.content)
+
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error updating observation concepts in bulk: {e}")
+        raise e
+
+    return response.json()
+
+
+def update_association_data_bulk(request_data: List[dict]) -> List[dict]:
+    """
+    Update several associations' data in bulk.
+    """
+    LOGGER.debug(f"Updating association data in bulk:\n{request_data}")
+    response = m3.ANNOSAURUS_CLIENT.update_associations_bulk(request_data)
+
+    print(response.headers)
+    print(response.content)
+
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error updating association data in bulk: {e}")
         raise e
 
     return response.json()

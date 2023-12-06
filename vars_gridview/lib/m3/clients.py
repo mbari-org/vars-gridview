@@ -120,6 +120,10 @@ class AnnosaurusClient(M3Client):
         return self.put(f"/associations/{association_uuid}", data=data)
 
     @needs_auth
+    def update_associations_bulk(self, data: dict) -> requests.Response:
+        return self.put("/associations/bulk", json=data)
+
+    @needs_auth
     def delete_association(self, association_uuid: str) -> requests.Response:
         return self.delete(f"/associations/{association_uuid}")
 
@@ -135,6 +139,10 @@ class AnnosaurusClient(M3Client):
         self, observation_uuid: str, data: dict
     ) -> requests.Response:
         return self.put(f"/observations/{observation_uuid}", data=data)
+
+    @needs_auth
+    def update_observations_bulk(self, data: dict) -> requests.Response:
+        return self.put("/annotations/bulk", json=data)
 
     @needs_auth
     def delete_observation(self, observation_uuid: str) -> requests.Response:

@@ -17,7 +17,7 @@ import requests
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib import m3
-from vars_gridview.lib.annotation import VARSLocalization
+from vars_gridview.lib.annotation import VARSLocalization, bulk_update_localizations
 from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
@@ -683,7 +683,9 @@ class ImageMosaic(QtCore.QObject):
             concept: The concept to apply. If None, the existing concept will be used.
             part: The part to apply. If None, the existing part will be used.
         """
-        for rect in self.get_selected():
+        to_label = self.get_selected()
+
+        for rect in to_label:
             # Set the new concept and immediately push to VARS
             rect.localization.set_verified_concept(
                 concept if concept is not None else rect.localization.concept,
@@ -691,17 +693,17 @@ class ImageMosaic(QtCore.QObject):
                 self.verifier,
             )
 
-            try:
-                rect.localization.push_changes(self.verifier)
-            except Exception as e:
-                LOGGER.error(
-                    f"Error pushing changes for localization {rect.localization.association_uuid}: {e}"
-                )
-                QtWidgets.QMessageBox.critical(
-                    self._graphics_view,
-                    "Error",
-                    f"An error occurred while pushing changes for localization {rect.localization.association_uuid}.",
-                )
+            # try:
+            #     rect.localization.push_changes(self.verifier)
+            # except Exception as e:
+            #     LOGGER.error(
+            #         f"Error pushing changes for localization {rect.localization.association_uuid}: {e}"
+            #     )
+            #     QtWidgets.QMessageBox.critical(
+            #         self._graphics_view,
+            #         "Error",
+            #         f"An error occurred while pushing changes for localization {rect.localization.association_uuid}.",
+            #     )
 
             # Update the widget's text label and deselect it
             rect.text_label = rect.localization.text_label
@@ -709,6 +711,10 @@ class ImageMosaic(QtCore.QObject):
 
             # Propagate visual changes
             rect.update()
+
+        bulk_update_localizations(
+            [rect.localization for rect in to_label], self.verifier
+        )
 
         self.render_mosaic()
 
@@ -722,21 +728,23 @@ class ImageMosaic(QtCore.QObject):
         """
         Unverify the selected rect widgets.
         """
-        for rect in self.get_selected():
+        to_unverify = self.get_selected()
+
+        for rect in to_unverify:
             # Unverify the localization and immediately push to VARS
             rect.localization.unverify()
 
-            try:
-                rect.localization.push_changes(self.verifier)
-            except Exception as e:
-                LOGGER.error(
-                    f"Error pushing changes for localization {rect.localization.association_uuid}: {e}"
-                )
-                QtWidgets.QMessageBox.critical(
-                    self._graphics_view,
-                    "Error",
-                    f"An error occurred while pushing changes for localization {rect.localization.association_uuid}.",
-                )
+            # try:
+            #     rect.localization.push_changes(self.verifier)
+            # except Exception as e:
+            #     LOGGER.error(
+            #         f"Error pushing changes for localization {rect.localization.association_uuid}: {e}"
+            #     )
+            #     QtWidgets.QMessageBox.critical(
+            #         self._graphics_view,
+            #         "Error",
+            #         f"An error occurred while pushing changes for localization {rect.localization.association_uuid}.",
+            #     )
 
             # Update the widget's text label and deselect it
             rect.text_label = rect.localization.text_label
@@ -744,6 +752,10 @@ class ImageMosaic(QtCore.QObject):
 
             # Propagate visual changes
             rect.update()
+
+        bulk_update_localizations(
+            [rect.localization for rect in to_unverify], self.verifier
+        )
 
     def get_selected(self) -> List[RectWidget]:
         """

@@ -5,14 +5,16 @@ Distributed under MIT license. See license.txt for more information.
 """
 
 import json
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import numpy as np
 
 from vars_gridview.lib.m3.operations import (
+    update_association_data_bulk,
     update_bounding_box_data,
     update_bounding_box_part,
     update_observation_concept,
+    update_observation_concepts_bulk,
 )
 
 
@@ -165,6 +167,22 @@ class VARSLocalization:
     def valid_box(self):
         return self.xf > self.x and self.yf > self.y
 
+    @property
+    def dirty_concept(self):
+        return self._dirty_concept
+
+    @property
+    def dirty_part(self):
+        return self._dirty_part
+
+    @property
+    def dirty_box(self):
+        return self._dirty_box
+
+    @property
+    def dirty_verifier(self):
+        return self._dirty_verifier
+
     def in_bounds(self, min_x, min_y, max_x, max_y):
         return (
             self.x >= min_x
@@ -201,3 +219,74 @@ class VARSLocalization:
 
         if do_modify_box:
             update_bounding_box_data(self.association_uuid, self.json)
+
+
+def bulk_update_localizations(localizations: List[VARSLocalization], verifier: str):
+    """
+    Bulk update localizations. This is a performance optimization to reduce the number of calls to Annosaurus.
+
+    Args:
+        localizations: List of VARSLocalization objects
+        verifier: User who is performing the update
+    """
+    if not localizations:
+        return
+
+    # We will call two endpoints to update relevant data.
+    # PUT annotations/bulk -- for updating observation concept, observer
+    # PUT associations/bulk -- for updating part, bounding box data, verifier
+
+    # Find all localizations that have a dirty concept. For those, call PUT annotations/bulk
+    to_update_annotation = [
+        localization for localization in localizations if localization.dirty_concept
+    ]
+    observation_uuid_concept_pairs = [
+        (localization.observation_uuid, localization.concept)
+        for localization in to_update_annotation
+    ]
+
+    if observation_uuid_concept_pairs:
+        update_observation_concepts_bulk(observation_uuid_concept_pairs, verifier)
+
+    # Remove dirty flags
+    for localization in to_update_annotation:
+        localization._dirty_concept = False
+
+    # Find all localizations that have a dirty part or dirty box. For those, call PUT associations/bulk
+    to_update_associations = [
+        localization
+        for localization in localizations
+        if localization.dirty_part
+        or localization.dirty_box
+        or localization.dirty_verifier
+    ]
+
+    # Update the observer and generator as needed
+    to_update_observer = [
+        localization
+        for localization in to_update_associations
+        if localization.dirty_box
+    ]
+    for localization in to_update_observer:
+        localization.meta["observer"] = verifier
+        localization.meta["generator"] = "gridview"
+
+    request_data = [
+        {
+            "uuid": localization.association_uuid,
+            "linkName": "bounding box",
+            "toConcept": localization.part,
+            "linkValue": json.dumps(localization.json),
+            "mimeType": "application/json",
+        }
+        for localization in to_update_associations
+    ]
+
+    if request_data:
+        update_association_data_bulk(request_data)
+
+    # Remove dirty flags
+    for localization in to_update_associations:
+        localization._dirty_part = False
+        localization._dirty_box = False
+        localization._dirty_verifier = False
