@@ -849,6 +849,13 @@ class MainWindow(TemplateBaseClass):
                 video_reference_uuid, [localization]
             )
             self.sharktopoda_client.show(video_reference_uuid)
+            
+            # If on macOS, call the open command to bring Sharktopoda to the front
+            if sys.platform == "darwin":
+                try:
+                    os.system(f"open -a {constants.SHARKTOPODA_APP_NAME}")
+                except Exception as e:
+                    LOGGER.warning(f"Could not open Sharktopoda: {e}")
 
         self.sharktopoda_client.open(
             video_reference_uuid, mp4_video_url, callback=show_localization
