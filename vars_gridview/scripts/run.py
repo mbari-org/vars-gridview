@@ -115,6 +115,8 @@ class MainWindow(TemplateBaseClass):
 
         self.cache_controller = CacheController()
 
+        self._sort_method = RecordedTimestampSort
+
         # Connect signals to slots
         self.ui.discardButton.clicked.connect(self.delete)
         self.ui.clearSelections.clicked.connect(self.clear_selected)
@@ -138,8 +140,12 @@ class MainWindow(TemplateBaseClass):
             parent=self,
         )
 
-        self.ui.roiGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
-        self.ui.roiDetailGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
+        self.ui.roiGraphicsView.viewport().setAttribute(
+            QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
+        )
+        self.ui.roiDetailGraphicsView.viewport().setAttribute(
+            QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
+        )
 
         self._launch()
 
@@ -386,8 +392,9 @@ class MainWindow(TemplateBaseClass):
         method = sort_dialog.method
         if method is None:
             return
+        self._sort_method = method
 
-        self.image_mosaic.sort_rect_widgets(method)
+        self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
 
     def _do_query(self):
@@ -421,8 +428,7 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.hide_to_review = False
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
 
-        default_sort_method = RecordedTimestampSort
-        self.image_mosaic.sort_rect_widgets(default_sort_method)
+        self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
 
         # Show some stats about the images and annotations
@@ -589,6 +595,10 @@ class MainWindow(TemplateBaseClass):
             # Update the label of the selected localization in the image view (if necessary)
             self.box_handler.update_labels()
 
+            # Sort and render the mosaic
+            self.image_mosaic.sort_rect_widgets(self._sort_method)
+            self.image_mosaic.render_mosaic()
+
     def verify_selected(self):
         """
         Verify the selected localizations.
@@ -607,6 +617,9 @@ class MainWindow(TemplateBaseClass):
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             self.image_mosaic.verify_selected()
 
+            self.image_mosaic.sort_rect_widgets(self._sort_method)
+            self.image_mosaic.render_mosaic()
+
     def unverify_selected(self):
         """
         Unverify the selected localizations.
@@ -624,6 +637,9 @@ class MainWindow(TemplateBaseClass):
 
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             self.image_mosaic.unverify_selected()
+
+            self.image_mosaic.sort_rect_widgets(self._sort_method)
+            self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot()
     def delete(self):
@@ -651,6 +667,9 @@ class MainWindow(TemplateBaseClass):
             self.ui.annotationXML.clear()
             self.ui.imageInfoList.clear()
 
+            self.image_mosaic.sort_rect_widgets(self._sort_method)
+            self.image_mosaic.render_mosaic()
+
     @QtCore.pyqtSlot()
     def clear_selected(self):
         if not self.loaded:
@@ -663,11 +682,11 @@ class MainWindow(TemplateBaseClass):
         if not self.loaded:
             return
 
-        # method = self.ui.sortMethod.currentData()
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
-        # self.image_mosaic.sort_rect_widgets(method)
+
+        self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot(int)
@@ -852,7 +871,7 @@ class MainWindow(TemplateBaseClass):
                 video_reference_uuid, [localization]
             )
             self.sharktopoda_client.show(video_reference_uuid)
-            
+
             # If on macOS, call the open command to bring Sharktopoda to the front
             if sys.platform == "darwin":
                 try:
