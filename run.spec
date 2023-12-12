@@ -29,7 +29,7 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
+    codesign_identity='Developer ID Application: Monterey Bay Aquarium Research Institute (9TN7A342V4)',
     entitlements_file=None,
     icon=['vars_gridview/assets/icons/VARSGridView.icns'],
 )
@@ -46,5 +46,5 @@ app = BUNDLE(
     coll,
     name='VARS GridView.app',
     icon='vars_gridview/assets/icons/VARSGridView.icns',
-    bundle_identifier=None,
+    bundle_identifier='org.mbari.vars.gridview',
 )
