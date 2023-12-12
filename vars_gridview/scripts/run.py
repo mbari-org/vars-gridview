@@ -138,6 +138,9 @@ class MainWindow(TemplateBaseClass):
             parent=self,
         )
 
+        self.ui.roiGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
+        self.ui.roiDetailGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
+
         self._launch()
 
     @property
