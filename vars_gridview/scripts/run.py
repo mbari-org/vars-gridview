@@ -139,8 +139,12 @@ class MainWindow(TemplateBaseClass):
             parent=self,
         )
 
-        self.ui.roiGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
-        self.ui.roiDetailGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
+        self.ui.roiGraphicsView.viewport().setAttribute(
+            QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
+        )
+        self.ui.roiDetailGraphicsView.viewport().setAttribute(
+            QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
+        )
 
         self._launch()
 
@@ -694,7 +698,14 @@ class MainWindow(TemplateBaseClass):
             shift = False
 
         # Save information to VARS for any moved/resized boxes
-        self.box_handler.save_all(self.verifier)
+        try:
+            self.box_handler.save_all(self.verifier)
+        except Exception as e:
+            LOGGER.error(f"Could not save localizations: {e}")
+            QtWidgets.QMessageBox.critical(
+                self, "Error", f"An error occurred while saving localizations: {e}"
+            )
+            return
 
         # Select the widget
         if shift:
@@ -855,7 +866,7 @@ class MainWindow(TemplateBaseClass):
                 video_reference_uuid, [localization]
             )
             self.sharktopoda_client.show(video_reference_uuid)
-            
+
             # If on macOS, call the open command to bring Sharktopoda to the front
             if sys.platform == "darwin":
                 try:
