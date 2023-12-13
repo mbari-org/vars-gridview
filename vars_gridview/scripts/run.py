@@ -141,6 +141,8 @@ class MainWindow(TemplateBaseClass):
             parent=self,
         )
 
+        self.sort_dialog = SortDialog(parent=self)
+
         self.ui.roiGraphicsView.viewport().setAttribute(
             QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
         )
@@ -385,17 +387,17 @@ class MainWindow(TemplateBaseClass):
             )
             return
 
-        # Show a sort dialog
-        sort_dialog = SortDialog(parent=self)
-        ok = sort_dialog.exec()
+        # Show the sort dialog
+        ok = self.sort_dialog.exec()
         if not ok:
             return
-        method = sort_dialog.method
+        method = self.sort_dialog.method
         if method is None:
             return
-        self._sort_method = method
 
+        self._sort_method = method
         self.image_mosaic.sort_rect_widgets(self._sort_method)
+
         self.image_mosaic.render_mosaic()
 
     def _do_query(self):
@@ -430,6 +432,7 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic._hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
+        self.sort_dialog.clear()
         self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
 
@@ -597,8 +600,7 @@ class MainWindow(TemplateBaseClass):
             # Update the label of the selected localization in the image view (if necessary)
             self.box_handler.update_labels()
 
-            # Sort and render the mosaic
-            self.image_mosaic.sort_rect_widgets(self._sort_method)
+            # Render the mosaic
             self.image_mosaic.render_mosaic()
 
     def verify_selected(self):
@@ -619,7 +621,6 @@ class MainWindow(TemplateBaseClass):
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             self.image_mosaic.verify_selected()
 
-            self.image_mosaic.sort_rect_widgets(self._sort_method)
             self.image_mosaic.render_mosaic()
 
     def unverify_selected(self):
@@ -640,7 +641,6 @@ class MainWindow(TemplateBaseClass):
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             self.image_mosaic.unverify_selected()
 
-            self.image_mosaic.sort_rect_widgets(self._sort_method)
             self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot()
@@ -669,7 +669,6 @@ class MainWindow(TemplateBaseClass):
             self.ui.annotationXML.clear()
             self.ui.imageInfoList.clear()
 
-            self.image_mosaic.sort_rect_widgets(self._sort_method)
             self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot()
@@ -689,7 +688,6 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic._hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
-        self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot(int)

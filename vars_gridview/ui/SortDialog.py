@@ -110,6 +110,12 @@ class SortDialog(QDialog):
         self.method = self._get_method()
         super().accept()
 
+    def clear(self):
+        """
+        Clear the current sort methods from the dialog.
+        """
+        self._clear_methods()
+
 
 if __name__ == "__main__":
     # Test code, just show the dialog
