@@ -274,10 +274,10 @@ def bulk_update_localizations(localizations: List[VARSLocalization], verifier: s
     request_data = [
         {
             "uuid": localization.association_uuid,
-            "linkName": "bounding box",
-            "toConcept": localization.part,
-            "linkValue": json.dumps(localization.json),
-            "mimeType": "application/json",
+            "link_name": "bounding box",
+            "to_concept": localization.part,
+            "link_value": json.dumps(localization.json),
+            "mime_type": "application/json",
         }
         for localization in to_update_associations
     ]
