@@ -246,6 +246,23 @@
                   </widget>
                 </item>
                 <item>
+                  <widget class="QCheckBox" name="hideUnlabeled">
+                    <property name="font">
+                      <font>
+                        <pointsize>10</pointsize>
+                        <weight>75</weight>
+                        <bold>true</bold>
+                      </font>
+                    </property>
+                    <property name="text">
+                      <string>Hide Unverified</string>
+                    </property>
+                    <property name="checked">
+                      <bool>false</bool>
+                    </property>
+                  </widget>
+                </item>
+                <item>
                   <widget class="QPushButton" name="sortButton">
                     <property name="font">
                       <font>

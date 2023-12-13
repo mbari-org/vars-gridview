@@ -48,6 +48,7 @@ class ImageMosaic(QtCore.QObject):
         self._rect_widgets: List[RectWidget] = []
         self.roi_map = {}
         self._hide_labeled = True
+        self._hide_unlabeled = True
         self.hide_discarded = True
         self.hide_to_review = True
         self.n_columns = 0
@@ -650,7 +651,7 @@ class ImageMosaic(QtCore.QObject):
         rect_widgets_to_render = [
             rw
             for rw in self._rect_widgets
-            if not (self._hide_labeled and rw.is_verified)
+            if (not rw.is_verified and not self._hide_unlabeled) or (rw.is_verified and not self._hide_labeled)
         ]
 
         # Hide all rect widgets that we aren't rendering
