@@ -10,11 +10,42 @@ import requests
 
 from vars_gridview.lib import m3
 from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.m3.clients import M3Client
 
 KB_CONCEPTS: Dict[str, Optional[str]] = None
 KB_PARTS: List[str] = None
 USERS = None
 VIDEO_SEQUENCE_NAMES = None
+
+
+def reauthenciate(client: M3Client):
+    """
+    Decorator factory to reauthenticate an M3 client and retry if a request fails due to an expired token.
+
+    Works by intercepting a requests.exceptions.HTTPError with status code 401.
+
+    Args:
+        client: The M3 client to reauthenticate. Assumes the API key has already been set.
+
+    Returns:
+        A decorator that reauthenticates the client and retries the request if it fails due to an expired token.
+    """
+
+    def decorator(f):
+        def wrapper(*args, **kwargs):
+            try:
+                return f(*args, **kwargs)
+            except requests.exceptions.HTTPError as e:
+                if e.response.status_code == 401:
+                    LOGGER.debug(f"Reauthenticating due to error 401: {e}")
+                    client.authenticate()
+                    return f(*args, **kwargs)
+                else:
+                    raise e
+
+        return wrapper
+
+    return decorator
 
 
 def get_kb_concepts() -> Dict[str, Optional[str]]:
@@ -125,6 +156,7 @@ def get_users() -> List[dict]:
     return USERS
 
 
+@reauthenciate(m3.ANNOSAURUS_CLIENT)
 def update_bounding_box_data(association_uuid: str, box_dict: dict) -> dict:
     """
     Update a bounding box's JSON data (link_value field of association).
@@ -144,6 +176,7 @@ def update_bounding_box_data(association_uuid: str, box_dict: dict) -> dict:
     return response.json()
 
 
+@reauthenciate(m3.ANNOSAURUS_CLIENT)
 def update_bounding_box_part(association_uuid: str, part: str) -> dict:
     """
     Update a bounding box's part (to_concept field of association).
@@ -163,6 +196,7 @@ def update_bounding_box_part(association_uuid: str, part: str) -> dict:
     return response.json()
 
 
+@reauthenciate(m3.ANNOSAURUS_CLIENT)
 def update_observation_concept(
     observation_uuid: str, concept: str, observer: str
 ) -> dict:
@@ -188,6 +222,7 @@ def update_observation_concept(
     return response.json()
 
 
+@reauthenciate(m3.ANNOSAURUS_CLIENT)
 def create_association(association: dict) -> requests.Response:
     """
     Create an association.
@@ -204,6 +239,7 @@ def create_association(association: dict) -> requests.Response:
     return response
 
 
+@reauthenciate(m3.ANNOSAURUS_CLIENT)
 def delete_association(association_uuid: str):
     """
     Delete an association.
@@ -237,6 +273,7 @@ def get_observation(observation_uuid: str) -> requests.Response:
     return response.json()
 
 
+@reauthenciate(m3.ANNOSAURUS_CLIENT)
 def create_observation(observation: dict) -> requests.Response:
     """
     Create an observation.
@@ -253,6 +290,7 @@ def create_observation(observation: dict) -> requests.Response:
     return response
 
 
+@reauthenciate(m3.ANNOSAURUS_CLIENT)
 def delete_observation(observation_uuid: str):
     """
     Delete an observation.

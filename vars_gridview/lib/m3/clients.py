@@ -2,6 +2,8 @@
 M3 REST API clients.
 """
 
+from typing import Optional
+
 import requests
 import requests.auth
 
@@ -53,6 +55,7 @@ class M3Client:
         self.base_url = base_url
 
         if api_key is not None:
+            self._api_key = api_key
             self.authenticate(api_key)
 
     @property
@@ -88,11 +91,17 @@ class M3Client:
         """
         return self._session.auth is not None
 
-    def authenticate(self, api_key: str, auth_path: str = "/auth"):
+    def authenticate(self, api_key: Optional[str] = None, auth_path: str = "/auth"):
         """
         Authenticate the client with the provided API key.
         """
         self._session.auth = None
+
+        if api_key is not None:
+            self._api_key = api_key
+
+        if self._api_key is None:
+            raise ValueError("No API key provided")
 
         response = self.post(auth_path, headers={"Authorization": f"APIKEY {api_key}"})
         response.raise_for_status()
