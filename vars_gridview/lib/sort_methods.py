@@ -187,9 +187,32 @@ class DepthSort(SortMethod):
         return depth
 
 
+def localization_meta_sort(key: str, default: Any) -> SortMethod:
+    """
+    Decorator factory for creating a sort method that sorts by a localization meta key.
+    
+    Args:
+        key: The localization meta key to sort by.
+        default: The default value to use if the key is not present.
+    """
+    def decorator(cls):
+        class LocalizationMetaSort(SortMethod):
+            NAME = cls.NAME
+
+            @staticmethod
+            def key(rect: RectWidget) -> Any:
+                return rect.localization.meta.get(key, default)
+
+        return LocalizationMetaSort
+    
+    return decorator
+
+
+@localization_meta_sort("verifier", "")
 class VerifierSort(SortMethod):
     NAME = "Verifier"
 
-    @staticmethod
-    def key(rect: RectWidget) -> str:
-        return rect.localization.meta.get("verifier", "")
+
+@localization_meta_sort("confidence", 0.0)
+class ConfidenceSort(SortMethod):
+    NAME = "Confidence"
