@@ -432,7 +432,10 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic._hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
+        # Reset sort dialog and default sort method
         self.sort_dialog.clear()
+        self._sort_method = RecordedTimestampSort
+
         self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
 
