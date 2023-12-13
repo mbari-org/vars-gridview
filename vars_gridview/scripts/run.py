@@ -124,6 +124,7 @@ class MainWindow(TemplateBaseClass):
         self.ui.zoomSpinBox.valueChanged.connect(self.update_zoom)
         # self.ui.sortMethod.currentTextChanged.connect(self.update_layout)
         self.ui.hideLabeled.stateChanged.connect(self.update_layout)
+        self.ui.hideUnlabeled.stateChanged.connect(self.update_layout)
         self.ui.styleComboBox.currentTextChanged.connect(self._style_gui)
         self.ui.openVideo.clicked.connect(self.open_video)
         self.ui.sortButton.clicked.connect(self._sort_widgets)
@@ -137,6 +138,9 @@ class MainWindow(TemplateBaseClass):
             self._clear_cache,
             parent=self,
         )
+
+        self.ui.roiGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
+        self.ui.roiDetailGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
 
         self._launch()
 
@@ -417,6 +421,7 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
+        self.image_mosaic._hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
         default_sort_method = RecordedTimestampSort
         self.image_mosaic.sort_rect_widgets(default_sort_method)
@@ -664,6 +669,7 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
+        self.image_mosaic._hide_unlabeled = self.ui.hideUnlabeled.isChecked()
         # self.image_mosaic.sort_rect_widgets(method)
         self.image_mosaic.render_mosaic()
 
@@ -849,6 +855,13 @@ class MainWindow(TemplateBaseClass):
                 video_reference_uuid, [localization]
             )
             self.sharktopoda_client.show(video_reference_uuid)
+            
+            # If on macOS, call the open command to bring Sharktopoda to the front
+            if sys.platform == "darwin":
+                try:
+                    os.system(f"open -a {constants.SHARKTOPODA_APP_NAME}")
+                except Exception as e:
+                    LOGGER.warning(f"Could not open Sharktopoda: {e}")
 
         self.sharktopoda_client.open(
             video_reference_uuid, mp4_video_url, callback=show_localization

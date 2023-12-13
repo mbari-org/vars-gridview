@@ -40,3 +40,6 @@ SHARKTOPODA_INCOMING_PORT_DEFAULT = 8801
 
 # Data cache
 CACHE_DIR_DEFAULT = Path(user_cache_dir(APP_NAME))
+
+# Sharktopoda
+SHARKTOPODA_APP_NAME = "Sharktopoda"

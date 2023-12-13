@@ -2,6 +2,31 @@
 
 
 
+## v0.8.1 (2023-12-12)
+
+### Chore
+
+* chore: add macOS codesign identity/bundle ident ([`2a9b03d`](https://github.com/mbari-org/vars-gridview/commit/2a9b03d810888a45bfd1bf56efca80f15b8f105b))
+
+### Fix
+
+* fix: turn off touch events re: macOS QTBUG-103935
+
+Set attribte WA_AcceptTouchEvents to false in GraphicsViews.
+See QTBUG-103935 for details.
+
+This resolves the &#34;qt.pointer.dispath: Skipping QEventPoint&#34; message
+spam issue in the terminal. ([`3bfc0d7`](https://github.com/mbari-org/vars-gridview/commit/3bfc0d76b14e4eba4cbc3de0c7574193840c7bde))
+
+* fix: run &#39;open -a&#39; command when showing in S2
+
+On macOS, call &#39;open -a&#39; to open Sharktopoda 2
+(or bring it to the forefront if it&#39;s already open)
+when showing a localization. (#42) ([`5cf7307`](https://github.com/mbari-org/vars-gridview/commit/5cf7307cfa78989c5b12ef11c5001e027fde6dc5))
+
+* fix: Fix parsing of native timestamp with tzoffset ([`2cf39f2`](https://github.com/mbari-org/vars-gridview/commit/2cf39f250d572b194258ba9d1529e86c995bf950))
+
+
 ## v0.8.0 (2023-12-05)
 
 ### Feature
