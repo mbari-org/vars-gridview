@@ -206,8 +206,6 @@ def update_observation_concepts_bulk(
     LOGGER.debug(f"Updating observation concepts in bulk:\n{request_data}")
     response = m3.ANNOSAURUS_CLIENT.update_observations_bulk(request_data)
 
-    print(response.content)
-
     try:
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
@@ -223,9 +221,6 @@ def update_association_data_bulk(request_data: List[dict]) -> List[dict]:
     """
     LOGGER.debug(f"Updating association data in bulk:\n{request_data}")
     response = m3.ANNOSAURUS_CLIENT.update_associations_bulk(request_data)
-
-    print(response.headers)
-    print(response.content)
 
     try:
         response.raise_for_status()
