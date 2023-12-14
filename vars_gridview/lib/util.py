@@ -3,7 +3,10 @@ Utilities.
 """
 
 
+import subprocess
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
 
@@ -88,3 +91,18 @@ def parse_sqlserver_native(timestamp: str) -> datetime:
         timedelta(seconds=float(f".{decimal_part}")) if decimal_part else timedelta()
     )
     return datetime.strptime(datetime_part, "%Y-%m-%d %H:%M:%S") + subsecond_timedelta
+
+
+def open_file_browser(path: Path):
+    """
+    Open a file browser to the given path. Implementation varies by platform.
+
+    Args:
+        path: The path to open.
+    """
+    if sys.platform == "win32":
+        subprocess.Popen(f'explorer /select,"{path}"')
+    elif sys.platform == "darwin":
+        subprocess.Popen(["open" "-R", path] if path.is_file() else ["open", path])
+    else:
+        subprocess.Popen(["xdg-open", path.parent if path.is_file() else path])

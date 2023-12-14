@@ -427,6 +427,60 @@ class GeneratorFilter(Filter):
             return GeneratorFilter.Result(generator)
 
 
+class VerifierFilter(Filter):
+    class Result(Filter.Result):
+        def __init__(self, verifier: str):
+            self.verifier = verifier
+
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            yield Constraint(
+                "JSON_VALUE(assoc.link_value, '$.verifier')", self.verifier
+            )
+
+        def __str__(self) -> str:
+            return "Verifier: {}".format(self.verifier)
+
+    def __call__(self) -> Optional[Result]:
+        verifier, ok = QInputDialog.getText(
+            self.parent,
+            "Verifier",
+            "Verifier",
+            QLineEdit.EchoMode.Normal,
+            "",
+        )
+        if ok:
+            return VerifierFilter.Result(verifier)
+
+
+class VerifiedBooleanFilter(Filter):
+    class Result(Filter.Result):
+        def __init__(self, verified: bool):
+            self.verified = verified
+
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            yield Constraint(
+                "CASE WHEN JSON_VALUE(assoc.link_value, '$.verifier') IS NOT NULL THEN 1 ELSE 0 END",
+                int(self.verified),
+            )
+
+        def __str__(self) -> str:
+            return "Verified: {}".format("Yes" if self.verified else "No")
+
+    def __call__(self) -> Optional[Result]:
+        verified, ok = QInputDialog.getItem(
+            self.parent,
+            "Verified",
+            "Verified",
+            ["Yes", "No"],
+            0,
+            False,
+        )
+        if ok:
+            return VerifiedBooleanFilter.Result(True if verified == "Yes" else False)
+
+
 class ResultListModel(QAbstractListModel):
     def __init__(self, parent: QObject = None, results: List[Filter.Result] = None):
         super().__init__(parent=parent)
@@ -495,6 +549,8 @@ class QueryDialog(QDialog):
             ActivityFilter(self, "Activity"),
             ObservationGroupFilter(self, "Observation group"),
             GeneratorFilter(self, "Generator"),
+            VerifierFilter(self, "Verifier"),
+            VerifiedBooleanFilter(self, "Verified"),
         ]
 
         # Create button bar (add, remove, clear constraints)

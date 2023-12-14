@@ -2,6 +2,50 @@
 
 
 
+## v0.10.0 (2023-12-14)
+
+### Feature
+
+* feat: add verifier and verified query filters ([`d94ab98`](https://github.com/mbari-org/vars-gridview/commit/d94ab98a2d0cd461b5bf17b520bb82311754bb61))
+
+### Fix
+
+* fix: add all localizations from the same video into S2 ([`99ea7a0`](https://github.com/mbari-org/vars-gridview/commit/99ea7a0a1d4a64ce20bd83bef224d2b61d1d9a12))
+
+* fix: reset to recorded timestamp sort on new query ([`a8144cc`](https://github.com/mbari-org/vars-gridview/commit/a8144cc039ca59a4f6e659da74ab6200f935c949))
+
+
+## v0.9.0 (2023-12-13)
+
+### Chore
+
+* chore: add macOS build script ([`b0ba51f`](https://github.com/mbari-org/vars-gridview/commit/b0ba51fe96b4b0e845479052d70ed740c68de279))
+
+### Feature
+
+* feat: add sort by confidence
+
+Closes #63 ([`151f8b9`](https://github.com/mbari-org/vars-gridview/commit/151f8b92c536e5d7c7be5d71cb1aa6673d8c1a30))
+
+* feat: add &#34;hide unverified&#34; button
+
+Closes #55 ([`52b477d`](https://github.com/mbari-org/vars-gridview/commit/52b477d6809262b7d9f8e9f1d32207ed64e4fcc3))
+
+### Fix
+
+* fix: maintain sort options in dialog, don&#39;t auto re-sort ([`abfd1b9`](https://github.com/mbari-org/vars-gridview/commit/abfd1b94e7c1309e07a07abdd8dc989ba21e18cc))
+
+* fix: add error dialog when saving localizations fails ([`cf92bb3`](https://github.com/mbari-org/vars-gridview/commit/cf92bb3a9887a073599c268c2009baf66fe07785))
+
+* fix: maintain sort across updates
+
+Related to #49 ([`29e6483`](https://github.com/mbari-org/vars-gridview/commit/29e648386cb6d0592b4bd498dc02b201730e4140))
+
+### Unknown
+
+* Merge branch &#39;develop&#39; into feat/maintain-sort ([`2a08cb2`](https://github.com/mbari-org/vars-gridview/commit/2a08cb2e5c77cde5b9e07eb866efd03b5efce8b2))
+
+
 ## v0.8.1 (2023-12-12)
 
 ### Chore

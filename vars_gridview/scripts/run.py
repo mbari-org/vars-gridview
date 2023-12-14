@@ -44,7 +44,7 @@ from vars_gridview.lib.log import LOGGER, AppLogger
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_name, get_kb_parts
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
-from vars_gridview.lib.util import parse_iso
+from vars_gridview.lib.util import open_file_browser, parse_iso
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
 from vars_gridview.ui.LoginDialog import LoginDialog
@@ -115,6 +115,8 @@ class MainWindow(TemplateBaseClass):
 
         self.cache_controller = CacheController()
 
+        self._sort_method = RecordedTimestampSort
+
         # Connect signals to slots
         self.ui.discardButton.clicked.connect(self.delete)
         self.ui.clearSelections.clicked.connect(self.clear_selected)
@@ -139,8 +141,14 @@ class MainWindow(TemplateBaseClass):
             parent=self,
         )
 
-        self.ui.roiGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
-        self.ui.roiDetailGraphicsView.viewport().setAttribute(QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False)
+        self.sort_dialog = SortDialog(parent=self)
+
+        self.ui.roiGraphicsView.viewport().setAttribute(
+            QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
+        )
+        self.ui.roiDetailGraphicsView.viewport().setAttribute(
+            QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
+        )
 
         self._launch()
 
@@ -282,6 +290,12 @@ class MainWindow(TemplateBaseClass):
         settings_action.triggered.connect(self._open_settings)
         file_menu.addAction(settings_action)
 
+        open_log_dir_action = QtGui.QAction("&Open Log Directory", self)
+        open_log_dir_icon = QtGui.QIcon(str(ICONS_DIR / "folder-open-solid.svg"))
+        open_log_dir_action.setIcon(open_log_dir_icon)
+        open_log_dir_action.triggered.connect(self._open_log_dir)
+        file_menu.addAction(open_log_dir_action)
+
         query_menu = menu_bar.addMenu("&Query")
 
         query_action = QtGui.QAction("&Query", self)
@@ -296,6 +310,7 @@ class MainWindow(TemplateBaseClass):
         toolbar.setObjectName("toolbar")
         toolbar.addAction(settings_action)
         toolbar.addAction(query_action)
+        toolbar.addAction(open_log_dir_action)
         toolbar.setIconSize(QtCore.QSize(16, 16))
         self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
 
@@ -367,6 +382,12 @@ class MainWindow(TemplateBaseClass):
         """
         self.settings_dialog.show()
 
+    def _open_log_dir(self):
+        """
+        Open the log directory.
+        """
+        open_file_browser(constants.LOG_DIR)
+
     def _sort_widgets(self):
         """
         Open the sort dialog and apply a sort method to the rect widgets.
@@ -379,16 +400,17 @@ class MainWindow(TemplateBaseClass):
             )
             return
 
-        # Show a sort dialog
-        sort_dialog = SortDialog(parent=self)
-        ok = sort_dialog.exec()
+        # Show the sort dialog
+        ok = self.sort_dialog.exec()
         if not ok:
             return
-        method = sort_dialog.method
+        method = self.sort_dialog.method
         if method is None:
             return
 
-        self.image_mosaic.sort_rect_widgets(method)
+        self._sort_method = method
+        self.image_mosaic.sort_rect_widgets(self._sort_method)
+
         self.image_mosaic.render_mosaic()
 
     def _do_query(self):
@@ -423,8 +445,11 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic._hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
-        default_sort_method = RecordedTimestampSort
-        self.image_mosaic.sort_rect_widgets(default_sort_method)
+        # Reset sort dialog and default sort method
+        self.sort_dialog.clear()
+        self._sort_method = RecordedTimestampSort
+
+        self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
 
         # Show some stats about the images and annotations
@@ -591,6 +616,9 @@ class MainWindow(TemplateBaseClass):
             # Update the label of the selected localization in the image view (if necessary)
             self.box_handler.update_labels()
 
+            # Render the mosaic
+            self.image_mosaic.render_mosaic()
+
     def verify_selected(self):
         """
         Verify the selected localizations.
@@ -609,6 +637,8 @@ class MainWindow(TemplateBaseClass):
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             self.image_mosaic.verify_selected()
 
+            self.image_mosaic.render_mosaic()
+
     def unverify_selected(self):
         """
         Unverify the selected localizations.
@@ -626,6 +656,8 @@ class MainWindow(TemplateBaseClass):
 
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             self.image_mosaic.unverify_selected()
+
+            self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot()
     def delete(self):
@@ -653,6 +685,8 @@ class MainWindow(TemplateBaseClass):
             self.ui.annotationXML.clear()
             self.ui.imageInfoList.clear()
 
+            self.image_mosaic.render_mosaic()
+
     @QtCore.pyqtSlot()
     def clear_selected(self):
         if not self.loaded:
@@ -665,12 +699,11 @@ class MainWindow(TemplateBaseClass):
         if not self.loaded:
             return
 
-        # method = self.ui.sortMethod.currentData()
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
         self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic._hide_unlabeled = self.ui.hideUnlabeled.isChecked()
-        # self.image_mosaic.sort_rect_widgets(method)
+
         self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot(int)
@@ -694,7 +727,14 @@ class MainWindow(TemplateBaseClass):
             shift = False
 
         # Save information to VARS for any moved/resized boxes
-        self.box_handler.save_all(self.verifier)
+        try:
+            self.box_handler.save_all(self.verifier)
+        except Exception as e:
+            LOGGER.error(f"Could not save localizations: {e}")
+            QtWidgets.QMessageBox.critical(
+                self, "Error", f"An error occurred while saving localizations: {e}"
+            )
+            return
 
         # Select the widget
         if shift:
@@ -760,10 +800,10 @@ class MainWindow(TemplateBaseClass):
             QtWidgets.QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
             return
 
-        rect = self.last_selected_rect
+        selected_rect = self.last_selected_rect
 
         # Get the annotation imaged moment UUID
-        imaged_moment_uuid = rect.imaged_moment_uuid
+        imaged_moment_uuid = selected_rect.imaged_moment_uuid
 
         # Get the annotation MP4 video data
         mp4_video_data = self.image_mosaic.moment_mp4_data.get(imaged_moment_uuid, None)
@@ -820,8 +860,8 @@ class MainWindow(TemplateBaseClass):
             )
             return
 
-        rescale_x = mp4_width / rect.image.shape[1]
-        rescale_y = mp4_height / rect.image.shape[0]
+        rescale_x = mp4_width / selected_rect.image.shape[1]
+        rescale_y = mp4_height / selected_rect.image.shape[0]
 
         # Show warning if rescale dimensions are different
         if abs(rescale_x / rescale_y - 1) > 0.01:  # 1% tolerance
@@ -831,19 +871,47 @@ class MainWindow(TemplateBaseClass):
                 "MP4 video has different aspect ratio than ROI source image. The bounding box may not be displayed correctly.",
             )
 
-        localization = Localization(
-            uuid=uuid4(),
-            concept=rect.localization.concept,
-            elapsed_time_millis=annotation_milliseconds,
-            x=rescale_x * rect.localization.x,
-            y=rescale_y * rect.localization.y,
-            width=rescale_x * rect.localization.width,
-            height=rescale_y * rect.localization.height,
-            duration_millis=1000,
-            color=color_for_concept(rect.localization.concept).name(),
-        )
+        # Collect localizations for all rects that are on the same video
+        localizations = []
+        for rect in self.image_mosaic._rect_widgets:
+            imaged_moment_uuid_other = rect.imaged_moment_uuid
+            mp4_video_data_other = self.image_mosaic.moment_mp4_data.get(
+                imaged_moment_uuid_other, None
+            )
+            if mp4_video_data_other is None:
+                continue
+            mp4_video_reference_other = mp4_video_data_other["video_reference"]
+            video_reference_uuid_other = UUID(mp4_video_reference_other["uuid"])
+            if video_reference_uuid_other != video_reference_uuid:
+                continue
 
-        def show_localization():
+            # Get the annotation timestamp
+            annotation_datetime_other = self.image_mosaic.moment_timestamps[
+                imaged_moment_uuid_other
+            ]
+
+            # Compute the timedelta between the annotation and video start
+            annotation_timedelta_other = annotation_datetime_other - mp4_start_timestamp
+
+            annotation_milliseconds_other = max(
+                annotation_timedelta_other.total_seconds() * 1000, 0
+            )
+
+            localization = Localization(
+                uuid=uuid4(),
+                concept=rect.localization.concept,
+                elapsed_time_millis=annotation_milliseconds_other,
+                x=rescale_x * rect.localization.x,
+                y=rescale_y * rect.localization.y,
+                width=rescale_x * rect.localization.width,
+                height=rescale_y * rect.localization.height,
+                duration_millis=1000,
+                color=color_for_concept(rect.localization.concept).name(),
+            )
+
+            localizations.append(localization)
+
+        def show_localizations():
             sleep(
                 0.5
             )  # A hack, since Sharktopoda 2 crashes if you send it a command too soon
@@ -851,11 +919,16 @@ class MainWindow(TemplateBaseClass):
                 video_reference_uuid, annotation_milliseconds
             )
             self.sharktopoda_client.clear_localizations(video_reference_uuid)
-            self.sharktopoda_client.add_localizations(
-                video_reference_uuid, [localization]
-            )
+
+            # Add localizations in chunks
+            chunk_size = 20
+            for i in range(0, len(localizations), chunk_size):
+                chunk = localizations[i : i + chunk_size]
+
+                self.sharktopoda_client.add_localizations(video_reference_uuid, chunk)
+
             self.sharktopoda_client.show(video_reference_uuid)
-            
+
             # If on macOS, call the open command to bring Sharktopoda to the front
             if sys.platform == "darwin":
                 try:
@@ -864,7 +937,7 @@ class MainWindow(TemplateBaseClass):
                     LOGGER.warning(f"Could not open Sharktopoda: {e}")
 
         self.sharktopoda_client.open(
-            video_reference_uuid, mp4_video_url, callback=show_localization
+            video_reference_uuid, mp4_video_url, callback=show_localizations
         )
 
     @QtCore.pyqtSlot()
