@@ -787,10 +787,10 @@ class MainWindow(TemplateBaseClass):
             QtWidgets.QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
             return
 
-        rect = self.last_selected_rect
+        selected_rect = self.last_selected_rect
 
         # Get the annotation imaged moment UUID
-        imaged_moment_uuid = rect.imaged_moment_uuid
+        imaged_moment_uuid = selected_rect.imaged_moment_uuid
 
         # Get the annotation MP4 video data
         mp4_video_data = self.image_mosaic.moment_mp4_data.get(imaged_moment_uuid, None)
@@ -847,8 +847,8 @@ class MainWindow(TemplateBaseClass):
             )
             return
 
-        rescale_x = mp4_width / rect.image.shape[1]
-        rescale_y = mp4_height / rect.image.shape[0]
+        rescale_x = mp4_width / selected_rect.image.shape[1]
+        rescale_y = mp4_height / selected_rect.image.shape[0]
 
         # Show warning if rescale dimensions are different
         if abs(rescale_x / rescale_y - 1) > 0.01:  # 1% tolerance
@@ -858,19 +858,47 @@ class MainWindow(TemplateBaseClass):
                 "MP4 video has different aspect ratio than ROI source image. The bounding box may not be displayed correctly.",
             )
 
-        localization = Localization(
-            uuid=uuid4(),
-            concept=rect.localization.concept,
-            elapsed_time_millis=annotation_milliseconds,
-            x=rescale_x * rect.localization.x,
-            y=rescale_y * rect.localization.y,
-            width=rescale_x * rect.localization.width,
-            height=rescale_y * rect.localization.height,
-            duration_millis=1000,
-            color=color_for_concept(rect.localization.concept).name(),
-        )
+        # Collect localizations for all rects that are on the same video
+        localizations = []
+        for rect in self.image_mosaic._rect_widgets:
+            imaged_moment_uuid_other = rect.imaged_moment_uuid
+            mp4_video_data_other = self.image_mosaic.moment_mp4_data.get(
+                imaged_moment_uuid_other, None
+            )
+            if mp4_video_data_other is None:
+                continue
+            mp4_video_reference_other = mp4_video_data_other["video_reference"]
+            video_reference_uuid_other = UUID(mp4_video_reference_other["uuid"])
+            if video_reference_uuid_other != video_reference_uuid:
+                continue
 
-        def show_localization():
+            # Get the annotation timestamp
+            annotation_datetime_other = self.image_mosaic.moment_timestamps[
+                imaged_moment_uuid_other
+            ]
+
+            # Compute the timedelta between the annotation and video start
+            annotation_timedelta_other = annotation_datetime_other - mp4_start_timestamp
+
+            annotation_milliseconds_other = max(
+                annotation_timedelta_other.total_seconds() * 1000, 0
+            )
+
+            localization = Localization(
+                uuid=uuid4(),
+                concept=rect.localization.concept,
+                elapsed_time_millis=annotation_milliseconds_other,
+                x=rescale_x * rect.localization.x,
+                y=rescale_y * rect.localization.y,
+                width=rescale_x * rect.localization.width,
+                height=rescale_y * rect.localization.height,
+                duration_millis=1000,
+                color=color_for_concept(rect.localization.concept).name(),
+            )
+
+            localizations.append(localization)
+
+        def show_localizations():
             sleep(
                 0.5
             )  # A hack, since Sharktopoda 2 crashes if you send it a command too soon
@@ -878,9 +906,14 @@ class MainWindow(TemplateBaseClass):
                 video_reference_uuid, annotation_milliseconds
             )
             self.sharktopoda_client.clear_localizations(video_reference_uuid)
-            self.sharktopoda_client.add_localizations(
-                video_reference_uuid, [localization]
-            )
+
+            # Add localizations in chunks
+            chunk_size = 20
+            for i in range(0, len(localizations), chunk_size):
+                chunk = localizations[i : i + chunk_size]
+
+                self.sharktopoda_client.add_localizations(video_reference_uuid, chunk)
+
             self.sharktopoda_client.show(video_reference_uuid)
 
             # If on macOS, call the open command to bring Sharktopoda to the front
@@ -891,7 +924,7 @@ class MainWindow(TemplateBaseClass):
                     LOGGER.warning(f"Could not open Sharktopoda: {e}")
 
         self.sharktopoda_client.open(
-            video_reference_uuid, mp4_video_url, callback=show_localization
+            video_reference_uuid, mp4_video_url, callback=show_localizations
         )
 
     @QtCore.pyqtSlot()
