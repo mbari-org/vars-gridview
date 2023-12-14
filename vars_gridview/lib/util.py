@@ -103,6 +103,6 @@ def open_file_browser(path: Path):
     if sys.platform == "win32":
         subprocess.Popen(f'explorer /select,"{path}"')
     elif sys.platform == "darwin":
-        subprocess.Popen(["open", "-R", path])
+        subprocess.Popen(["open" "-R", path] if path.is_file() else ["open", path])
     else:
         subprocess.Popen(["xdg-open", path.parent if path.is_file() else path])
