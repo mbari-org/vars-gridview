@@ -44,7 +44,7 @@ from vars_gridview.lib.log import LOGGER, AppLogger
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_name, get_kb_parts
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
-from vars_gridview.lib.util import parse_iso
+from vars_gridview.lib.util import open_file_browser, parse_iso
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
 from vars_gridview.ui.LoginDialog import LoginDialog
@@ -290,6 +290,12 @@ class MainWindow(TemplateBaseClass):
         settings_action.triggered.connect(self._open_settings)
         file_menu.addAction(settings_action)
 
+        open_log_dir_action = QtGui.QAction("&Open Log Directory", self)
+        open_log_dir_icon = QtGui.QIcon(str(ICONS_DIR / "folder-open-solid.svg"))
+        open_log_dir_action.setIcon(open_log_dir_icon)
+        open_log_dir_action.triggered.connect(self._open_log_dir)
+        file_menu.addAction(open_log_dir_action)
+
         query_menu = menu_bar.addMenu("&Query")
 
         query_action = QtGui.QAction("&Query", self)
@@ -304,6 +310,7 @@ class MainWindow(TemplateBaseClass):
         toolbar.setObjectName("toolbar")
         toolbar.addAction(settings_action)
         toolbar.addAction(query_action)
+        toolbar.addAction(open_log_dir_action)
         toolbar.setIconSize(QtCore.QSize(16, 16))
         self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
 
@@ -374,6 +381,12 @@ class MainWindow(TemplateBaseClass):
         Open the settings dialog.
         """
         self.settings_dialog.show()
+
+    def _open_log_dir(self):
+        """
+        Open the log directory.
+        """
+        open_file_browser(constants.LOG_DIR)
 
     def _sort_widgets(self):
         """
