@@ -872,10 +872,22 @@ class MainWindow(TemplateBaseClass):
             if video_reference_uuid_other != video_reference_uuid:
                 continue
 
+            # Get the annotation timestamp
+            annotation_datetime_other = self.image_mosaic.moment_timestamps[
+                imaged_moment_uuid_other
+            ]
+
+            # Compute the timedelta between the annotation and video start
+            annotation_timedelta_other = annotation_datetime_other - mp4_start_timestamp
+
+            annotation_milliseconds_other = max(
+                annotation_timedelta_other.total_seconds() * 1000, 0
+            )
+
             localization = Localization(
                 uuid=uuid4(),
                 concept=rect.localization.concept,
-                elapsed_time_millis=annotation_milliseconds,
+                elapsed_time_millis=annotation_milliseconds_other,
                 x=rescale_x * rect.localization.x,
                 y=rescale_y * rect.localization.y,
                 width=rescale_x * rect.localization.width,
