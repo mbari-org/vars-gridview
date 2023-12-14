@@ -894,9 +894,14 @@ class MainWindow(TemplateBaseClass):
                 video_reference_uuid, annotation_milliseconds
             )
             self.sharktopoda_client.clear_localizations(video_reference_uuid)
-            self.sharktopoda_client.add_localizations(
-                video_reference_uuid, localizations
-            )
+
+            # Add localizations in chunks
+            chunk_size = 20
+            for i in range(0, len(localizations), chunk_size):
+                chunk = localizations[i : i + chunk_size]
+
+                self.sharktopoda_client.add_localizations(video_reference_uuid, chunk)
+
             self.sharktopoda_client.show(video_reference_uuid)
 
             # If on macOS, call the open command to bring Sharktopoda to the front
