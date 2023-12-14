@@ -2,6 +2,19 @@
 
 
 
+## v0.10.0 (2023-12-14)
+
+### Feature
+
+* feat: add verifier and verified query filters ([`d94ab98`](https://github.com/mbari-org/vars-gridview/commit/d94ab98a2d0cd461b5bf17b520bb82311754bb61))
+
+### Fix
+
+* fix: add all localizations from the same video into S2 ([`99ea7a0`](https://github.com/mbari-org/vars-gridview/commit/99ea7a0a1d4a64ce20bd83bef224d2b61d1d9a12))
+
+* fix: reset to recorded timestamp sort on new query ([`a8144cc`](https://github.com/mbari-org/vars-gridview/commit/a8144cc039ca59a4f6e659da74ab6200f935c949))
+
+
 ## v0.9.0 (2023-12-13)
 
 ### Chore
