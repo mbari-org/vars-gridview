@@ -38,6 +38,7 @@ class VARSLocalization:
         self.observation_uuid = None
         self.association_uuid = None
         self.imaged_moment_uuid = None
+        self.video_reference_uuid = None
         self.meta = meta
         self._concept = None
         self._part = None
@@ -120,8 +121,20 @@ class VARSLocalization:
         return self._x, self._y, self.xf, self.yf
 
     @property
+    def verifier(self):
+        return self.meta.get("verifier", None)
+
+    @verifier.setter
+    def verifier(self, value):
+        if value is None:
+            if "verifier" in self.meta:
+                del self.meta["verifier"]
+        else:
+            self.meta["verifier"] = value
+
+    @property
     def verified(self):
-        return "verifier" in self.meta
+        return self.verifier is not None
 
     @property
     def deleted(self):
@@ -152,12 +165,12 @@ class VARSLocalization:
 
     def set_verified_concept(self, concept, part, verifier):
         self.set_concept(concept, part)
-        self.meta["verifier"] = verifier
+        self.verifier = verifier
         self._dirty_verifier = True
 
     def unverify(self):
         if self.verified:
-            del self.meta["verifier"]
+            self.verifier = None
             self._dirty_verifier = True
 
     def get_roi(self, image: np.ndarray):
@@ -221,9 +234,9 @@ class VARSLocalization:
             update_bounding_box_data(self.association_uuid, self.json)
 
 
-def bulk_update_localizations(localizations: List[VARSLocalization], verifier: str):
+def push_changes_bulk(localizations: List[VARSLocalization], verifier: str):
     """
-    Bulk update localizations. This is a performance optimization to reduce the number of calls to Annosaurus.
+    Push changes in bulk. This is a performance optimization to reduce the number of calls to Annosaurus.
 
     Args:
         localizations: List of VARSLocalization objects
@@ -232,21 +245,23 @@ def bulk_update_localizations(localizations: List[VARSLocalization], verifier: s
     if not localizations:
         return
 
-    # We will call two endpoints to update relevant data.
-    # PUT annotations/bulk -- for updating observation concept, observer
-    # PUT associations/bulk -- for updating part, bounding box data, verifier
-
     # Find all localizations that have a dirty concept. For those, call PUT annotations/bulk
     to_update_annotation = [
         localization for localization in localizations if localization.dirty_concept
     ]
-    observation_uuid_concept_pairs = [
-        (localization.observation_uuid, localization.concept)
+    observation_uuid_vr_uuid_concept_tuples = [
+        (
+            localization.observation_uuid,
+            localization.video_reference_uuid,
+            localization.concept,
+        )
         for localization in to_update_annotation
     ]
 
-    if observation_uuid_concept_pairs:
-        update_observation_concepts_bulk(observation_uuid_concept_pairs, verifier)
+    if observation_uuid_vr_uuid_concept_tuples:
+        update_observation_concepts_bulk(
+            observation_uuid_vr_uuid_concept_tuples, verifier
+        )
 
     # Remove dirty flags
     for localization in to_update_annotation:

@@ -189,18 +189,19 @@ def update_observation_concept(
 
 
 def update_observation_concepts_bulk(
-    observation_uuid_concept_pairs: List[Tuple[str, str]], observer: str
+    data_tuples: List[Tuple[str, str, str]], observer: str
 ) -> List[dict]:
     """
     Update several observations' concepts and observers in bulk.
     """
     request_data = [
         {
-            "uuid": observation_uuid,
+            "observation_uuid": observation_uuid,
+            "video_reference_uuid": video_reference_uuid,
             "concept": concept,
             "observer": observer,
         }
-        for observation_uuid, concept in observation_uuid_concept_pairs
+        for observation_uuid, video_reference_uuid, concept in data_tuples
     ]
 
     LOGGER.debug(f"Updating observation concepts in bulk:\n{request_data}")

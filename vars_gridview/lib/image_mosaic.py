@@ -17,7 +17,7 @@ import requests
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib import m3
-from vars_gridview.lib.annotation import VARSLocalization, bulk_update_localizations
+from vars_gridview.lib.annotation import VARSLocalization, push_changes_bulk
 from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
@@ -169,6 +169,9 @@ class ImageMosaic(QtCore.QObject):
                 # Video data
                 video_start_timestamp = video_data["video_start_timestamp"]
 
+                # Video reference data
+                video_reference_uuid = video_data["video_reference_uuid"]
+
                 # Handle string timestamps (convert to datetime)
                 # Note: This is only apparently an issue with FreeTDS (what pymssql uses) on Apple Silicon
                 if isinstance(recorded_timestamp, str):
@@ -215,6 +218,7 @@ class ImageMosaic(QtCore.QObject):
                 localization.imaged_moment_uuid = imaged_moment_uuid  # The imaged moment of the annotation. Does not necessarily correspond to the imaged moment of the bounding box association's image.
                 localization.observation_uuid = observation_uuid
                 localization.association_uuid = association_uuid
+                localization.video_reference_uuid = video_reference_uuid
 
                 # Each group corresponds to an image to be downloaded.
                 # The key is the imaged moment UUID + image reference UUID.
@@ -651,7 +655,8 @@ class ImageMosaic(QtCore.QObject):
         rect_widgets_to_render = [
             rw
             for rw in self._rect_widgets
-            if (not rw.is_verified and not self._hide_unlabeled) or (rw.is_verified and not self._hide_labeled)
+            if (not rw.is_verified and not self._hide_unlabeled)
+            or (rw.is_verified and not self._hide_labeled)
         ]
 
         # Hide all rect widgets that we aren't rendering
@@ -686,36 +691,49 @@ class ImageMosaic(QtCore.QObject):
         """
         to_label = self.get_selected()
 
+        backup_rect_concept_part_verifier = []
         for rect in to_label:
-            # Set the new concept and immediately push to VARS
+            # Set the new concept
+            backup_rect_concept_part_verifier.append(
+                (
+                    rect.localization.concept,
+                    rect.localization.part,
+                    rect.localization.verifier,
+                )
+            )
             rect.localization.set_verified_concept(
                 concept if concept is not None else rect.localization.concept,
                 part if part is not None else rect.localization.part,
                 self.verifier,
             )
 
-            # try:
-            #     rect.localization.push_changes(self.verifier)
-            # except Exception as e:
-            #     LOGGER.error(
-            #         f"Error pushing changes for localization {rect.localization.association_uuid}: {e}"
-            #     )
-            #     QtWidgets.QMessageBox.critical(
-            #         self._graphics_view,
-            #         "Error",
-            #         f"An error occurred while pushing changes for localization {rect.localization.association_uuid}.",
-            #     )
+        try:
+            push_changes_bulk([rect.localization for rect in to_label], self.verifier)
+        except Exception as e:
+            LOGGER.error(f"Error pushing changes: {e}")
+            QtWidgets.QMessageBox.critical(
+                self._graphics_view,
+                "Error",
+                f"An error occurred while pushing changes.\n\n{e}",
+            )
 
+            # Restore the old concept/part/verifier
+            for rect, (concept, part, verifier) in zip(
+                to_label, backup_rect_concept_part_verifier
+            ):
+                rect.localization.set_verified_concept(
+                    concept,
+                    part,
+                    verifier,
+                )
+
+        for rect in to_label:
             # Update the widget's text label and deselect it
             rect.text_label = rect.localization.text_label
             rect.is_selected = False
 
             # Propagate visual changes
             rect.update()
-
-        bulk_update_localizations(
-            [rect.localization for rect in to_label], self.verifier
-        )
 
         self.render_mosaic()
 
@@ -731,32 +749,35 @@ class ImageMosaic(QtCore.QObject):
         """
         to_unverify = self.get_selected()
 
+        backup_verifier = []
         for rect in to_unverify:
-            # Unverify the localization and immediately push to VARS
+            # Unverify the localization
+            backup_verifier.append(rect.localization.verifier)
             rect.localization.unverify()
 
-            # try:
-            #     rect.localization.push_changes(self.verifier)
-            # except Exception as e:
-            #     LOGGER.error(
-            #         f"Error pushing changes for localization {rect.localization.association_uuid}: {e}"
-            #     )
-            #     QtWidgets.QMessageBox.critical(
-            #         self._graphics_view,
-            #         "Error",
-            #         f"An error occurred while pushing changes for localization {rect.localization.association_uuid}.",
-            #     )
+        try:
+            push_changes_bulk(
+                [rect.localization for rect in to_unverify], self.verifier
+            )
+        except Exception as e:
+            LOGGER.error(f"Error pushing changes: {e}")
+            QtWidgets.QMessageBox.critical(
+                self._graphics_view,
+                "Error",
+                f"An error occurred while pushing changes.\n\n{e}",
+            )
 
+            # Restore the old verifier
+            for rect, verifier in zip(to_unverify, backup_verifier):
+                rect.localization.verifier = verifier
+
+        for rect in to_unverify:
             # Update the widget's text label and deselect it
             rect.text_label = rect.localization.text_label
             rect.is_selected = False
 
             # Propagate visual changes
             rect.update()
-
-        bulk_update_localizations(
-            [rect.localization for rect in to_unverify], self.verifier
-        )
 
     def get_selected(self) -> List[RectWidget]:
         """
