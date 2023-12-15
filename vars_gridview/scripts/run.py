@@ -191,6 +191,7 @@ class MainWindow(TemplateBaseClass):
         Prompt a login dialog and return the username, password, and Raziel URL. If failed, returns None.
         """
         login_dialog = LoginDialog(parent=self)
+        login_dialog._login_form._username_line_edit.setFocus()
         ok = login_dialog.exec()
 
         if not ok:
