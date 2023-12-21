@@ -2,6 +2,21 @@
 
 
 
+## v0.11.0 (2023-12-21)
+
+### Feature
+
+* feat: add button to open log directory ([`a87b78e`](https://github.com/mbari-org/vars-gridview/commit/a87b78e028f6ef40e36921702595690b6260a3d9))
+
+### Fix
+
+* fix: grab focus in login dialog on startup ([`0995775`](https://github.com/mbari-org/vars-gridview/commit/0995775ffdd7f66c38364410669d7e4686194f2e))
+
+* fix: update observation UUID constraint ([`946779f`](https://github.com/mbari-org/vars-gridview/commit/946779f5e238ca6e9a994b11bda6b50825a9132f))
+
+* fix: open into log directory in macOS ([`aa6d37d`](https://github.com/mbari-org/vars-gridview/commit/aa6d37ddb5a6f369e298ce44e7d374fd3659881a))
+
+
 ## v0.10.0 (2023-12-14)
 
 ### Feature
