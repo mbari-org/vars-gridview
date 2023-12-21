@@ -240,7 +240,7 @@ class ObservationUUIDFilter(Filter):
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("observation_uuid", self.observation_uuid)
+            yield Constraint("anno.observation_uuid", self.observation_uuid)
 
         def __str__(self) -> str:
             return "Observation UUID: {}".format(self.observation_uuid)
