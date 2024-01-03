@@ -17,12 +17,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from vars_gridview.lib.m3.operations import (
-    get_kb_concepts,
-    get_kb_descendants,
-    get_users,
-    get_video_sequence_names,
-)
+from vars_gridview.lib.m3.operations import M3ClientWrapper
 
 
 class Constraint:
@@ -40,7 +35,7 @@ class Filter:
         def __str__(self) -> str:
             raise NotImplementedError()
 
-    def __init__(self, parent, name: str):
+    def __init__(self, parent: "QueryDialog", name: str):
         self.parent = parent
         self.name = name
 
@@ -62,7 +57,7 @@ class ConceptFilter(Filter):
 
     def __call__(self) -> Optional[Result]:
         concept, ok = QInputDialog.getItem(
-            self.parent, "Concept", "Concept", get_kb_concepts(), 0, True
+            self.parent, "Concept", "Concept", self.parent.m3.kb_concepts, 0, True
         )
         if ok:
             return ConceptFilter.Result(concept)
@@ -70,9 +65,9 @@ class ConceptFilter(Filter):
 
 class ConceptDescFilter(Filter):
     class Result(ConceptFilter.Result):
-        def __init__(self, concept: str):
+        def __init__(self, filter: "ConceptDescFilter", concept: str):
             super().__init__(concept)
-            self.descendants = get_kb_descendants(concept)
+            self.descendants = filter.parent.m3.get_kb_descendants(concept)
 
         @property
         def constraints(self) -> Iterable[Constraint]:
@@ -87,7 +82,7 @@ class ConceptDescFilter(Filter):
 
     def __call__(self) -> Optional[Result]:
         concept, ok = QInputDialog.getItem(
-            self.parent, "Concept", "Concept", get_kb_concepts(), 0, True
+            self.parent, "Concept", "Concept", self.parent.m3.kb_concepts, 0, True
         )
         if ok:
             return ConceptDescFilter.Result(concept)
@@ -130,7 +125,7 @@ class VideoSequenceNameFilter(Filter):
             self.parent,
             "Video sequence name",
             "Video sequence name",
-            get_video_sequence_names(),
+            self.parent.m3.video_sequence_names,
             0,
             True,
         )
@@ -195,7 +190,7 @@ class ObserverFilter(Filter):
             return "Observer: {}".format(self.observer)
 
     def __call__(self) -> Optional[Result]:
-        usernames = sorted([user["username"] for user in get_users()])
+        usernames = sorted([user["username"] for user in self.parent.m3.users_data])
         observer, ok = QInputDialog.getItem(
             self.parent, "Observer", "Observer", usernames, 0, True
         )
@@ -472,8 +467,10 @@ class ResultListModel(QAbstractListModel):
 
 
 class QueryDialog(QDialog):
-    def __init__(self, parent):
-        super().__init__(parent=parent)
+    def __init__(self, window):
+        super().__init__(parent=window)
+
+        self._window = window
 
         self.setWindowTitle("Query")
         self.setLayout(QVBoxLayout())
@@ -564,6 +561,13 @@ class QueryDialog(QDialog):
     @pyqtSlot()
     def clear(self):
         self.result_list_model.clear()
+
+    @property
+    def m3(self) -> M3ClientWrapper:
+        """
+        The parent window's M3 client wrapper.
+        """
+        return self._window.m3
 
     def constraints_dict(self):
         d = {}

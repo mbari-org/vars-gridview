@@ -11,8 +11,8 @@ import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
 from vars_gridview.lib.settings import SettingsManager
+from vars_gridview.lib.widgets import RectWidget
 
 
 class BoundingBox(pg.RectROI):
@@ -63,7 +63,7 @@ class BoundingBox(pg.RectROI):
         self.sigRegionChangeFinished.connect(self.update_localization_box)
 
         self.localization = localization
-        self.rect = rect
+        self.rect: RectWidget = rect
 
         self.image_mosaic = image_mosaic
 
@@ -102,7 +102,7 @@ class BoundingBox(pg.RectROI):
         Change concept (clicked from context menu).
         """
         try:
-            kb_concepts = get_kb_concepts()
+            kb_concepts = self.rect.m3.kb_concepts
         except Exception as e:
             LOGGER.error(f"Could not get KB concepts: {e}")
             return
@@ -122,7 +122,7 @@ class BoundingBox(pg.RectROI):
         Change part (clicked from context menu).
         """
         try:
-            kb_parts = get_kb_parts()
+            kb_parts = self.rect.m3.kb_parts
         except Exception as e:
             LOGGER.error(f"Could not get KB parts: {e}")
             return

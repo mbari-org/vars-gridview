@@ -36,12 +36,12 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from sharktopoda_client.client import SharktopodaClient
 from sharktopoda_client.dto import Localization
 
-from vars_gridview.lib import constants, m3, raziel, sql
+from vars_gridview.lib import constants, sql
 from vars_gridview.lib.boxes import BoxHandler
 from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.image_mosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER, AppLogger
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_name, get_kb_parts
+from vars_gridview.lib.m3.operations import M3ClientWrapper
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
 from vars_gridview.lib.util import parse_iso
@@ -94,25 +94,29 @@ class MainWindow(TemplateBaseClass):
         self._restore_gui()
         self._style_gui()
 
-        self.verifier = None  # The username of the current verifier
-        self.endpoints = None  # The list of endpoint data from Raziel
+        # M3 client wrapper
+        self.m3: Optional[M3ClientWrapper] = None
 
-        self.last_selected_rect = None  # Last selected ROI
+        # VARS username of the current verifier
+        self.verifier: Optional[str] = None
 
-        self.image_mosaic = (
-            None  # Image mosaic (holds the thumbnails as a grid of RectWidgets)
-        )
-        self.box_handler = None  # Box handler (handles the ROIs and annotations)
+        # Last selected ROI
+        self.last_selected_rect: Optional[RectWidget] = None
 
-        self.cached_moment_concepts = (
-            {}
-        )  # Cache for imaged moment -> set of observed concepts
+        # Image mosaic (holds the thumbnails as a grid of RectWidgets)
+        self.image_mosaic: Optional[ImageMosaic] = None
 
-        self.sharktopoda_client = None  # Sharktopoda client
-        self.sharktopoda_connected = (
-            False  # Whether the Sharktopoda client is connected
-        )
+        # Box handler (handles the ROIs and annotations)
+        self.box_handler: Optional[BoxHandler] = None
 
+        # Cache for imaged moment -> set of observed concepts
+        self.cached_moment_concepts = {}
+
+        # Sharktopoda client and connection status
+        self.sharktopoda_client = None
+        self.sharktopoda_connected = False
+
+        # File cache controller
         self.cache_controller = CacheController()
 
         # Connect signals to slots
@@ -122,7 +126,6 @@ class MainWindow(TemplateBaseClass):
         self.ui.verifySelectedButton.clicked.connect(self.verify_selected)
         self.ui.unverifySelectedButton.clicked.connect(self.unverify_selected)
         self.ui.zoomSpinBox.valueChanged.connect(self.update_zoom)
-        # self.ui.sortMethod.currentTextChanged.connect(self.update_layout)
         self.ui.hideLabeled.stateChanged.connect(self.update_layout)
         self.ui.hideUnlabeled.stateChanged.connect(self.update_layout)
         self.ui.styleComboBox.currentTextChanged.connect(self._style_gui)
@@ -139,14 +142,22 @@ class MainWindow(TemplateBaseClass):
             parent=self,
         )
 
+        self._patch_touch_events()
+
+        self._launch()
+
+    def _patch_touch_events(self):
+        """
+        Disable touch events on the ROI and ROI detail graphics views.
+
+        This is a patch for macOS, which has a bug where touch events are not properly handled.
+        """
         self.ui.roiGraphicsView.viewport().setAttribute(
             QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
         )
         self.ui.roiDetailGraphicsView.viewport().setAttribute(
             QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
         )
-
-        self._launch()
 
     @property
     def loaded(self):
@@ -196,7 +207,10 @@ class MainWindow(TemplateBaseClass):
 
     def _login_procedure(self) -> bool:
         """
-        Perform the full login + authentication procedure. Return True on success, False on fail.
+        Perform the full login + authentication procedure.
+
+        Returns:
+            True on success, False on fail
         """
         login = self._get_login()
         if login is None:  # Login failed
@@ -209,13 +223,8 @@ class MainWindow(TemplateBaseClass):
             LOGGER.debug(f"Updating Raziel URL setting to {raziel_url}")
             self._settings.raz_url.value = raziel_url
 
-        # Authenticate Raziel + get endpoint data
-        endpoints = self._auth_raziel(raziel_url, username, password)
-        if endpoints is None:  # Authentication failed
-            return False
-
-        # Authenticate M3 modules
-        ok = self._setup_m3(endpoints)
+        # Set up the M3 client wrapper
+        ok = self._setup_m3(raziel_url, username, password)
         if not ok:
             return False
 
@@ -234,34 +243,25 @@ class MainWindow(TemplateBaseClass):
                 if self.settings_dialog.exec() == QtWidgets.QDialog.DialogCode.Rejected:
                     return False
 
-        # Set the verifier and endpoint data
+        # Set the verifier
         self.verifier = username
-        self.endpoints = endpoints
 
         return True
 
-    def _auth_raziel(self, raziel_url, username, password) -> Optional[list]:
+    def _setup_m3(self, raziel_url: str, username: str, password: str) -> bool:
         """
-        Authenticate with Raziel. Return endpoints list on success, None on fail.
-        """
-        try:
-            endpoints = raziel.authenticate(raziel_url, username, password)
-            LOGGER.info(f"Authenticated user {username} at {raziel_url}")
-            return endpoints
-        except Exception as e:
-            LOGGER.error(f"Raziel authentication failed: {e}")
-            QtWidgets.QMessageBox.critical(
-                self,
-                "Authentication failed",
-                f"Failed to authenticate with the configuration server. Check your username and password.\n\n{e}",
-            )
+        Setup the M3 client wrapper.
 
-    def _setup_m3(self, endpoints: list) -> bool:
-        """
-        Setup the M3 modules from a list of authenticated Raziel endpoint dicts. Return True on success, False on fail.
+        Args:
+            raziel_url: The Raziel URL
+            username: The username
+            password: The password
+
+        Returns:
+            True on success, False on fail
         """
         try:
-            m3.setup_from_endpoint_data(endpoints)
+            self.m3 = M3ClientWrapper.from_raziel(raziel_url, username, password)
             LOGGER.info("M3 setup successful")
             return True
         except ValueError as e:
@@ -413,6 +413,7 @@ class MainWindow(TemplateBaseClass):
 
         # Create the image mosaic
         self.image_mosaic = ImageMosaic(
+            self,
             self.ui.roiGraphicsView,
             self.cache_controller,
             query_data,
@@ -442,7 +443,7 @@ class MainWindow(TemplateBaseClass):
 
         # Create the box handler
         try:
-            kb_concepts = get_kb_concepts()
+            kb_concepts = self.m3.kb_concepts
         except Exception as e:
             LOGGER.error(f"Could not get KB concepts: {e}")
             return
@@ -458,8 +459,8 @@ class MainWindow(TemplateBaseClass):
         Populate the label combo boxes
         """
         try:
-            kb_concepts = get_kb_concepts()
-            kb_parts = get_kb_parts()
+            kb_concepts = self.m3.kb_concepts
+            kb_parts = self.m3.kb_parts
         except Exception as e:
             LOGGER.error(f"Could not get KB concepts or parts: {e}")
             return
@@ -548,18 +549,18 @@ class MainWindow(TemplateBaseClass):
             )
             return
 
-        if concept not in get_kb_concepts():
+        if concept not in self.m3.kb_concepts:
             QtWidgets.QMessageBox.critical(
                 self, "Bad Concept", f'Bad concept "{concept}".'
             )
             return
-        if part not in get_kb_parts() and part != "self":
+        if part not in self.m3.kb_parts and part != "self":
             QtWidgets.QMessageBox.critical(self, "Bad Part", f'Bad part "{part}".')
             return
 
         # Remap concept name
         try:
-            remapped_concept = get_kb_name(concept)
+            remapped_concept = self.m3.get_kb_name(concept)
         except Exception as e:
             QtWidgets.QMessageBox.critical(
                 self, "Error", f'Could not get KB name for concept "{concept}": {e}'
@@ -908,7 +909,7 @@ class MainWindow(TemplateBaseClass):
         QtWidgets.QMainWindow.closeEvent(self, event)
 
     def query(self) -> Optional[dict]:
-        dialog = QueryDialog(parent=self)
+        dialog = QueryDialog(self)
         ok = dialog.exec()
         return dialog.constraints_dict() if ok else None
 

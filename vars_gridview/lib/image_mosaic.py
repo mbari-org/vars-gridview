@@ -16,16 +16,13 @@ import pyqtgraph as pg
 import requests
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib import m3
 from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.m3 import operations
+from vars_gridview.lib.m3.operations import M3ClientWrapper
 from vars_gridview.lib.sort_methods import SortMethod
 from vars_gridview.lib.util import get_timestamp, parse_iso, parse_sqlserver_native
 from vars_gridview.lib.widgets import RectWidget
-
-# from vars_gridview.lib.constants import IMAGE_TYPE
 
 
 class ImageMosaic(QtCore.QObject):
@@ -35,6 +32,7 @@ class ImageMosaic(QtCore.QObject):
 
     def __init__(
         self,
+        window,
         graphics_view: QtWidgets.QGraphicsView,
         cache_controller: CacheController,
         query_data: List[List],
@@ -44,6 +42,9 @@ class ImageMosaic(QtCore.QObject):
         zoom: float = 1.0,
     ):
         super().__init__()
+
+        # Store the parent main window
+        self.window = window
 
         self._rect_widgets: List[RectWidget] = []
         self.roi_map = {}
@@ -238,7 +239,7 @@ class ImageMosaic(QtCore.QObject):
                     if video_sequence_name not in self.video_sequences_by_name:
                         # Try to fetch
                         try:
-                            video_sequence_data = operations.get_video_sequence_by_name(
+                            video_sequence_data = self.m3.get_video_sequence_by_name(
                                 video_sequence_name
                             )
                         except Exception as e:
@@ -365,7 +366,7 @@ class ImageMosaic(QtCore.QObject):
                             f"Getting capture from beholder for moment: {imaged_moment_uuid} ({mp4_video_reference_uri} @ {elapsed_time_millis} ms)"
                         )
                         try:
-                            img_raw = m3.BEHOLDER_CLIENT.capture_raw(
+                            img_raw = self.m3.capture_raw(
                                 mp4_video_reference_uri, elapsed_time_millis
                             )
                         except Exception:
@@ -398,7 +399,7 @@ class ImageMosaic(QtCore.QObject):
                             f"Fetching image reference {image_reference_uuid} from M3"
                         )
                         try:
-                            image_reference = operations.get_image_reference(
+                            image_reference = self.m3.get_image_reference(
                                 image_reference_uuid
                             )
                         except Exception as e:
@@ -505,6 +506,7 @@ class ImageMosaic(QtCore.QObject):
                     other_locs = list(localizations)
                     other_locs.remove(localization)
                     rw = RectWidget(
+                        self.window,
                         other_locs + [localization],
                         img,
                         ancillary_data,
@@ -579,6 +581,13 @@ class ImageMosaic(QtCore.QObject):
                     "video_reference": video_reference,
                 }
 
+    @property
+    def m3(self) -> M3ClientWrapper:
+        """
+        The parent window's M3 client wrapper.
+        """
+        return self.window.m3
+
     def sort_rect_widgets(self, sort_method: SortMethod):
         """
         Sort the rect widgets
@@ -651,7 +660,8 @@ class ImageMosaic(QtCore.QObject):
         rect_widgets_to_render = [
             rw
             for rw in self._rect_widgets
-            if (not rw.is_verified and not self._hide_unlabeled) or (rw.is_verified and not self._hide_labeled)
+            if (not rw.is_verified and not self._hide_unlabeled)
+            or (rw.is_verified and not self._hide_labeled)
         ]
 
         # Hide all rect widgets that we aren't rendering
@@ -788,7 +798,7 @@ class ImageMosaic(QtCore.QObject):
                     ] = []
 
                 try:
-                    observation = operations.get_observation(
+                    observation = self.m3.get_observation(
                         observation_uuid
                     )  # Get the observation data from VARS
                     for association in observation.get("associations"):

@@ -9,12 +9,6 @@ from typing import Optional, Union
 
 import numpy as np
 
-from vars_gridview.lib.m3.operations import (
-    update_bounding_box_data,
-    update_bounding_box_part,
-    update_observation_concept,
-)
-
 
 class VARSLocalization:
     """Representation of VARS localizations (bounding boxes)"""
@@ -180,12 +174,14 @@ class VARSLocalization:
         do_modify_box = False
 
         if self._dirty_concept:
-            update_observation_concept(self.observation_uuid, self._concept, verifier)
+            self.rect.m3.update_observation_concept(
+                self.observation_uuid, self._concept, verifier
+            )
             self._dirty_concept = False
             do_modify_box = True
 
         if self._dirty_part:
-            update_bounding_box_part(self.association_uuid, self._part)
+            self.rect.m3.update_bounding_box_part(self.association_uuid, self._part)
             self._dirty_part = False
             do_modify_box = True
 
@@ -200,4 +196,4 @@ class VARSLocalization:
             self._dirty_verifier = False
 
         if do_modify_box:
-            update_bounding_box_data(self.association_uuid, self.json)
+            self.rect.m3.update_bounding_box_data(self.association_uuid, self.json)
