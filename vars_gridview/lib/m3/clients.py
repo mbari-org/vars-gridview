@@ -103,7 +103,9 @@ class M3Client:
         if self._api_key is None:
             raise ValueError("No API key provided")
 
-        response = self.post(auth_path, headers={"Authorization": f"APIKEY {api_key}"})
+        response = self.post(
+            auth_path, headers={"Authorization": f"APIKEY {self._api_key}"}
+        )
         response.raise_for_status()
 
         token = response.json()["access_token"]
