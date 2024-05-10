@@ -2,6 +2,15 @@
 
 
 
+## v0.12.0 (2024-05-10)
+
+### Feature
+
+* feat: add embedding sort
+
+Requires a CUDA-enabled GPU. ([`60798b2`](https://github.com/mbari-org/vars-gridview/commit/60798b2298d2abe931d15af5d7b5d9ec35f780da))
+
+
 ## v0.11.0 (2023-12-21)
 
 ### Feature
@@ -239,7 +248,7 @@ hooks for isort, black, and flake8. ([`cf7486b`](https://github.com/mbari-org/va
 Fixes #53 ([`cbd9ba9`](https://github.com/mbari-org/vars-gridview/commit/cbd9ba90b268f7ec90ce96558a4398926b5d30a9))
 
 
-## v0.5.0 (2023-11-28)
+## v0.5.0 (2023-11-27)
 
 ### Unknown
 
@@ -254,7 +263,7 @@ Fixes #53 ([`cbd9ba9`](https://github.com/mbari-org/vars-gridview/commit/cbd9ba9
 * Add observation observer to image info list ([`b33d4c3`](https://github.com/mbari-org/vars-gridview/commit/b33d4c3f3015b9cd22fbffe4c4289302f9d89078))
 
 
-## v0.4.8 (2023-11-28)
+## v0.4.8 (2023-11-27)
 
 ### Unknown
 
@@ -278,7 +287,7 @@ Implements #58 ([`6b5e7e9`](https://github.com/mbari-org/vars-gridview/commit/6b
 * Setup for pyinstaller build ([`4217862`](https://github.com/mbari-org/vars-gridview/commit/4217862520c507219af19d587887924bc3feff36))
 
 
-## v0.4.7 (2023-11-22)
+## v0.4.7 (2023-11-21)
 
 ### Unknown
 
@@ -291,7 +300,7 @@ Implements #58 ([`6b5e7e9`](https://github.com/mbari-org/vars-gridview/commit/6b
 * Rescale localizations for Sharktopoda 2 ([`66a4abc`](https://github.com/mbari-org/vars-gridview/commit/66a4abcd5e53da95f2315f230bf9769fb82e9bf3))
 
 
-## v0.4.6 (2023-11-21)
+## v0.4.6 (2023-11-20)
 
 ### Unknown
 
@@ -300,7 +309,7 @@ Implements #58 ([`6b5e7e9`](https://github.com/mbari-org/vars-gridview/commit/6b
 * Add setting for selection highlight color ([`4e77a08`](https://github.com/mbari-org/vars-gridview/commit/4e77a082c41ca66cc3c540a6c6451aed505f139e))
 
 
-## v0.4.5 (2023-11-17)
+## v0.4.5 (2023-11-16)
 
 ### Unknown
 
@@ -314,7 +323,7 @@ or sequence name
 Fixes #56 ([`f203824`](https://github.com/mbari-org/vars-gridview/commit/f203824c2cf93dce4b98b30d5676e3bd4e6adf0e))
 
 
-## v0.4.4 (2023-11-17)
+## v0.4.4 (2023-11-16)
 
 ### Unknown
 
@@ -322,7 +331,7 @@ Fixes #56 ([`f203824`](https://github.com/mbari-org/vars-gridview/commit/f203824
 class ([`74c91eb`](https://github.com/mbari-org/vars-gridview/commit/74c91eb10439e41f9b864de19017713a8b225b57))
 
 
-## v0.4.3 (2023-11-15)
+## v0.4.3 (2023-11-14)
 
 ### Unknown
 
@@ -333,7 +342,7 @@ class ([`74c91eb`](https://github.com/mbari-org/vars-gridview/commit/74c91eb1043
 - Save/restore style in GUI settings ([`2129a13`](https://github.com/mbari-org/vars-gridview/commit/2129a1352d56b3c00ff3981366ef9e466267be0f))
 
 
-## v0.4.2 (2023-11-14)
+## v0.4.2 (2023-11-13)
 
 ### Unknown
 
@@ -348,7 +357,7 @@ Fixes #40 ([`ff06c8f`](https://github.com/mbari-org/vars-gridview/commit/ff06c8f
 Fixes #43 ([`1b6ec10`](https://github.com/mbari-org/vars-gridview/commit/1b6ec1053a819ed36e35811b46712aa7ab578788))
 
 
-## v0.4.1 (2023-11-14)
+## v0.4.1 (2023-11-13)
 
 ### Unknown
 
@@ -356,7 +365,7 @@ Fixes #43 ([`1b6ec10`](https://github.com/mbari-org/vars-gridview/commit/1b6ec10
 in sorting, labeling, and deleting functions. Fixes #38 ([`18575cd`](https://github.com/mbari-org/vars-gridview/commit/18575cd98af846fa9d7c66c4380d9c5f4c975be3))
 
 
-## v0.4.0 (2023-11-14)
+## v0.4.0 (2023-11-13)
 
 ### Unknown
 
@@ -365,7 +374,7 @@ in sorting, labeling, and deleting functions. Fixes #38 ([`18575cd`](https://git
 * Merge branch &#39;feature/sharktopoda2&#39; into develop ([`e41312a`](https://github.com/mbari-org/vars-gridview/commit/e41312a596b3a6a59f6523166771a99cf198fd45))
 
 
-## v0.3.17 (2023-11-14)
+## v0.3.17 (2023-11-13)
 
 ### Unknown
 
@@ -381,14 +390,14 @@ get_concept method to VARSKBServerClient ([`65c3557`](https://github.com/mbari-o
 * Merge branch &#39;develop&#39; into feature/sharktopoda2 ([`9be650a`](https://github.com/mbari-org/vars-gridview/commit/9be650a53aee4478db955e699e82649270171e7c))
 
 
-## v0.3.16 (2023-11-08)
+## v0.3.16 (2023-11-07)
 
 ### Unknown
 
 * Revert conditional lookup of video info ([`a86dc93`](https://github.com/mbari-org/vars-gridview/commit/a86dc9327b624c35bee088128cb01dd724b874b9))
 
 
-## v0.3.15 (2023-11-08)
+## v0.3.15 (2023-11-07)
 
 ### Unknown
 
@@ -403,28 +412,28 @@ get_concept method to VARSKBServerClient ([`65c3557`](https://github.com/mbari-o
 * Avoid bug in pymssql value formatting ([`16ea7b4`](https://github.com/mbari-org/vars-gridview/commit/16ea7b42bbd7cec7a9b798d18e1f730b2d22d708))
 
 
-## v0.3.14 (2023-10-05)
+## v0.3.14 (2023-10-04)
 
 ### Unknown
 
 * Update video data store with datetime objects ([`4665040`](https://github.com/mbari-org/vars-gridview/commit/466504053f0c568dbd329ee313f06c0eeb7bc36c))
 
 
-## v0.3.13 (2023-10-05)
+## v0.3.13 (2023-10-04)
 
 ### Unknown
 
 * Patch fix for Apple Silicon issue ([`1e9cfd7`](https://github.com/mbari-org/vars-gridview/commit/1e9cfd7f83e1d27e82e169602a7450a48f8c7150))
 
 
-## v0.3.12 (2023-10-05)
+## v0.3.12 (2023-10-04)
 
 ### Unknown
 
 * Relax constraint on pymssql ([`6a9f86a`](https://github.com/mbari-org/vars-gridview/commit/6a9f86a9d00f404173c4d6db3ccfd0e1aaba801f))
 
 
-## v0.3.11 (2023-10-05)
+## v0.3.11 (2023-10-04)
 
 ### Unknown
 
@@ -439,7 +448,7 @@ return the string representation.
 Fixes #32 ([`5edac61`](https://github.com/mbari-org/vars-gridview/commit/5edac6106847d990044bc98d1193ff5a43ddd578))
 
 
-## v0.3.10 (2023-09-27)
+## v0.3.10 (2023-09-26)
 
 ### Unknown
 
@@ -450,7 +459,7 @@ Fixes #32 ([`5edac61`](https://github.com/mbari-org/vars-gridview/commit/5edac61
 Add resolution scaling ([`8e026ba`](https://github.com/mbari-org/vars-gridview/commit/8e026ba7e07ac8313e46ba785c79edb4d2332868))
 
 
-## v0.3.9 (2023-09-26)
+## v0.3.9 (2023-09-25)
 
 ### Unknown
 
@@ -463,7 +472,7 @@ Autorange on rect click, closes #30 ([`1620d85`](https://github.com/mbari-org/va
 * Autorange on rect click, closes #30 ([`a8c9ddb`](https://github.com/mbari-org/vars-gridview/commit/a8c9ddb50ae782e55290faeed7a4cb7ce79f8893))
 
 
-## v0.3.8 (2023-09-26)
+## v0.3.8 (2023-09-25)
 
 ### Unknown
 
@@ -482,7 +491,7 @@ Autorange on rect click, closes #30 ([`1620d85`](https://github.com/mbari-org/va
 * Background sharktopoda connect, opencv-python dep ([`08b580b`](https://github.com/mbari-org/vars-gridview/commit/08b580bd29750ddf4326dffe717b64adabe5b479))
 
 
-## v0.3.7 (2023-08-23)
+## v0.3.7 (2023-08-22)
 
 ### Unknown
 
@@ -491,7 +500,7 @@ Autorange on rect click, closes #30 ([`1620d85`](https://github.com/mbari-org/va
 * Left click select/right click menu in image ([`924041b`](https://github.com/mbari-org/vars-gridview/commit/924041b35d471c585dff698d1167a54e3960468c))
 
 
-## v0.3.6 (2023-08-23)
+## v0.3.6 (2023-08-22)
 
 ### Unknown
 
@@ -500,7 +509,7 @@ Autorange on rect click, closes #30 ([`1620d85`](https://github.com/mbari-org/va
 * Add setting for font size ([`6010d95`](https://github.com/mbari-org/vars-gridview/commit/6010d953e2336270a533d9f9c9c00fee61f0af36))
 
 
-## v0.3.5 (2023-08-22)
+## v0.3.5 (2023-08-21)
 
 ### Unknown
 
@@ -511,7 +520,7 @@ Autorange on rect click, closes #30 ([`1620d85`](https://github.com/mbari-org/va
 * Keep settings tabs updated from external changes ([`94d48ac`](https://github.com/mbari-org/vars-gridview/commit/94d48acda107c4393e27b1e6a0f232c11fbcada7))
 
 
-## v0.3.4 (2023-08-19)
+## v0.3.4 (2023-08-18)
 
 ### Unknown
 
@@ -525,7 +534,7 @@ Remove MBARI hard-coded bits ([`6e11a9d`](https://github.com/mbari-org/vars-grid
 Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79bf708b89831e7afa9d065779edd4d3c65))
 
 
-## v0.3.3 (2023-08-19)
+## v0.3.3 (2023-08-18)
 
 ### Unknown
 
@@ -536,7 +545,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Fix #26 ([`9127bd6`](https://github.com/mbari-org/vars-gridview/commit/9127bd6091302f2e70152f9dfb5212b26d7c5697))
 
 
-## v0.3.2 (2023-08-02)
+## v0.3.2 (2023-08-01)
 
 ### Unknown
 
@@ -549,7 +558,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Merge branch &#39;develop&#39; into feature/activity-observation-group-query ([`063f9a0`](https://github.com/mbari-org/vars-gridview/commit/063f9a086da5c4cac6bdcd313f7a12d1707f4147))
 
 
-## v0.3.1 (2023-08-02)
+## v0.3.1 (2023-08-01)
 
 ### Unknown
 
@@ -560,7 +569,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Support sorting by multiple values ([`0c84506`](https://github.com/mbari-org/vars-gridview/commit/0c845069ee15c14821a5af8408e3a1d6eb3f7cfd))
 
 
-## v0.3.0 (2023-06-16)
+## v0.3.0 (2023-06-15)
 
 ### Unknown
 
@@ -571,7 +580,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Begin integration ([`98028c5`](https://github.com/mbari-org/vars-gridview/commit/98028c55d60254a59d627dbd204b7973c1d1decf))
 
 
-## v0.2.8 (2023-06-14)
+## v0.2.8 (2023-06-13)
 
 ### Unknown
 
@@ -580,7 +589,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Several fixes to MP4 finding ([`d8e9601`](https://github.com/mbari-org/vars-gridview/commit/d8e9601bd85409ca769d996efe3de293efe693e4))
 
 
-## v0.2.7 (2023-06-09)
+## v0.2.7 (2023-06-08)
 
 ### Unknown
 
@@ -589,7 +598,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Guard against invalid videos ([`f33cb6c`](https://github.com/mbari-org/vars-gridview/commit/f33cb6c625c3a72041a7a351253cc4885d2d454a))
 
 
-## v0.2.6 (2023-06-09)
+## v0.2.6 (2023-06-08)
 
 ### Unknown
 
@@ -598,7 +607,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Find MP4 from any video in sequence ([`d151607`](https://github.com/mbari-org/vars-gridview/commit/d15160704c6648cb2a6cb6e6c54661708bf41d89))
 
 
-## v0.2.5 (2023-03-25)
+## v0.2.5 (2023-03-24)
 
 ### Unknown
 
@@ -607,7 +616,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Reworked open video ([`72369d0`](https://github.com/mbari-org/vars-gridview/commit/72369d06c1ee06bd502bd518f656a5d0506a4e49))
 
 
-## v0.2.4 (2023-03-23)
+## v0.2.4 (2023-03-22)
 
 ### Unknown
 
@@ -616,7 +625,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Support filter by video_sequence_name ([`1ab80fe`](https://github.com/mbari-org/vars-gridview/commit/1ab80fe6a274726ff6a0561f098076c133e9115a))
 
 
-## v0.2.3 (2023-03-23)
+## v0.2.3 (2023-03-22)
 
 ### Unknown
 
@@ -625,7 +634,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Fix #14 with explicit search for mp4 video ([`2486b4d`](https://github.com/mbari-org/vars-gridview/commit/2486b4d698415938bedf07511ce162b6c3f07320))
 
 
-## v0.2.2 (2023-03-14)
+## v0.2.2 (2023-03-13)
 
 ### Unknown
 
@@ -634,7 +643,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Fix ctrl-click deselect #15 ([`c1d6689`](https://github.com/mbari-org/vars-gridview/commit/c1d66896349164dee107d49d73b72557eeb70dd7))
 
 
-## v0.2.1 (2023-02-18)
+## v0.2.1 (2023-02-17)
 
 ### Unknown
 
@@ -643,7 +652,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Fix QRect/QRectF nit ([`471b67c`](https://github.com/mbari-org/vars-gridview/commit/471b67cbfe7cc8d436ec53fa773dd198ae7b2e5e))
 
 
-## v0.2.0 (2023-02-18)
+## v0.2.0 (2023-02-17)
 
 ### Unknown
 
@@ -684,7 +693,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Reformat with black and isort ([`711dd98`](https://github.com/mbari-org/vars-gridview/commit/711dd98c91d4ebadd85630ab39242024b337016b))
 
 
-## v0.1.1 (2023-02-04)
+## v0.1.1 (2023-02-03)
 
 ### Unknown
 
@@ -693,7 +702,7 @@ Fixes #27 ([`4010e79`](https://github.com/mbari-org/vars-gridview/commit/4010e79
 * Bump copyright year ([`3b94d5d`](https://github.com/mbari-org/vars-gridview/commit/3b94d5d7576323f29de6f05b52c1938a1e59f9bb))
 
 
-## v0.1.0 (2022-11-09)
+## v0.1.0 (2022-11-08)
 
 ### Unknown
 
