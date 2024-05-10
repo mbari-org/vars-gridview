@@ -3,6 +3,7 @@ from PyQt6 import QtCore, QtWidgets
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 from vars_gridview.ui.settings.tabs.AppearanceTab import AppearanceTab
 from vars_gridview.ui.settings.tabs.CacheTab import CacheTab
+from vars_gridview.ui.settings.tabs.EmbeddingsTab import EmbeddingsTab
 from vars_gridview.ui.settings.tabs.M3Tab import M3Tab
 from vars_gridview.ui.settings.tabs.SQLTab import SQLTab
 from vars_gridview.ui.settings.tabs.VideoPlayerTab import VideoPlayerTab
@@ -97,3 +98,4 @@ class SettingsDialog(QtWidgets.QDialog):
         self._register_tab(AppearanceTab())
         self._register_tab(VideoPlayerTab(connect_slot, connected_signal))
         self._register_tab(CacheTab(clear_cache_slot))
+        self._register_tab(EmbeddingsTab())

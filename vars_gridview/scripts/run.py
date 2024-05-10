@@ -39,6 +39,7 @@ from sharktopoda_client.dto import Localization
 from vars_gridview.lib import constants, m3, raziel, sql
 from vars_gridview.lib.boxes import BoxHandler
 from vars_gridview.lib.cache import CacheController
+from vars_gridview.lib.embedding import DreamSimEmbedding, Embedding
 from vars_gridview.lib.image_mosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER, AppLogger
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_name, get_kb_parts
@@ -99,10 +100,14 @@ class MainWindow(TemplateBaseClass):
 
         self.last_selected_rect = None  # Last selected ROI
 
-        self.image_mosaic = (
-            None  # Image mosaic (holds the thumbnails as a grid of RectWidgets)
-        )
-        self.box_handler = None  # Box handler (handles the ROIs and annotations)
+        # Image mosaic (holds the thumbnails as a grid of RectWidgets)
+        self.image_mosaic: Optional[ImageMosaic] = None
+
+        # Box handler (handles the ROIs and annotations)
+        self.box_handler: Optional[BoxHandler] = None
+
+        # Embedding model
+        self._embedding_model: Optional[Embedding] = None
 
         self.cached_moment_concepts = (
             {}
@@ -133,6 +138,9 @@ class MainWindow(TemplateBaseClass):
 
         self._settings = SettingsManager.get_instance()
         self._settings.label_font_size.valueChanged.connect(self.update_layout)
+        self._settings.embeddings_enabled.valueChanged.connect(
+            self.update_embeddings_enabled
+        )
 
         self.settings_dialog = SettingsDialog(
             self._setup_sharktopoda_client,
@@ -176,6 +184,9 @@ class MainWindow(TemplateBaseClass):
 
         # Set up the menu bar
         self._setup_menu_bar()
+
+        # Set up embeddings
+        self.update_embeddings_enabled(self._settings.embeddings_enabled.value)
 
         # Set up Sharktopoda client
         if self._settings.sharktopoda_autoconnect.value:
@@ -439,6 +450,7 @@ class MainWindow(TemplateBaseClass):
             self.rect_clicked,
             self.verifier,
             zoom=self.ui.zoomSpinBox.value() / 100,
+            embedding_model=self._embedding_model,
         )
 
         self.image_mosaic.hide_discarded = False
@@ -713,6 +725,14 @@ class MainWindow(TemplateBaseClass):
             return
 
         self.image_mosaic.update_zoom(zoom / 100)
+
+    @QtCore.pyqtSlot(object)
+    def update_embeddings_enabled(self, embeddings_enabled: bool):
+        if embeddings_enabled:
+            if self._embedding_model is None:
+                self._embedding_model = DreamSimEmbedding()
+            if self.image_mosaic is not None:
+                self.image_mosaic.update_embedding_model(self._embedding_model)
 
     @QtCore.pyqtSlot(object, object)
     def rect_clicked(self, rect: RectWidget, event: Optional[QtGui.QMouseEvent]):
@@ -1030,6 +1050,12 @@ def init_settings():
         "cache/size_mb",
         int,
         1000,
+    )
+
+    settings.embeddings_enabled = (
+        "embeddings/enabled",
+        bool,
+        constants.EMBEDDINGS_ENABLED_DEFAULT,
     )
 
 

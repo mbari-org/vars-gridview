@@ -12,8 +12,10 @@ from typing import List, Optional
 import cv2
 import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
+from scipy.spatial.distance import cosine
 
 from vars_gridview.lib.annotation import VARSLocalization
+from vars_gridview.lib.embedding import Embedding
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.settings import SettingsManager
@@ -24,6 +26,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     rectHover = QtCore.pyqtSignal(object)
 
     clicked = QtCore.pyqtSignal(object, object)  # self, event
+    similaritySort = QtCore.pyqtSignal(object, bool)  # self, same_class_only
 
     def __init__(
         self,
@@ -33,6 +36,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         video_data: dict,
         observer: str,
         localization_index: int,
+        embedding_model: Optional[Embedding] = None,
         parent=None,
         text_label="rect widget",
     ):
@@ -58,8 +62,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.is_last_selected = False
         self.is_selected = False
 
+        self._embedding_model = embedding_model
+
         self.roi = None
         self.pic = None
+        self._embedding = None
         self.update_roi_pic()
 
         self._deleted = False  # Flag to indicate if this rect widget has been deleted. Used to prevent double deletion.
@@ -132,10 +139,49 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """
         return self.localization.association_uuid
 
+    @property
+    def embedding(self):
+        if self._embedding is None:
+            self.update_embedding()
+        return self._embedding
+
+    def update_embedding(self):
+        """
+        Update the embedding value.
+
+        Raises:
+            ValueError: If the embedding model is None.
+        """
+        if self._embedding_model is None:
+            raise ValueError(
+                "Embedding model is not provided; cannot compute embedding"
+            )
+
+        self._embedding = self._embedding_model.embed(
+            self.localization.get_roi(self.image)[::-1]
+        )
+
     def update_roi_pic(self):
         self.roi = self.localization.get_roi(self.image)
         self.pic = self.getpic(self.roi)
+        if self._embedding_model is not None:
+            self.update_embedding()
         self.update()
+
+    def embedding_distance(self, other: "RectWidget") -> float:
+        """
+        Calculate the embedding distance between this rect widget and another.
+
+        Args:
+            other: The other rect widget to compare to.
+
+        Returns:
+            The embedding distance between the two rect widgets.
+        """
+        return cosine(self.embedding, other.embedding)
+
+    def update_embedding_model(self, embedding_model: Embedding):
+        self._embedding_model = embedding_model
 
     @property
     def is_verified(self) -> bool:
@@ -192,71 +238,76 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     #     self._boundingRect = thumb_widget_rect
 
     #     return thumb_widget_rect
-    
+
     @property
     def outline_x(self):
         return 0
-    
+
     @property
     def outline_y(self):
         return 0
-    
+
     @property
     def outline_width(self):
         return self.picdims[0] + self.bordersize * 2 + self.outlinesize * 2
-    
+
     @property
     def outline_height(self):
-        return self.picdims[1] + self.labelheight + self.bordersize * 2 + self.outlinesize * 2
-    
+        return (
+            self.picdims[1]
+            + self.labelheight
+            + self.bordersize * 2
+            + self.outlinesize * 2
+        )
+
     @property
     def border_x(self):
         return self.outline_x + self.outlinesize
-    
+
     @property
     def border_y(self):
         return self.outline_y + self.outlinesize
-    
+
     @property
     def border_width(self):
         return self.outline_width - self.outlinesize * 2
-    
+
     @property
     def border_height(self):
         return self.outline_height - self.outlinesize * 2
-    
+
     @property
     def pic_x(self):
         return self.border_x + self.bordersize
-    
+
     @property
     def pic_y(self):
         return self.border_y + self.bordersize
-    
+
     @property
     def pic_width(self):
         return self.picdims[0]
-    
+
     @property
     def pic_height(self):
         return self.picdims[1]
-    
+
     @property
     def label_x(self):
         return self.pic_x
-    
+
     @property
     def label_y(self):
         return self.pic_y + self.pic_height
-    
+
     @property
     def label_width(self):
         return self.pic_width
-    
+
     @property
     def label_height(self):
         return self.labelheight
-    
+
     def scale_rect(self, rect: QtCore.QRectF) -> QtCore.QRect:
         return QtCore.QRect(
             round(rect.x() * self.zoom),
@@ -264,7 +315,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             round(rect.width() * self.zoom),
             round(rect.height() * self.zoom),
         )
-    
+
     @property
     def outline_rect(self):
         rect = QtCore.QRectF(
@@ -274,7 +325,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             self.outline_height,
         )
         return self.scale_rect(rect)
-    
+
     @property
     def border_rect(self):
         rect = QtCore.QRectF(
@@ -284,7 +335,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             self.border_height,
         )
         return self.scale_rect(rect)
-    
+
     @property
     def pic_rect(self):
         rect = QtCore.QRectF(
@@ -294,7 +345,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             self.pic_height,
         )
         return self.scale_rect(rect)
-    
+
     @property
     def label_rect(self):
         rect = QtCore.QRectF(
@@ -304,7 +355,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             self.label_height,
         )
         return self.scale_rect(rect)
-    
+
     def boundingRect(self):
         return QtCore.QRectF(
             self.zoom * self.outline_x,
@@ -319,13 +370,13 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def getpic(self, roi: np.ndarray) -> QtGui.QPixmap:
         """
         Get the scaled and padded pixmap for the given ROI.
-        
+
         Fits the ROI into a square of size picdims, scaling it up or down as necessary.
         Then, pads the ROI with a border to fit the square.
-        
+
         Args:
             roi: The ROI to get the pixmap for.
-        
+
         Returns:
             The scaled and padded pixmap.
         """
@@ -333,11 +384,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         roi_height, roi_width, _ = roi.shape
         max_width = self.pic_width
         max_height = self.pic_height
-        
+
         # Scale the ROI to fit the square
         scale = min(max_width / roi_width, max_height / roi_height)
         roi = cv2.resize(roi, (0, 0), fx=scale, fy=scale)
-        
+
         # Pad the image with a border
         pad_x = (max_width - roi.shape[1]) // 2
         pad_y = (max_height - roi.shape[0]) // 2
@@ -350,7 +401,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             cv2.BORDER_CONSTANT,
             value=(45, 35, 25),
         )
-        
+
         # Convert to Qt pixmap
         qimg = self.toqimage(roi_padded)
         orpixmap = QtGui.QPixmap.fromImage(qimg)
@@ -412,10 +463,27 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         # Draw label text
         painter.drawText(
-            self.label_rect, 
-            QtCore.Qt.AlignmentFlag.AlignCenter, 
-            self.text_label
+            self.label_rect, QtCore.Qt.AlignmentFlag.AlignCenter, self.text_label
         )
 
     def mousePressEvent(self, event):
-        self.clicked.emit(self, event)
+        if event.button() == QtCore.Qt.MouseButton.LeftButton:
+            self.clicked.emit(self, event)
+        else:
+            self.handle_right_click(event)
+
+    def handle_right_click(self, event):
+        """
+        Handle a right click event. Open a context menu with options.
+        """
+        menu = QtWidgets.QMenu()
+        similarity_sort = menu.addAction("Find similar")
+        similarity_sort.triggered.connect(lambda: self.similaritySort.emit(self, False))
+        similarity_sort_same_label = menu.addAction("Find similar with same label")
+        similarity_sort_same_label.triggered.connect(
+            lambda: self.similaritySort.emit(self, True)
+        )
+        no_embedding_model = self._embedding_model is None
+        similarity_sort.setDisabled(no_embedding_model)
+        similarity_sort_same_label.setDisabled(no_embedding_model)
+        menu.exec(event.screenPos())

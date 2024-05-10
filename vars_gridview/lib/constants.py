@@ -43,3 +43,6 @@ CACHE_DIR_DEFAULT = Path(user_cache_dir(APP_NAME))
 
 # Sharktopoda
 SHARKTOPODA_APP_NAME = "Sharktopoda"
+
+# Embeddings
+EMBEDDINGS_ENABLED_DEFAULT = False

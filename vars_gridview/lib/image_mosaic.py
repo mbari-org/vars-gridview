@@ -19,6 +19,7 @@ from PyQt6 import QtCore, QtWidgets
 from vars_gridview.lib import m3
 from vars_gridview.lib.annotation import VARSLocalization
 from vars_gridview.lib.cache import CacheController
+from vars_gridview.lib.embedding import Embedding
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.sort_methods import SortMethod
@@ -42,6 +43,7 @@ class ImageMosaic(QtCore.QObject):
         rect_clicked_slot: callable,
         verifier: str,
         zoom: float = 1.0,
+        embedding_model: Optional[Embedding] = None,
     ):
         super().__init__()
 
@@ -61,6 +63,8 @@ class ImageMosaic(QtCore.QObject):
         self._init_graphics()
 
         self.cache_controller = cache_controller
+
+        self._embedding_model = embedding_model
 
         self.verifier = verifier
 
@@ -511,15 +515,35 @@ class ImageMosaic(QtCore.QObject):
                         video_data,
                         observer,
                         len(other_locs),
+                        embedding_model=self._embedding_model,
                     )
                     rw.text_label = localization.text_label
                     rw.update_zoom(zoom)
                     rw.clicked.connect(rect_clicked_slot)
+                    rw.similaritySort.connect(self._similarity_sort_slot)
                     self._rect_widgets.append(rw)
 
                     localization.rect = rw  # Back reference
 
                     self.n_localizations += 1
+
+    def _similarity_sort_slot(self, clicked_rect: RectWidget, same_class_only: bool):
+        def key(rect_widget: RectWidget) -> float:
+            if same_class_only and clicked_rect.text_label != rect_widget.text_label:
+                return float("inf")
+            return clicked_rect.embedding_distance(rect_widget)
+
+        # Sort the rects by distance
+        self._rect_widgets.sort(key=key)
+
+        # Re-render the mosaic
+        self.render_mosaic()
+
+    def update_embedding_model(self, embedding_model: Embedding):
+        self._embedding_model = embedding_model
+        for rect_widget in self._rect_widgets:
+            rect_widget.update_embedding_model(embedding_model)
+            rect_widget.update_embedding()
 
     def find_mp4_video_data(
         self, video_sequence_name: str, timestamp: datetime
@@ -651,7 +675,8 @@ class ImageMosaic(QtCore.QObject):
         rect_widgets_to_render = [
             rw
             for rw in self._rect_widgets
-            if (not rw.is_verified and not self._hide_unlabeled) or (rw.is_verified and not self._hide_labeled)
+            if (not rw.is_verified and not self._hide_unlabeled)
+            or (rw.is_verified and not self._hide_labeled)
         ]
 
         # Hide all rect widgets that we aren't rendering
