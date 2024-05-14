@@ -4,6 +4,7 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/language-Python-blue.svg)](https://www.python.org/downloads/)
+[![.github/workflows/ci.yml](https://github.com/mbari-org/vars-gridview/actions/workflows/ci.yml/badge.svg)](https://github.com/mbari-org/vars-gridview/actions/workflows/ci.yml)
 
 Authors: Kevin Barnard ([kbarnard@mbari.org](mailto:kbarnard@mbari.org)), Paul Roberts ([proberts@mbari.org](mailto:proberts@mbari.org))
 
