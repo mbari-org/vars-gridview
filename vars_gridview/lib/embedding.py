@@ -2,10 +2,35 @@ from abc import ABC
 from pathlib import Path
 
 import numpy as np
+import torch
 from dreamsim import dreamsim
 from PIL import Image
+from torch.types import Device
 
 from vars_gridview.lib.settings import SettingsManager
+
+
+def get_torch_device() -> Device:
+    """
+    Get the appropriate torch device for embedding computation.
+
+    Returns:
+        Device: torch device instance.
+    """
+    # Define an ordered list of predicates to check the device availability and its corresponding device string
+    device_check_order = [
+        (torch.cuda.is_available, "cuda"),
+        (torch.backends.mps.is_available, "mps"),
+    ]
+
+    # Check each predicate in order, returning the first device that is present
+    for check, device_str in device_check_order:
+        present = check()
+        if present:
+            return device_str
+
+    # Failing all, use CPU
+    return "cpu"
 
 
 class Embedding(ABC):
@@ -38,17 +63,20 @@ class DreamSimEmbedding(Embedding):
         base_cache_dir = Path(settings.cache_dir.value)
         dreamsim_cache_dir = base_cache_dir / DreamSimEmbedding.CACHE_SUBDIR_NAME
 
+        # Get the appropriate torch device
+        self._device = get_torch_device()
+
         # Download / load the models
         self._model, self._preprocess = dreamsim(
             pretrained=True,
-            device="cuda",
+            device=self._device,
             cache_dir=str(dreamsim_cache_dir.resolve().absolute()),
         )
 
     def embed(self, image: np.ndarray) -> np.ndarray:
         # Preprocess the image
         image_pil = Image.fromarray(image)
-        image_tensor = self._preprocess(image_pil).cuda()
+        image_tensor = self._preprocess(image_pil).to(self._device)
 
         # Compute the embedding
         embedding = self._model.embed(image_tensor).cpu().detach().numpy().flatten()
