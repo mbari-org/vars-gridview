@@ -2,6 +2,19 @@
 
 
 
+## v0.12.1 (2024-05-14)
+
+### Performance
+
+* perf: use best available torch backend for embedding
+
+Automatically detect and use the best available backend for PyTorch. This is used to specify the device on which to compute the embeddings. Currently, this searches in order:
+1. CUDA
+2. MPS
+
+If no device is available, this process will fall back on the CPU. ([`59dcc06`](https://github.com/mbari-org/vars-gridview/commit/59dcc06eaeaa6db7e833c55caf7d8871fdbbab73))
+
+
 ## v0.12.0 (2024-05-10)
 
 ### Feature
