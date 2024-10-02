@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, List, Tuple
 
+import cv2
 import numpy as np
 
 from vars_gridview.lib.widgets import RectWidget
@@ -185,6 +186,16 @@ class DepthSort(SortMethod):
             depth = 0.0
 
         return depth
+
+
+class LaplacianVarianceSort(SortMethod):
+    NAME = "Sharpness"
+    
+    @staticmethod
+    def key(rect: RectWidget) -> float:
+        roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
+        lap_var = cv2.Laplacian(roi_gray, cv2.CV_64F).var()
+        return lap_var
 
 
 def localization_meta_sort(key: str, default: Any) -> SortMethod:
