@@ -1,4 +1,4 @@
-from typing import Any, Iterable, List, Optional
+from typing import Any, Iterable, List, Optional, Tuple
 from uuid import UUID
 
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, pyqtSlot
@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QLineEdit,
     QListView,
+    QListWidget,
     QMessageBox,
     QPushButton,
     QStyle,
@@ -46,6 +47,81 @@ class Filter:
 
     def __call__(self) -> Optional[Result]:
         raise NotImplementedError()
+
+
+class BulkUUIDInputDialog(QDialog):
+    """
+    Dialog that allows the user to input multiple UUIDs at once.
+
+    The UUIDs should be delimited by commas, spaces, or newlines.
+
+    The parsed UUIDs should be rendered in a QListWidget.
+    """
+
+    def __init__(self, parent: QWidget | None = ...) -> None:
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+
+        # Input field for UUIDs
+        self._uuid_input = QLineEdit()
+        self._uuid_input.setPlaceholderText(
+            "Enter UUIDs separated by commas, spaces, or newlines"
+        )
+        layout.addWidget(self._uuid_input)
+
+        # Buttons to add and delete UUIDs
+        button_layout = QHBoxLayout()
+        self._add_button = QPushButton("Add UUIDs")
+        self._delete_button = QPushButton("Delete Selected")
+        button_layout.addWidget(self._add_button)
+        button_layout.addWidget(self._delete_button)
+        layout.addLayout(button_layout)
+
+        # List widget to display UUIDs
+        self._uuid_list = QListWidget()
+        self._uuid_list.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
+        layout.addWidget(self._uuid_list)
+
+        # Dialog buttons
+        self.dialog_buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        layout.addWidget(self.dialog_buttons)
+
+        # Connect signals to slots
+        self._add_button.clicked.connect(self.add_uuids)
+        self._delete_button.clicked.connect(self.delete_selected_uuids)
+        self.dialog_buttons.accepted.connect(self.accept)
+        self.dialog_buttons.rejected.connect(self.reject)
+
+    def add_uuids(self):
+        input_text = self._uuid_input.text()
+        uuids = [uuid.strip().lower() for uuid in input_text.replace(",", " ").split()]
+        for uuid in uuids:
+            if uuid and not self._uuid_list.findItems(uuid, Qt.MatchFlag.MatchExactly):
+                self._uuid_list.addItem(uuid)
+        self._uuid_input.clear()
+
+    def delete_selected_uuids(self):
+        selected_items = self._uuid_list.selectedItems()
+        for item in selected_items:
+            self._uuid_list.takeItem(self._uuid_list.row(item))
+
+    @classmethod
+    def get_uuids(
+        cls, title: str = "Enter UUIDs", parent: QWidget | None = ...
+    ) -> Tuple[List[str], bool]:
+        dialog = cls(parent)
+        dialog.setWindowTitle(title)
+        dialog.resize(450, 300)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            return [
+                dialog._uuid_list.item(i).text()
+                for i in range(dialog._uuid_list.count())
+            ], True
+        return [], False
 
 
 class ConceptFilter(Filter):
@@ -205,152 +281,208 @@ class ObserverFilter(Filter):
 
 class ImagedMomentUUIDFilter(Filter):
     class Result(Filter.Result):
-        def __init__(self, imaged_moment_uuid: str):
-            self.imaged_moment_uuid = imaged_moment_uuid
+        def __init__(self, imaged_moment_uuids: List[str]):
+            self.imaged_moment_uuids = imaged_moment_uuids
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("imaged_moment_uuid", self.imaged_moment_uuid)
+            for uuid in self.imaged_moment_uuids:
+                yield Constraint("imaged_moment_uuid", uuid)
 
         def __str__(self) -> str:
-            return "Imaged moment UUID: {}".format(self.imaged_moment_uuid)
+            if len(self.imaged_moment_uuids) == 1:
+                return "Imaged moment UUID: {}".format(self.imaged_moment_uuids[0])
+            return "Imaged moment UUIDs ({} items)".format(
+                len(self.imaged_moment_uuids)
+            )
 
     def __call__(self) -> Optional[Result]:
-        imaged_moment_uuid, ok = QInputDialog.getText(
-            self.parent,
-            "Imaged moment UUID",
-            "Imaged moment UUID",
-            QLineEdit.EchoMode.Normal,
-            "",
+        imaged_moment_uuids, ok = BulkUUIDInputDialog.get_uuids(
+            "Imaged moment UUIDs", self.parent
         )
         if ok:
-            # Ensure that the UUID is valid
-            try:
-                UUID(imaged_moment_uuid)
-            except ValueError:
-                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
+            # If no UUIDs were entered, return None
+            if not imaged_moment_uuids:
                 return None
-            return ImagedMomentUUIDFilter.Result(imaged_moment_uuid.lower())
+
+            # Validate all the UUIDs
+            for imaged_moment_uuid in imaged_moment_uuids:
+                try:
+                    UUID(imaged_moment_uuid)
+                except ValueError:
+                    QMessageBox.warning(
+                        self.parent,
+                        "Invalid UUID",
+                        "The UUID '{}' is invalid.".format(imaged_moment_uuid),
+                    )
+                    return None
+
+            # Return the result
+            return ImagedMomentUUIDFilter.Result(imaged_moment_uuids)
 
 
 class ObservationUUIDFilter(Filter):
     class Result(Filter.Result):
-        def __init__(self, observation_uuid: str):
-            self.observation_uuid = observation_uuid
+        def __init__(self, observation_uuids: List[str]):
+            self.observation_uuids = observation_uuids
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("anno.observation_uuid", self.observation_uuid)
+            for uuid in self.observation_uuids:
+                yield Constraint("observation_uuid", uuid)
 
         def __str__(self) -> str:
-            return "Observation UUID: {}".format(self.observation_uuid)
+            if len(self.observation_uuids) == 1:
+                return "Observation UUID: {}".format(self.observation_uuids[0])
+            return "Observation UUIDs ({} items)".format(len(self.observation_uuids))
 
     def __call__(self) -> Optional[Result]:
-        observation_uuid, ok = QInputDialog.getText(
-            self.parent,
-            "Observation UUID",
-            "Observation UUID",
-            QLineEdit.EchoMode.Normal,
-            "",
+        observation_uuids, ok = BulkUUIDInputDialog.get_uuids(
+            "Observation UUIDs", self.parent
         )
         if ok:
-            # Ensure that the UUID is valid
-            try:
-                UUID(observation_uuid)
-            except ValueError:
-                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
+            # If no UUIDs were entered, return None
+            if not observation_uuids:
                 return None
-            return ObservationUUIDFilter.Result(observation_uuid.lower())
+
+            # Validate all the UUIDs
+            for observation_uuid in observation_uuids:
+                try:
+                    UUID(observation_uuid)
+                except ValueError:
+                    QMessageBox.warning(
+                        self.parent,
+                        "Invalid UUID",
+                        "The UUID '{}' is invalid.".format(observation_uuid),
+                    )
+                    return None
+
+            # Return the result
+            return ObservationUUIDFilter.Result(observation_uuids)
 
 
 class AssociationUUIDFilter(Filter):
     class Result(Filter.Result):
-        def __init__(self, association_uuid: str):
-            self.association_uuid = association_uuid
+        def __init__(self, association_uuids: List[str]):
+            self.association_uuids = association_uuids
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("assoc.uuid", self.association_uuid)
+            for uuid in self.association_uuids:
+                yield Constraint("association_uuid", uuid)
 
         def __str__(self) -> str:
-            return "Association UUID: {}".format(self.association_uuid)
+            if len(self.association_uuids) == 1:
+                return "Association UUID: {}".format(self.association_uuids[0])
+            return "Association UUIDs ({} items)".format(len(self.association_uuids))
 
     def __call__(self) -> Optional[Result]:
-        association_uuid, ok = QInputDialog.getText(
-            self.parent,
-            "Association UUID",
-            "Association UUID",
-            QLineEdit.EchoMode.Normal,
-            "",
+        association_uuids, ok = BulkUUIDInputDialog.get_uuids(
+            "Association UUIDs", self.parent
         )
         if ok:
-            # Ensure that the UUID is valid
-            try:
-                UUID(association_uuid)
-            except ValueError:
-                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
+            # If no UUIDs were entered, return None
+            if not association_uuids:
                 return None
-            return AssociationUUIDFilter.Result(association_uuid.lower())
+
+            # Validate all the UUIDs
+            for association_uuid in association_uuids:
+                try:
+                    UUID(association_uuid)
+                except ValueError:
+                    QMessageBox.warning(
+                        self.parent,
+                        "Invalid UUID",
+                        "The UUID '{}' is invalid.".format(association_uuid),
+                    )
+                    return None
+
+            # Return the result
+            return AssociationUUIDFilter.Result(association_uuids)
 
 
 class ImageReferenceUUIDFilter(Filter):
     class Result(Filter.Result):
-        def __init__(self, image_reference_uuid: str):
-            self.image_reference_uuid = image_reference_uuid
+        def __init__(self, image_reference_uuids: List[str]):
+            self.image_reference_uuids = image_reference_uuids
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("image_reference_uuid", self.image_reference_uuid)
+            for uuid in self.image_reference_uuids:
+                yield Constraint("image_reference_uuid", uuid)
 
         def __str__(self) -> str:
-            return "Image reference UUID: {}".format(self.image_reference_uuid)
+            if len(self.image_reference_uuids) == 1:
+                return "Image reference UUID: {}".format(self.image_reference_uuids[0])
+            return "Image reference UUIDs ({} items)".format(
+                len(self.image_reference_uuids)
+            )
 
     def __call__(self) -> Optional[Result]:
-        image_reference_uuid, ok = QInputDialog.getText(
-            self.parent,
-            "Image reference UUID",
-            "Image reference UUID",
-            QLineEdit.EchoMode.Normal,
-            "",
+        image_reference_uuids, ok = BulkUUIDInputDialog.get_uuids(
+            "Image reference UUIDs", self.parent
         )
         if ok:
-            # Ensure that the UUID is valid
-            try:
-                UUID(image_reference_uuid)
-            except ValueError:
-                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
+            # If no UUIDs were entered, return None
+            if not image_reference_uuids:
                 return None
-            return ImageReferenceUUIDFilter.Result(image_reference_uuid.lower())
+
+            # Validate all the UUIDs
+            for image_reference_uuid in image_reference_uuids:
+                try:
+                    UUID(image_reference_uuid)
+                except ValueError:
+                    QMessageBox.warning(
+                        self.parent,
+                        "Invalid UUID",
+                        "The UUID '{}' is invalid.".format(image_reference_uuid),
+                    )
+                    return None
+
+            # Return the result
+            return ImageReferenceUUIDFilter.Result(image_reference_uuids)
 
 
 class VideoReferenceUUIDFilter(Filter):
     class Result(Filter.Result):
-        def __init__(self, video_reference_uuid: str):
-            self.video_reference_uuid = video_reference_uuid
+        def __init__(self, video_reference_uuids: List[str]):
+            self.video_reference_uuids = video_reference_uuids
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("video_reference_uuid", self.video_reference_uuid)
+            for uuid in self.video_reference_uuids:
+                yield Constraint("video_reference_uuid", uuid)
 
         def __str__(self) -> str:
-            return "Video reference UUID: {}".format(self.video_reference_uuid)
+            if len(self.video_reference_uuids) == 1:
+                return "Video reference UUID: {}".format(self.video_reference_uuids[0])
+            return "Video reference UUIDs ({} items)".format(
+                len(self.video_reference_uuids)
+            )
 
     def __call__(self) -> Optional[Result]:
-        video_reference_uuid, ok = QInputDialog.getText(
-            self.parent,
-            "Video reference UUID",
-            "Video reference UUID",
-            QLineEdit.EchoMode.Normal,
-            "",
+        video_reference_uuids, ok = BulkUUIDInputDialog.get_uuids(
+            "Video reference UUIDs", self.parent
         )
         if ok:
-            # Ensure that the UUID is valid
-            try:
-                UUID(video_reference_uuid)
-            except ValueError:
-                QMessageBox.warning(self.parent, "Invalid UUID", "The UUID is invalid.")
+            # If no UUIDs were entered, return None
+            if not video_reference_uuids:
                 return None
-            return VideoReferenceUUIDFilter.Result(video_reference_uuid.lower())
+
+            # Validate all the UUIDs
+            for video_reference_uuid in video_reference_uuids:
+                try:
+                    UUID(video_reference_uuid)
+                except ValueError:
+                    QMessageBox.warning(
+                        self.parent,
+                        "Invalid UUID",
+                        "The UUID '{}' is invalid.".format(video_reference_uuid),
+                    )
+                    return None
+
+            # Return the result
+            return VideoReferenceUUIDFilter.Result(video_reference_uuids)
 
 
 class ActivityFilter(Filter):
