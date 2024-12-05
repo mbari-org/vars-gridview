@@ -730,7 +730,16 @@ class MainWindow(TemplateBaseClass):
     def update_embeddings_enabled(self, embeddings_enabled: bool):
         if embeddings_enabled:
             if self._embedding_model is None:
-                self._embedding_model = DreamSimEmbedding()
+                try:
+                    self._embedding_model = DreamSimEmbedding()
+                except Exception as e:
+                    LOGGER.error(f"Could not create embedding model: {e}")
+                    QtWidgets.QMessageBox.critical(
+                        self,
+                        "Error",
+                        f"Could not create embedding model: {e}",
+                    )
+                    return
             if self.image_mosaic is not None:
                 self.image_mosaic.update_embedding_model(self._embedding_model)
 
