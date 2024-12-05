@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.15.0 (2024-12-05)
+
+### Bug Fixes
+
+- Handle errors when creating embedding model in MainWindow
+  ([`ac8f4b4`](https://github.com/mbari-org/vars-gridview/commit/ac8f4b413d3efba542d7553510bc8ceee22dcb74))
+
+### Features
+
+- Add new intensity and hue variance sort methods
+  ([`b13875b`](https://github.com/mbari-org/vars-gridview/commit/b13875b91279b2fbf3b984a171ea1a6ef6cef9e4))
+
+
 ## v0.14.0 (2024-11-13)
 
 ### Features
@@ -58,11 +71,11 @@ Requires a CUDA-enabled GPU.
 - Grab focus in login dialog on startup
   ([`0995775`](https://github.com/mbari-org/vars-gridview/commit/0995775ffdd7f66c38364410669d7e4686194f2e))
 
-- Update observation UUID constraint
-  ([`946779f`](https://github.com/mbari-org/vars-gridview/commit/946779f5e238ca6e9a994b11bda6b50825a9132f))
-
 - Open into log directory in macOS
   ([`aa6d37d`](https://github.com/mbari-org/vars-gridview/commit/aa6d37ddb5a6f369e298ce44e7d374fd3659881a))
+
+- Update observation UUID constraint
+  ([`946779f`](https://github.com/mbari-org/vars-gridview/commit/946779f5e238ca6e9a994b11bda6b50825a9132f))
 
 ### Features
 
@@ -90,9 +103,6 @@ Requires a CUDA-enabled GPU.
 
 ### Bug Fixes
 
-- Maintain sort options in dialog, don't auto re-sort
-  ([`abfd1b9`](https://github.com/mbari-org/vars-gridview/commit/abfd1b94e7c1309e07a07abdd8dc989ba21e18cc))
-
 - Add error dialog when saving localizations fails
   ([`cf92bb3`](https://github.com/mbari-org/vars-gridview/commit/cf92bb3a9887a073599c268c2009baf66fe07785))
 
@@ -101,6 +111,9 @@ Requires a CUDA-enabled GPU.
 
 Related to #49
 
+- Maintain sort options in dialog, don't auto re-sort
+  ([`abfd1b9`](https://github.com/mbari-org/vars-gridview/commit/abfd1b94e7c1309e07a07abdd8dc989ba21e18cc))
+
 ### Chores
 
 - Add macOS build script
@@ -108,27 +121,23 @@ Related to #49
 
 ### Features
 
-- Add sort by confidence
-  ([`151f8b9`](https://github.com/mbari-org/vars-gridview/commit/151f8b92c536e5d7c7be5d71cb1aa6673d8c1a30))
-
-Closes #63
-
 - Add "hide unverified" button
   ([`52b477d`](https://github.com/mbari-org/vars-gridview/commit/52b477d6809262b7d9f8e9f1d32207ed64e4fcc3))
 
 Closes #55
+
+- Add sort by confidence
+  ([`151f8b9`](https://github.com/mbari-org/vars-gridview/commit/151f8b92c536e5d7c7be5d71cb1aa6673d8c1a30))
+
+Closes #63
 
 
 ## v0.8.1 (2023-12-12)
 
 ### Bug Fixes
 
-- Turn off touch events re: macOS QTBUG-103935
-  ([`3bfc0d7`](https://github.com/mbari-org/vars-gridview/commit/3bfc0d76b14e4eba4cbc3de0c7574193840c7bde))
-
-Set attribte WA_AcceptTouchEvents to false in GraphicsViews. See QTBUG-103935 for details.
-
-This resolves the "qt.pointer.dispath: Skipping QEventPoint" message spam issue in the terminal.
+- Fix parsing of native timestamp with tzoffset
+  ([`2cf39f2`](https://github.com/mbari-org/vars-gridview/commit/2cf39f250d572b194258ba9d1529e86c995bf950))
 
 - Run 'open -a' command when showing in S2
   ([`5cf7307`](https://github.com/mbari-org/vars-gridview/commit/5cf7307cfa78989c5b12ef11c5001e027fde6dc5))
@@ -136,8 +145,12 @@ This resolves the "qt.pointer.dispath: Skipping QEventPoint" message spam issue 
 On macOS, call 'open -a' to open Sharktopoda 2 (or bring it to the forefront if it's already open)
   when showing a localization. (#42)
 
-- Fix parsing of native timestamp with tzoffset
-  ([`2cf39f2`](https://github.com/mbari-org/vars-gridview/commit/2cf39f250d572b194258ba9d1529e86c995bf950))
+- Turn off touch events re: macOS QTBUG-103935
+  ([`3bfc0d7`](https://github.com/mbari-org/vars-gridview/commit/3bfc0d76b14e4eba4cbc3de0c7574193840c7bde))
+
+Set attribte WA_AcceptTouchEvents to false in GraphicsViews. See QTBUG-103935 for details.
+
+This resolves the "qt.pointer.dispath: Skipping QEventPoint" message spam issue in the terminal.
 
 ### Chores
 
@@ -209,11 +222,11 @@ Defaults to on.
 
 ### Features
 
-- Integrate initial image caching
-  ([`62637f5`](https://github.com/mbari-org/vars-gridview/commit/62637f5ba38ff2816c2d384cb1447a143ff69d7a))
-
 - Add cache controller and settings UI
   ([`22a0e15`](https://github.com/mbari-org/vars-gridview/commit/22a0e15f5d31619b860d4fa6cc67ce57e62afb8c))
+
+- Integrate initial image caching
+  ([`62637f5`](https://github.com/mbari-org/vars-gridview/commit/62637f5ba38ff2816c2d384cb1447a143ff69d7a))
 
 
 ## v0.5.4 (2023-11-30)
