@@ -122,36 +122,44 @@ class AreaSort(SortMethod):
         return WidthSort.key(rect) * HeightSort.key(rect)
 
 
-class MeanIntensitySort(SortMethod):
-    NAME = "Mean intensity"
+class IntensityMeanSort(SortMethod):
+    NAME = "Intensity mean"
 
     @staticmethod
     def key(rect: RectWidget) -> float:
         return np.mean(rect.roi, axis=(0, 1, 2))
 
 
-class MeanHueSort(SortMethod):
-    NAME = "Mean hue"
+class IntensityVarianceSort(SortMethod):
+    NAME = "Inteinsity variance"
 
     @staticmethod
     def key(rect: RectWidget) -> float:
-        # RGB -> Hue from https://stackoverflow.com/a/23094494
-        means = np.mean(rect.roi, axis=(0, 1))
-        means = means / 255
-        r, g, b = means
-        min_idx, min_val = min(enumerate(means), key=lambda x: x[1])
-        max_val = max(means)
-
-        if min_idx == 0:
-            return (g - b) / (max_val - min_val)
-        elif min_idx == 1:
-            return 2 + (b - r) / (max_val - min_val)
-        else:
-            return 4 + (r - g) / (max_val - min_val)
+        return np.var(rect.roi, axis=(0, 1, 2))
 
 
-class RegionMeanHueSort(SortMethod):
-    NAME = "Region mean hue (center 1/3)"
+class HueMeanSort(SortMethod):
+    NAME = "Hue mean"
+
+    @staticmethod
+    def key(rect: RectWidget) -> float:
+        roi_hsv = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2HSV)
+        hue = roi_hsv[:, :, 0]
+        return np.mean(hue.ravel())
+
+
+class HueVarianceSort(SortMethod):
+    NAME = "Hue variance"
+
+    @staticmethod
+    def key(rect: RectWidget) -> float:
+        roi_hsv = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2HSV)
+        hue = roi_hsv[:, :, 0]
+        return np.var(hue.ravel())
+
+
+class HueMeanCenterRegion(SortMethod):
+    NAME = "Hue mean (center region)"
 
     @staticmethod
     def key(rect: RectWidget) -> float:
@@ -159,20 +167,10 @@ class RegionMeanHueSort(SortMethod):
             rect.localization.height // 3 : rect.localization.height * 2 // 3,
             rect.localization.width // 3 : rect.localization.width * 2 // 3,
         ]
-
-        # RGB -> Hue from https://stackoverflow.com/a/23094494
-        means = np.mean(sub_roi, axis=(0, 1))
-        means = means / 255
-        r, g, b = means
-        min_idx, min_val = min(enumerate(means), key=lambda x: x[1])
-        max_val = max(means)
-
-        if min_idx == 0:
-            return (g - b) / (max_val - min_val)
-        elif min_idx == 1:
-            return 2 + (b - r) / (max_val - min_val)
-        else:
-            return 4 + (r - g) / (max_val - min_val)
+        
+        roi_hsv = cv2.cvtColor(sub_roi, cv2.COLOR_BGR2HSV)
+        hue = roi_hsv[:, :, 0]
+        return np.mean(hue.ravel())
 
 
 class DepthSort(SortMethod):
@@ -190,7 +188,7 @@ class DepthSort(SortMethod):
 
 class LaplacianVarianceSort(SortMethod):
     NAME = "Sharpness"
-    
+
     @staticmethod
     def key(rect: RectWidget) -> float:
         roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
