@@ -8,13 +8,13 @@ Distributed under MIT license. See license.txt for more infomation.
 
 from datetime import datetime, timedelta
 from typing import List, Optional
-from uuid import UUID
 
 import cv2
 import numpy as np
 import pyqtgraph as pg
 import requests
 from PyQt6 import QtCore, QtWidgets
+from iso8601 import parse_date
 
 from vars_gridview.lib import m3
 from vars_gridview.lib.annotation import VARSLocalization
@@ -23,7 +23,7 @@ from vars_gridview.lib.embedding import Embedding
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.sort_methods import SortMethod
-from vars_gridview.lib.util import get_timestamp, parse_iso, parse_sqlserver_native
+from vars_gridview.lib.util import get_timestamp
 from vars_gridview.lib.widgets import RectWidget
 
 # from vars_gridview.lib.constants import IMAGE_TYPE
@@ -94,10 +94,6 @@ class ImageMosaic(QtCore.QObject):
                 dict(zip(query_headers, i)) for i in query_data
             ):  # TODO Make pagination
                 progress += 1
-
-                for k, v in query_item.items():  # Stringify UUID objects
-                    if isinstance(v, UUID):
-                        query_item[k] = str(v)
 
                 # Extract fields
                 imaged_moment_uuid = query_item["imaged_moment_uuid"]
@@ -174,19 +170,14 @@ class ImageMosaic(QtCore.QObject):
                 video_start_timestamp = video_data["video_start_timestamp"]
 
                 # Handle string timestamps (convert to datetime)
-                # Note: This is only apparently an issue with FreeTDS (what pymssql uses) on Apple Silicon
-                if isinstance(recorded_timestamp, str):
-                    recorded_timestamp = parse_sqlserver_native(recorded_timestamp)
-                    video_data[
-                        "index_recorded_timestamp"
-                    ] = recorded_timestamp  # Update the video data dict for downstream use
-                if isinstance(video_start_timestamp, str):
-                    video_start_timestamp = parse_sqlserver_native(
-                        video_start_timestamp
-                    )
-                    video_data[
-                        "video_start_timestamp"
-                    ] = video_start_timestamp  # Update the video data dict for downstream use
+                recorded_timestamp = parse_date(recorded_timestamp)
+                video_data[
+                    "index_recorded_timestamp"
+                ] = recorded_timestamp  # Update the video data dict for downstream use
+                video_start_timestamp = parse_date(video_start_timestamp)
+                video_data[
+                    "video_start_timestamp"
+                ] = video_start_timestamp  # Update the video data dict for downstream use
 
                 # ------------------
 
@@ -340,7 +331,7 @@ class ImageMosaic(QtCore.QObject):
                     mp4_video_reference_uri = mp4_video_data["video_reference"]["uri"]
                     mp4_width = mp4_video_data["video_reference"]["width"]
                     mp4_height = mp4_video_data["video_reference"]["height"]
-                    mp4_video_start_timestamp = parse_iso(
+                    mp4_video_start_timestamp = parse_date(
                         mp4_video_data["video"]["start_timestamp"]
                     )  # datetime
                     moment_timestamp = self.moment_timestamps[imaged_moment_uuid]
@@ -396,7 +387,7 @@ class ImageMosaic(QtCore.QObject):
                     # Get the URL for the image reference, if we have it
                     url = self.image_reference_urls.get(image_reference_uuid, None)
 
-                    # If we don't have the image reference URL (wasn't fetched during SQL query), try to fetch it and update the URL
+                    # If we don't have the image reference URL (wasn't fetched during query), try to fetch it and update the URL
                     if url is None:
                         LOGGER.debug(
                             f"Fetching image reference {image_reference_uuid} from M3"
@@ -579,7 +570,7 @@ class ImageMosaic(QtCore.QObject):
                 continue
 
             # Compute datetime start-end range
-            video_start_timestamp = parse_iso(video_start_timestamp)
+            video_start_timestamp = parse_date(video_start_timestamp)
             video_end_timestamp = video_start_timestamp + timedelta(
                 milliseconds=video_duration_millis
             )

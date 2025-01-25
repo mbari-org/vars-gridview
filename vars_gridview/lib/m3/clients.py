@@ -5,6 +5,8 @@ M3 REST API clients.
 import requests
 import requests.auth
 
+from vars_gridview.lib.m3.query import QueryRequest
+
 
 class JWTAuth(requests.auth.AuthBase):
     """
@@ -145,6 +147,12 @@ class AnnosaurusClient(M3Client):
 
     def get_image_reference(self, image_reference_uuid: str) -> requests.Response:
         return self.get(f"/imagereferences/{image_reference_uuid}")
+
+    def query(self, query_request: QueryRequest) -> requests.Response:
+        return self.post("/query/run", json=query_request.to_dict())
+
+    def count(self, query_request: QueryRequest) -> requests.Response:
+        return self.post("/query/count", json=query_request.to_dict())
 
 
 class VampireSquidClient(M3Client):

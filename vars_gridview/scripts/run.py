@@ -35,6 +35,7 @@ import qdarkstyle
 from PyQt6 import QtCore, QtGui, QtWidgets
 from sharktopoda_client.client import SharktopodaClient
 from sharktopoda_client.dto import Localization
+from iso8601 import parse_date
 
 from vars_gridview.lib import constants, m3, raziel, sql
 from vars_gridview.lib.boxes import BoxHandler
@@ -42,10 +43,11 @@ from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.embedding import DreamSimEmbedding, Embedding
 from vars_gridview.lib.image_mosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER, AppLogger
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_name, get_kb_parts
+from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_name, get_kb_parts, query
+from vars_gridview.lib.m3.query import QueryConstraint, QueryRequest, parse_tsv
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
-from vars_gridview.lib.util import open_file_browser, parse_iso
+from vars_gridview.lib.util import open_file_browser
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
 from vars_gridview.ui.LoginDialog import LoginDialog
@@ -234,21 +236,6 @@ class MainWindow(TemplateBaseClass):
         ok = self._setup_m3(endpoints)
         if not ok:
             return False
-
-        # Connect to the database
-        while True:
-            try:
-                sql.connect_from_settings()
-                break
-            except Exception as e:
-                LOGGER.error(f"Could not connect to SQL server: {e}")
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    "SQL connection failed",
-                    f"Could not connect to the SQL server. Check the database URL and your username and password.\n\n{e}",
-                )
-                if self.settings_dialog.exec() == QtWidgets.QDialog.DialogCode.Rejected:
-                    return False
 
         # Set the verifier and endpoint data
         self.verifier = username
@@ -439,13 +426,62 @@ class MainWindow(TemplateBaseClass):
             self.box_handler = None
 
         # Run the query
-        query_data, query_headers = sql.query(constraint_dict)
+        constraint_spec = sql.ConstraintSpec.from_dict(constraint_dict)
+        query_request = QueryRequest(
+            select=[
+                "imaged_moment_uuid",
+                "image_reference_uuid",
+                "observation_uuid",
+                "video_reference_uuid",
+                "index_elapsed_time_millis",
+                "index_recorded_timestamp",
+                "index_timecode",
+                "video_start_timestamp",
+                "video_uri",
+                "video_container",
+                "association_uuid",
+                "image_url",
+                "image_format",
+                "observer",
+                "concept",
+                "link_name",
+                "to_concept",
+                "link_value",
+                "chief_scientist",
+                "dive_number",
+                "video_sequence_name",
+                "video_width",
+                "video_height",
+                "camera_platform",
+                "depth_meters",
+                "latitude",
+                "longitude",
+                "oxygen_ml_per_l",
+                "pressure_dbar",
+                "salinity",
+                "temperature_celsius",
+                "light_transmission"
+            ],
+            where=[
+                QueryConstraint(
+                    "link_name",
+                    equals="bounding box"
+                ),
+                QueryConstraint(
+                    "link_value",
+                    like="{%}"
+                )
+            ]
+        )
+        query_request.where.extend(constraint_spec.to_constraints())
+        query_data = query(query_request)
+        query_headers, query_rows = parse_tsv(query_data)
 
         # Create the image mosaic
         self.image_mosaic = ImageMosaic(
             self.ui.roiGraphicsView,
             self.cache_controller,
-            query_data,
+            query_rows,
             query_headers,
             self.rect_clicked,
             self.verifier,
@@ -845,7 +881,7 @@ class MainWindow(TemplateBaseClass):
         mp4_video_reference = mp4_video_data["video_reference"]
 
         mp4_video_url = mp4_video_reference.get("uri", None)
-        mp4_start_timestamp = parse_iso(mp4_video["start_timestamp"])
+        mp4_start_timestamp = parse_date(mp4_video["start_timestamp"])
 
         # Get the annotation timestamp
         annotation_datetime = self.image_mosaic.moment_timestamps[imaged_moment_uuid]
@@ -1010,11 +1046,6 @@ def init_settings():
     Initialize the application settings.
     """
     settings = SettingsManager.get_instance()
-
-    settings.sql_url = ("sql/url", str, constants.SQL_URL_DEFAULT)
-    settings.sql_user = ("sql/user", str, constants.SQL_USER_DEFAULT)
-    settings.sql_password = ("sql/password", str, constants.SQL_PASSWORD_DEFAULT)
-    settings.sql_database = ("sql/database", str, constants.SQL_DATABASE_DEFAULT)
 
     settings.raz_url = ("m3/raz_url", str, constants.RAZIEL_URL_DEFAULT)
 

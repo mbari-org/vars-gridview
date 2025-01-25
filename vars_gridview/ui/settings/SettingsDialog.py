@@ -5,7 +5,6 @@ from vars_gridview.ui.settings.tabs.AppearanceTab import AppearanceTab
 from vars_gridview.ui.settings.tabs.CacheTab import CacheTab
 from vars_gridview.ui.settings.tabs.EmbeddingsTab import EmbeddingsTab
 from vars_gridview.ui.settings.tabs.M3Tab import M3Tab
-from vars_gridview.ui.settings.tabs.SQLTab import SQLTab
 from vars_gridview.ui.settings.tabs.VideoPlayerTab import VideoPlayerTab
 
 
@@ -94,7 +93,6 @@ class SettingsDialog(QtWidgets.QDialog):
 
     def _add_tabs(self, connect_slot, connected_signal, clear_cache_slot):
         self._register_tab(M3Tab())
-        self._register_tab(SQLTab())
         self._register_tab(AppearanceTab())
         self._register_tab(VideoPlayerTab(connect_slot, connected_signal))
         self._register_tab(CacheTab(clear_cache_slot))

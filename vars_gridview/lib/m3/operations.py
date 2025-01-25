@@ -3,13 +3,13 @@ M3 operations. Make use of the clients defined in __init__.py.
 """
 
 import json
-from datetime import datetime
 from typing import Dict, List, Optional
 
 import requests
 
 from vars_gridview.lib import m3
 from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.m3.query import QueryRequest
 
 KB_CONCEPTS: Dict[str, Optional[str]] = None
 KB_PARTS: List[str] = None
@@ -188,22 +188,6 @@ def update_observation_concept(
     return response.json()
 
 
-def create_association(association: dict) -> requests.Response:
-    """
-    Create an association.
-    """
-    LOGGER.debug(f"Creating association:\n{association}")
-    response = m3.ANNOSAURUS_CLIENT.create_association(association)
-
-    try:
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        LOGGER.debug(f"Error creating association: {e}")
-        raise e
-
-    return response
-
-
 def delete_association(association_uuid: str):
     """
     Delete an association.
@@ -237,22 +221,6 @@ def get_observation(observation_uuid: str) -> requests.Response:
     return response.json()
 
 
-def create_observation(observation: dict) -> requests.Response:
-    """
-    Create an observation.
-    """
-    LOGGER.debug(f"Creating observation:\n{observation}")
-    response = m3.ANNOSAURUS_CLIENT.create_observation(observation)
-
-    try:
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        LOGGER.debug(f"Error creating observation: {e}")
-        raise e
-
-    return response
-
-
 def delete_observation(observation_uuid: str):
     """
     Delete an observation.
@@ -270,44 +238,6 @@ def delete_observation(observation_uuid: str):
         raise e
 
 
-def get_videos_at_datetime(dt: datetime) -> List[dict]:
-    """
-    Get a list of videos occurring at a given instant.
-    """
-    timestamp = dt.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-
-    LOGGER.debug(f"Getting videos at {timestamp}")
-    response = m3.VAMPIRE_SQUID_CLIENT.get_videos_at_timestamp(timestamp)
-
-    try:
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        LOGGER.debug(f"Error getting videos at {timestamp}: {e}")
-        raise e
-
-    return response.json()
-
-
-def get_video_by_video_reference_uuid(video_reference_uuid: str) -> dict:
-    """
-    Get a video information by a contained video reference UUID.
-    """
-    LOGGER.debug(f"Getting video by video reference UUID {video_reference_uuid}")
-    response = m3.VAMPIRE_SQUID_CLIENT.get_video_by_video_reference_uuid(
-        video_reference_uuid
-    )
-
-    try:
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        LOGGER.debug(
-            f"Error getting video by video reference UUID {video_reference_uuid}: {e}"
-        )
-        raise e
-
-    return response.json()
-
-
 def get_video_sequence_by_name(name: str) -> dict:
     """
     Get a video sequence by name.
@@ -319,22 +249,6 @@ def get_video_sequence_by_name(name: str) -> dict:
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         LOGGER.debug(f"Error getting video sequence by name {name}: {e}")
-        raise e
-
-    return response.json()
-
-
-def get_imaged_moment(imaged_moment_uuid: str) -> dict:
-    """
-    Get an imaged moment by UUID.
-    """
-    LOGGER.debug(f"Getting imaged moment {imaged_moment_uuid}")
-    response = m3.ANNOSAURUS_CLIENT.get_imaged_moment(imaged_moment_uuid)
-
-    try:
-        response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        LOGGER.debug(f"Error getting imaged moment {imaged_moment_uuid}: {e}")
         raise e
 
     return response.json()
@@ -375,3 +289,19 @@ def get_video_sequence_names() -> List[str]:
         LOGGER.debug(f"Got {len(VIDEO_SEQUENCE_NAMES)} video sequence names")
 
     return VIDEO_SEQUENCE_NAMES
+
+
+def query(query_request: QueryRequest) -> str:
+    """
+    Query the M3 API.
+    """
+    LOGGER.debug("Querying Annosaurus")
+    response = m3.ANNOSAURUS_CLIENT.query(query_request)
+
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error during query: {e}")
+        raise e
+
+    return response.text

@@ -51,48 +51,6 @@ def get_timestamp(
     return None
 
 
-def parse_iso(timestamp: str) -> datetime:
-    """
-    Parse an ISO timestamp.
-
-    Args:
-        timestamp: The timestamp to parse.
-
-    Returns:
-        The parsed timestamp.
-    """
-    if isinstance(timestamp, datetime):  # short circuit
-        return timestamp
-
-    try:
-        return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%fZ")
-    except ValueError:
-        return datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
-
-
-def parse_sqlserver_native(timestamp: str) -> datetime:
-    """
-    Parse a SQL Server native timestamp.
-
-    Args:
-        timestamp: The timestamp to parse.
-
-    Returns:
-        The parsed timestamp.
-    """
-    if isinstance(timestamp, datetime):  # short circuit
-        return timestamp
-
-    datetime_part, *decimal_part = timestamp.split(".")
-    decimal_part = decimal_part[0] if decimal_part else None
-    if "+" in decimal_part:
-        decimal_part, _ = decimal_part.split("+")
-    subsecond_timedelta = (
-        timedelta(seconds=float(f".{decimal_part}")) if decimal_part else timedelta()
-    )
-    return datetime.strptime(datetime_part, "%Y-%m-%d %H:%M:%S") + subsecond_timedelta
-
-
 def open_file_browser(path: Path):
     """
     Open a file browser to the given path. Implementation varies by platform.
