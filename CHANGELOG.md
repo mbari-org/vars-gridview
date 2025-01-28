@@ -1,6 +1,26 @@
 # CHANGELOG
 
 
+## v0.16.0 (2025-01-28)
+
+### Bug Fixes
+
+- Ensure type consistency for query item fields in ImageMosaic
+  ([`d9f2fff`](https://github.com/mbari-org/vars-gridview/commit/d9f2fffd6362eba7d44247a06879f338c3c0159c))
+
+### Features
+
+- Replace SQL with annosaurus query
+  ([`6ad52d8`](https://github.com/mbari-org/vars-gridview/commit/6ad52d8f11a04be0e768d07499e887b97587a74f))
+
+Remove SQL access #79
+
+### Refactoring
+
+- Add version variable in vars_gridview package init
+  ([`083263c`](https://github.com/mbari-org/vars-gridview/commit/083263c0e1576f1923e030f0d3c458430a135cd5))
+
+
 ## v0.15.0 (2024-12-05)
 
 ### Bug Fixes
