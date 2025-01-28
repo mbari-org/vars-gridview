@@ -23,7 +23,6 @@ import os
 import sys
 import traceback
 import webbrowser
-from importlib import metadata
 from pathlib import Path
 from time import sleep
 from typing import Optional, Tuple
@@ -32,18 +31,24 @@ from uuid import UUID, uuid4
 import cv2
 import pyqtgraph as pg
 import qdarkstyle
+from iso8601 import parse_date
 from PyQt6 import QtCore, QtGui, QtWidgets
 from sharktopoda_client.client import SharktopodaClient
 from sharktopoda_client.dto import Localization
-from iso8601 import parse_date
 
+from vars_gridview import __version__
 from vars_gridview.lib import constants, m3, raziel, sql
 from vars_gridview.lib.boxes import BoxHandler
 from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.embedding import DreamSimEmbedding, Embedding
 from vars_gridview.lib.image_mosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER, AppLogger
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_name, get_kb_parts, query
+from vars_gridview.lib.m3.operations import (
+    get_kb_concepts,
+    get_kb_name,
+    get_kb_parts,
+    query,
+)
 from vars_gridview.lib.m3.query import QueryConstraint, QueryRequest, parse_tsv
 from vars_gridview.lib.settings import SettingsManager
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
@@ -83,9 +88,7 @@ class MainWindow(TemplateBaseClass):
         self.ui.setupUi(self)
 
         # Set the window title
-        self.setWindowTitle(
-            f"{constants.APP_NAME} v{metadata.version('vars_gridview')}"
-        )
+        self.setWindowTitle(f"{constants.APP_NAME} v{__version__}")
         self.setWindowIcon(
             QtGui.QIcon(str(ICONS_DIR / "VARSGridView.iconset" / "icon_256x256.png"))
         )
@@ -460,18 +463,12 @@ class MainWindow(TemplateBaseClass):
                 "pressure_dbar",
                 "salinity",
                 "temperature_celsius",
-                "light_transmission"
+                "light_transmission",
             ],
             where=[
-                QueryConstraint(
-                    "link_name",
-                    equals="bounding box"
-                ),
-                QueryConstraint(
-                    "link_value",
-                    like="{%}"
-                )
-            ]
+                QueryConstraint("link_name", equals="bounding box"),
+                QueryConstraint("link_value", like="{%}"),
+            ],
         )
         query_request.where.extend(constraint_spec.to_constraints())
         query_data = query(query_request)

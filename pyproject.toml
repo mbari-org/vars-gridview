@@ -45,6 +45,9 @@ tag_format = "v{version}"
 version_toml = [
     "pyproject.toml:tool.poetry.version",
 ]
+version_variables = [
+    "vars_gridview/__init__.py:__version__",
+]
 
 [tool.semantic_release.branches.main]
 match = "(main|master)"
