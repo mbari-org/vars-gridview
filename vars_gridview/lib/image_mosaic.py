@@ -13,8 +13,8 @@ import cv2
 import numpy as np
 import pyqtgraph as pg
 import requests
-from PyQt6 import QtCore, QtWidgets
 from iso8601 import parse_date
+from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib import m3
 from vars_gridview.lib.annotation import VARSLocalization
@@ -96,19 +96,19 @@ class ImageMosaic(QtCore.QObject):
                 progress += 1
 
                 # Extract fields
-                imaged_moment_uuid = query_item["imaged_moment_uuid"]
-                image_reference_uuid = query_item["image_reference_uuid"]
-                observation_uuid = query_item["observation_uuid"]
-                association_uuid = query_item["association_uuid"]
+                imaged_moment_uuid = str(query_item["imaged_moment_uuid"])
+                image_reference_uuid = str(query_item["image_reference_uuid"])
+                observation_uuid = str(query_item["observation_uuid"])
+                association_uuid = str(query_item["association_uuid"])
 
-                image_url = query_item["image_url"]
+                image_url = str(query_item["image_url"])
 
-                observer = query_item["observer"]
-                concept = query_item["concept"]
+                observer = str(query_item["observer"])
+                concept = str(query_item["concept"])
 
-                link_name = query_item["link_name"]
-                to_concept = query_item["to_concept"]
-                link_value = query_item["link_value"]
+                link_name = str(query_item["link_name"])
+                to_concept = str(query_item["to_concept"])
+                link_value = str(query_item["link_value"])
 
                 # Fill image_reference_uuid -> image_url
                 if image_reference_uuid not in self.image_reference_urls:
@@ -120,38 +120,42 @@ class ImageMosaic(QtCore.QObject):
                 # Tag in ancillary data
                 # Note: this assumes a single imaged moment UUID will not have multiple ancillary data entries. This is a safe assumption for now but is not strictly necessary
                 if imaged_moment_uuid not in self.moment_ancillary_data:
-                    self.moment_ancillary_data[imaged_moment_uuid] = {
-                        k: query_item[k]
-                        for k in (  # Ancillary data keys
-                            "camera_platform",
-                            "dive_number",
-                            "depth_meters",
-                            "latitude",
-                            "longitude",
-                            "oxygen_ml_per_l",
-                            "pressure_dbar",
-                            "salinity",
-                            "temperature_celsius",
-                            "light_transmission",
-                        )
+                    ancillary = dict()
+                    ancillary_keys = {
+                        "camera_platform": str,
+                        "dive_number": str,
+                        "depth_meters": float,
+                        "latitude": float,
+                        "longitude": float,
+                        "oxygen_ml_per_l": float,
+                        "pressure_dbar": float,
+                        "salinity": float,
+                        "temperature_celsius": float,
+                        "light_transmission": float,
                     }
+                    for k, v in ancillary_keys.items():
+                        if k in query_item and query_item[k] != "null":
+                            ancillary[k] = v(query_item[k])
+
+                    self.moment_ancillary_data[imaged_moment_uuid] = ancillary
 
                 # Extract video data
-                video_data = {
-                    k: query_item[k]
-                    for k in (  # Video data keys
-                        "index_elapsed_time_millis",
-                        "index_timecode",
-                        "index_recorded_timestamp",
-                        "video_start_timestamp",
-                        "video_uri",
-                        "video_container",
-                        "video_reference_uuid",
-                        "video_sequence_name",
-                        "video_width",
-                        "video_height",
-                    )
+                video_data = dict()
+                video_keys = {
+                    "index_elapsed_time_millis": int,
+                    "index_timecode": str,
+                    "index_recorded_timestamp": parse_date,
+                    "video_start_timestamp": parse_date,
+                    "video_uri": str,
+                    "video_container": str,
+                    "video_reference_uuid": str,
+                    "video_sequence_name": str,
+                    "video_width": int,
+                    "video_height": int,
                 }
+                for k, v in video_keys.items():
+                    if k in query_item and query_item[k] != "null":
+                        video_data[k] = v(query_item[k])
 
                 # Tag in video data
                 if video_data.get("video_uri", None) is not None:  # valid video
@@ -159,25 +163,15 @@ class ImageMosaic(QtCore.QObject):
                         self.moment_video_data[imaged_moment_uuid] = video_data
 
                 # Observation data
-                recorded_timestamp = video_data["index_recorded_timestamp"]
-                elapsed_time_millis = video_data["index_elapsed_time_millis"]
-                timecode = video_data["index_timecode"]
+                recorded_timestamp = video_data.get("index_recorded_timestamp", None)
+                elapsed_time_millis = video_data.get("index_elapsed_time_millis", None)
+                timecode = video_data.get("index_timecode", None)
 
                 # Video sequence data
                 video_sequence_name = video_data["video_sequence_name"]
 
                 # Video data
                 video_start_timestamp = video_data["video_start_timestamp"]
-
-                # Handle string timestamps (convert to datetime)
-                recorded_timestamp = parse_date(recorded_timestamp)
-                video_data[
-                    "index_recorded_timestamp"
-                ] = recorded_timestamp  # Update the video data dict for downstream use
-                video_start_timestamp = parse_date(video_start_timestamp)
-                video_data[
-                    "video_start_timestamp"
-                ] = video_start_timestamp  # Update the video data dict for downstream use
 
                 # ------------------
 
