@@ -28,7 +28,7 @@ jobs:
       
       - name: Set up Rye in PATH
         run: |
-          echo "$HOME/.rye/bin" >> $GITHUB_PATH
+          echo "$HOME/.rye/shims" >> $GITHUB_PATH
 
       - name: Build
         run: |
@@ -85,11 +85,10 @@ jobs:
         if: steps.cache-rye.outputs.cache-hit != 'true'
         run: |
           curl -sSf https://rye.astral.sh/get | RYE_VERSION="0.38.0" RYE_INSTALL_OPTION="--yes" bash
-          echo "$HOME/.rye/bin" >> $GITHUB_PATH
 
       - name: Set up Rye in PATH
         run: |
-          echo "$HOME/.rye/bin" >> $GITHUB_PATH
+          echo "$HOME/.rye/shims" >> $GITHUB_PATH
 
       - name: Download built package
         uses: actions/download-artifact@v4
