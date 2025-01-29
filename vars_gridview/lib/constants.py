@@ -7,7 +7,7 @@ APP_NAME = "VARS GridView"
 APP_ORGANIZATION = "MBARI"
 
 # M3
-RAZIEL_URL_DEFAULT = "http://m3.shore.mbari.org/config"
+RAZIEL_URL_DEFAULT = "https://m3.shore.mbari.org/config"
 
 # Asset paths
 ROOT_DIR = Path(__file__).parent.parent
@@ -18,9 +18,6 @@ UI_FILE = ASSETS_DIR / "gridview.ui"
 STYLE_DIR = ASSETS_DIR / "style"
 GUI_SETTINGS_FILE = ASSETS_DIR / "gui.ini"
 LOG_DIR = Path(user_log_dir(APP_NAME, APP_ORGANIZATION))
-
-# Preferred image type
-IMAGE_TYPE = "image/png"
 
 # Appearance defaults
 LABEL_FONT_SIZE_DEFAULT = 8
