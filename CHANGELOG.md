@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.16.1 (2025-01-29)
+
+### Bug Fixes
+
+- Update RAZIEL_URL_DEFAULT to use HTTPS
+  ([`aa3ff92`](https://github.com/mbari-org/vars-gridview/commit/aa3ff92cbbcf4b6d8736cfee7d1f1de76bef51e7))
+
+### Chores
+
+- Fix pyproject.toml
+  ([`936d4bc`](https://github.com/mbari-org/vars-gridview/commit/936d4bc8ec51783071728d5edf338023d6fcac9e))
+
+- Fix Rye path in CI
+  ([`b406dc6`](https://github.com/mbari-org/vars-gridview/commit/b406dc6bec0b92ec6c75bdfd9a5747986c735681))
+
+### Refactoring
+
+- Use Rye
+  ([`c8a8642`](https://github.com/mbari-org/vars-gridview/commit/c8a8642124943b4f04f36cb0fc00f32072d5d5f4))
+
+
 ## v0.16.0 (2025-01-28)
 
 ### Bug Fixes
