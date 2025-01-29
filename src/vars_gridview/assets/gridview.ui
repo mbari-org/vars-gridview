@@ -78,20 +78,15 @@
                       <property name="orientation">
                         <enum>Qt::Horizontal</enum>
                       </property>
-                      <widget class="QTextEdit" name="annotationXML">
+                      <widget class="QWidget" name="boundingBoxInfoTree">
                         <property name="sizePolicy">
                           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                             <horstretch>1</horstretch>
                             <verstretch>0</verstretch>
                           </sizepolicy>
                         </property>
-                        <!-- Set read-only -->
-                        <property name="readOnly">
-                          <bool>true</bool>
-                        </property>
                         <property name="font">
                           <font>
-                            <family>MS Shell Dlg 2</family>
                             <pointsize>12</pointsize>
                             <weight>50</weight>
                             <bold>false</bold>
@@ -107,7 +102,6 @@
                         </property>
                         <property name="font">
                           <font>
-                            <family>MS Shell Dlg 2</family>
                             <pointsize>12</pointsize>
                             <weight>50</weight>
                             <bold>false</bold>

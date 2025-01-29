@@ -1,7 +1,8 @@
 *__pycache__/
-vars_gridview/assets/gui.ini
-vars_gridview/logs/
+src/vars_gridview/assets/gui.ini
+src/vars_gridview/logs/
 logs/
 build/
 dist/
-poetry.lock
+requirements.lock
+requirements-dev.lock

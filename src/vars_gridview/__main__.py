@@ -55,6 +55,7 @@ from vars_gridview.lib.sort_methods import RecordedTimestampSort
 from vars_gridview.lib.util import open_file_browser
 from vars_gridview.lib.widgets import RectWidget
 from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
+from vars_gridview.ui.JSONTree import JSONTree
 from vars_gridview.ui.LoginDialog import LoginDialog
 from vars_gridview.ui.QueryDialog import QueryDialog
 from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
@@ -86,6 +87,11 @@ class MainWindow(TemplateBaseClass):
         # Create the main window
         self.ui = WindowTemplate()
         self.ui.setupUi(self)
+        bb_info_tree: QtWidgets.QWidget = self.ui.boundingBoxInfoTree
+        bb_info_tree.setLayout(QtWidgets.QVBoxLayout())
+        bb_json_tree = JSONTree()
+        bb_info_tree.layout().addWidget(bb_json_tree)
+        self.ui.boundingBoxInfoTree = bb_json_tree
 
         # Set the window title
         self.setWindowTitle(f"{constants.APP_NAME} v{__version__}")
@@ -728,7 +734,7 @@ class MainWindow(TemplateBaseClass):
             self.image_mosaic.delete_selected()
             self.box_handler.roi_detail.clear()
             self.box_handler.clear()
-            self.ui.annotationXML.clear()
+            self.boundingBoxInfoTree.clear()
             self.ui.imageInfoList.clear()
 
             self.image_mosaic.render_mosaic()
@@ -834,10 +840,7 @@ class MainWindow(TemplateBaseClass):
         self.box_handler.add_annotation(rect.localization_index, rect)
 
         # Add localization data to the panel
-        self.ui.annotationXML.clear()
-        self.ui.annotationXML.insertPlainText(
-            json.dumps(rect.localization.json, indent=2)
-        )
+        self.ui.boundingBoxInfoTree.set_data(rect.localization.json)
 
         # Add ancillary data to the image info list
         self.ui.imageInfoList.clear()

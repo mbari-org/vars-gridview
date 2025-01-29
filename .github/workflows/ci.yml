@@ -7,38 +7,43 @@ on:
     branches: [ main ]
 
 jobs:
-  poetry-build:
+  build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v3
-        with:
-          python-version: "3.11"
-
-      - name: Cache Poetry
+      - name: Cache Rye
+        id: cache-rye
         uses: actions/cache@v3
         with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-poetry-
+          path: ~/.rye
+          key: ${{ runner.os }}-rye
 
-      - name: Install dependencies
+      - name: Install Rye (if not cached)
+        if: steps.cache-rye.outputs.cache-hit != 'true'
         run: |
-          pip install poetry
-          poetry install
-
-      - name: Build package
+          curl -sSf https://rye.astral.sh/get | RYE_VERSION="0.38.0" RYE_INSTALL_OPTION="--yes" bash
+      
+      - name: Set up Rye in PATH
         run: |
-          poetry build
+          echo "$HOME/.rye/bin" >> $GITHUB_PATH
 
-  semantic-release-version:
+      - name: Build
+        run: |
+          rye build
+
+      - name: Store built package
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  release:
     runs-on: ubuntu-latest
-    needs: poetry-build
-    concurrency: semantic-release-version
+    needs: build
+    concurrency: release
     permissions:
       id-token: write
       contents: write
@@ -47,46 +52,54 @@ jobs:
       tag: ${{ steps.semantic_release.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      
+
       - name: Python semantic release
         id: semantic_release
-        uses: python-semantic-release/python-semantic-release@master
+        uses: python-semantic-release/python-semantic-release@v9.15.1
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           vcs_release: true
   
-  poetry-publish:
+  publish:
     runs-on: ubuntu-latest
-    needs: semantic-release-version
-    if: ${{ needs.semantic-release-version.outputs.released == 'true' }}
-    concurrency: poetry-publish
+    needs: [build, release]
+    if: needs.release.outputs.released == 'true'
+    concurrency: publish
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          ref: ${{ needs.semantic-release-version.outputs.tag }}
-      
-      - name: Set up Python
-        uses: actions/setup-python@v3
-        with:
-          python-version: "3.11"
-      
-      - name: Cache Poetry
+          ref: ${{ needs.release.outputs.tag }}
+
+      - name: Restore Rye from cache
+        id: cache-rye
         uses: actions/cache@v3
         with:
-          path: ~/.cache/pypoetry
-          key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-poetry-
-      
+          path: ~/.rye
+          key: ${{ runner.os }}-rye
+
+      - name: Install Rye (if not cached)
+        if: steps.cache-rye.outputs.cache-hit != 'true'
+        run: |
+          curl -sSf https://rye.astral.sh/get | RYE_VERSION="0.38.0" RYE_INSTALL_OPTION="--yes" bash
+          echo "$HOME/.rye/bin" >> $GITHUB_PATH
+
+      - name: Set up Rye in PATH
+        run: |
+          echo "$HOME/.rye/bin" >> $GITHUB_PATH
+
+      - name: Download built package
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
       - name: Publish package
         run: |
-          pip install poetry
-          poetry config pypi-token.pypi ${{ secrets.PYPI_TOKEN }}
-          poetry publish --build
+          rye publish --token ${{ secrets.PYPI_TOKEN }} --yes
 
   # pyinstaller-build:
   #   runs-on: ${{ matrix.os }}

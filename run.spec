@@ -2,10 +2,10 @@
 
 
 a = Analysis(
-    ['vars_gridview/scripts/run.py'],
+    ['src/vars_gridview/scripts/run.py'],
     pathex=[],
     binaries=[],
-    datas=[('vars_gridview/assets', 'assets')],
+    datas=[('src/vars_gridview/assets', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
@@ -31,7 +31,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity='Developer ID Application: Monterey Bay Aquarium Research Institute (9TN7A342V4)',
     entitlements_file=None,
-    icon=['vars_gridview/assets/icons/VARSGridView.icns'],
+    icon=['src/vars_gridview/assets/icons/VARSGridView.icns'],
 )
 coll = COLLECT(
     exe,
@@ -45,6 +45,6 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='VARS GridView.app',
-    icon='vars_gridview/assets/icons/VARSGridView.icns',
+    icon='src/vars_gridview/assets/icons/VARSGridView.icns',
     bundle_identifier='org.mbari.vars.gridview',
 )
