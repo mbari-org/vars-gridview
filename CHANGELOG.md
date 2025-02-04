@@ -1,6 +1,43 @@
 # CHANGELOG
 
 
+## v0.16.2 (2025-02-04)
+
+### Bug Fixes
+
+- Update reference to boundingBoxInfoTree in MainWindow class, remove unused json import
+  ([`8432fa5`](https://github.com/mbari-org/vars-gridview/commit/8432fa5610867cceba75bb70cf2a080eceb6ad17))
+
+- Use get method for video_sequence_name and video_start_timestamp to handle missing keys
+  ([`a9703e5`](https://github.com/mbari-org/vars-gridview/commit/a9703e5e7503800e8b0522b2318bc4aa4b08762d))
+
+#86
+
+### Chores
+
+- Update CI workflow to use dist-wheel for artifact storage and retrieval
+  ([`217c057`](https://github.com/mbari-org/vars-gridview/commit/217c0573a80056f2a4b64d94c6620b78e32338e6))
+
+### Code Style
+
+- Format code via Rye/Ruff
+  ([`ab7a5e0`](https://github.com/mbari-org/vars-gridview/commit/ab7a5e037053a2753ec89848f7a429a68ef7ff8b))
+
+### Documentation
+
+- Add badges, updated install instructions to README
+  ([`8b4a409`](https://github.com/mbari-org/vars-gridview/commit/8b4a4091f7ff22f9827ff852724f239a80d0e51f))
+
+- Correct heading from 'Install' to 'Installation' in README
+  ([`c544a98`](https://github.com/mbari-org/vars-gridview/commit/c544a98ab29da29a8529d4d6bcd40346cf3b4ca5))
+
+- Update installation instructions and clarify project requirements in README
+  ([`93ffe4d`](https://github.com/mbari-org/vars-gridview/commit/93ffe4d15f57f2f6b7faf16831eb989667f2a67c))
+
+- Update note formatting in installation section of README
+  ([`d8d8186`](https://github.com/mbari-org/vars-gridview/commit/d8d818640fddb7de77bcf4d331a44e702aff5d8b))
+
+
 ## v0.16.1 (2025-01-29)
 
 ### Bug Fixes
