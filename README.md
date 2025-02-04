@@ -11,13 +11,12 @@
 
 Authors: Kevin Barnard ([kbarnard@mbari.org](mailto:kbarnard@mbari.org)), Paul Roberts ([proberts@mbari.org](mailto:proberts@mbari.org))
 
----
-
 ## :hammer: Installation
 
-### From PyPI
+> ![NOTE]
+> VARS GridView requires Python 3.8 or later.
 
-VARS GridView is available on PyPI as `vars-gridview`. To install, run:
+To install VARS GridView, run:
 
 ```bash
 pip install vars-gridview
@@ -25,7 +24,7 @@ pip install vars-gridview
 
 ### From source
 
-This project is built with [hatch](https://hatch.pypa.io/) and managed with [Rye](https://rye.astral.sh/). To install from source, clone the repository and run:
+VARS GridView is built with [hatch](https://hatch.pypa.io/) and managed with [Rye](https://rye.astral.sh/). To install from source, clone the repository and run:
 
 ```bash
 pip install .
