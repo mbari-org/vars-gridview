@@ -4,5 +4,4 @@ src/vars_gridview/logs/
 logs/
 build/
 dist/
-requirements.lock
-requirements-dev.lock
+uv.lock

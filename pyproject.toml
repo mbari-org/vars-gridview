@@ -26,6 +26,13 @@ license = "MIT"
 [project.scripts]
 vars-gridview = "vars_gridview.__main__:main"
 
+[dependency-groups]
+dev = [
+    "pre-commit>=3.5.0",
+    "pyinstaller>=6.11.1",
+    "python-semantic-release>=9.17.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -35,14 +42,6 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/vars_gridview"]
-
-[tool.rye]
-managed = true
-dev-dependencies = [
-    "pre-commit>=3.5.0",
-    "python-semantic-release>=9.17.0",
-    "pyinstaller>=6.11.1",
-]
 
 [tool.semantic_release]
 assets = []

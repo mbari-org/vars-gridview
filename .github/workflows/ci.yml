@@ -14,31 +14,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cache Rye
-        id: cache-rye
+      - name: Cache uv
+        id: cache-uv
         uses: actions/cache@v3
         with:
-          path: ~/.rye
-          key: ${{ runner.os }}-rye
+          path: ~/.local/bin/uv
+          key: ${{ runner.os }}-uv
 
-      - name: Install Rye (if not cached)
-        if: steps.cache-rye.outputs.cache-hit != 'true'
+      - name: Install uv (if not cached)
+        if: steps.cache-uv.outputs.cache-hit != 'true'
         run: |
-          curl -sSf https://rye.astral.sh/get | RYE_VERSION="0.38.0" RYE_INSTALL_OPTION="--yes" bash
-      
-      - name: Set up Rye in PATH
-        run: |
-          echo "$HOME/.rye/shims" >> $GITHUB_PATH
+          curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Build
         run: |
-          rye build
+          uv build
 
       - name: Store built package
         uses: actions/upload-artifact@v4
         with:
-          name: dist-wheel
-          path: dist/*.whl
+          name: dist
+          path: dist/
 
   release:
     runs-on: ubuntu-latest
@@ -74,110 +70,24 @@ jobs:
         with:
           ref: ${{ needs.release.outputs.tag }}
 
-      - name: Restore Rye from cache
-        id: cache-rye
+      - name: Restore uv from cache
+        id: cache-uv
         uses: actions/cache@v3
         with:
-          path: ~/.rye
-          key: ${{ runner.os }}-rye
+          path: ~/.local/bin/uv
+          key: ${{ runner.os }}-uv
 
-      - name: Install Rye (if not cached)
-        if: steps.cache-rye.outputs.cache-hit != 'true'
+      - name: Install uv (if not cached)
+        if: steps.cache-uv.outputs.cache-hit != 'true'
         run: |
-          curl -sSf https://rye.astral.sh/get | RYE_VERSION="0.38.0" RYE_INSTALL_OPTION="--yes" bash
-
-      - name: Set up Rye in PATH
-        run: |
-          echo "$HOME/.rye/shims" >> $GITHUB_PATH
+          curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Download built package
         uses: actions/download-artifact@v4
         with:
-          name: dist-wheel
+          name: dist
           path: dist/
 
       - name: Publish package
         run: |
-          rye publish --token ${{ secrets.PYPI_TOKEN }} --yes
-
-  # pyinstaller-build:
-  #   runs-on: ${{ matrix.os }}
-  #   needs: semantic-release-version
-  #   strategy:
-  #     matrix:
-  #       os: [ubuntu-latest, windows-latest, macos-latest]
-  #       python-version: ["3.11"]
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v3
-      
-  #     - name: Set up Python
-  #       uses: actions/setup-python@v3
-  #       with:
-  #         python-version: ${{ matrix.python-version }}
-      
-  #     - name: Cache Poetry
-  #       uses: actions/cache@v3
-  #       with:
-  #         path: ~/.cache/pypoetry
-  #         key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
-  #         restore-keys: |
-  #           ${{ runner.os }}-poetry-
-      
-  #     - name: Install dependencies
-  #       run: |
-  #         pip install poetry
-  #         poetry install
-      
-  #     - name: Build distributable
-  #       run: |
-  #         poetry run pyinstaller run.spec
-      
-  #     - name: Zip macOS app
-  #       if: matrix.os == 'macos-latest'
-  #       run: |
-  #         cd dist
-  #         zip -r VARS\ GridView.zip VARS\ GridView.app
-  #         cd ..
-
-  #     - name: Upload zipped macOS app
-  #       uses: actions/upload-artifact@v3
-  #       if: matrix.os == 'macos-latest'
-  #       with:
-  #         name: macos-latest-app-${{ github.sha }}
-  #         path: "dist/VARS GridView.zip"
-
-  # semantic-release-publish:
-  #   runs-on: ubuntu-latest
-  #   needs: pyinstaller-build
-  #   concurrency: semantic-release-publish
-  #   permissions:
-  #     id-token: write
-  #     contents: write
-  #   steps:
-  #     - name: Checkout
-  #       uses: actions/checkout@v3
-  #       with:
-  #         fetch-depth: 0
-      
-  #     # - name: Download Ubuntu artifact
-  #     #   uses: actions/download-artifact@v3
-  #     #   with:
-  #     #     name: ubuntu-latest-dist
-      
-  #     # - name: Download Windows artifact
-  #     #   uses: actions/download-artifact@v3
-  #     #   with:
-  #     #     name: windows-latest-dist
-      
-  #     - name: Download zipped macOS app
-  #       uses: actions/download-artifact@v3
-  #       with:
-  #         name: macos-latest-app-${{ github.sha }}
-  #         path: "dist/VARS GridView.zip"
-      
-  #     - name: Python semantic release
-  #       uses: python-semantic-release/python-semantic-release@master
-  #       with:
-  #         github_token: ${{ secrets.GITHUB_TOKEN }}
-  #         vcs_release: true
+          uv publish --token ${{ secrets.PYPI_TOKEN }}

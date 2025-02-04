@@ -6,7 +6,7 @@
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/language-Python-blue.svg)](https://www.python.org/downloads/)
 [![.github/workflows/ci.yml](https://github.com/mbari-org/vars-gridview/actions/workflows/ci.yml/badge.svg)](https://github.com/mbari-org/vars-gridview/actions/workflows/ci.yml)
-[![Rye](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/rye/main/artwork/badge.json)](https://rye.astral.sh)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://docs.astral.sh/ruff/)
 
 Authors: Kevin Barnard ([kbarnard@mbari.org](mailto:kbarnard@mbari.org)), Paul Roberts ([proberts@mbari.org](mailto:proberts@mbari.org))
@@ -24,7 +24,7 @@ pip install vars-gridview
 
 ### From source
 
-VARS GridView is built with [hatch](https://hatch.pypa.io/) and managed with [Rye](https://rye.astral.sh/). To install from source, clone the repository and run:
+VARS GridView is built with [hatch](https://hatch.pypa.io/) and managed with [uv](https://docs.astral.sh/uv/). To install from source, clone the repository and run:
 
 ```bash
 pip install .
