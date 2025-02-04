@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.16.3 (2025-02-04)
+
+### Bug Fixes
+
+- Normalize UUIDs and video reference UUID to lowercase in image mosaic
+  ([`5768ada`](https://github.com/mbari-org/vars-gridview/commit/5768ada058daaf15b409b35885c193a8f1145a1f))
+
+#84
+
+### Chores
+
+- Migrate from Rye to uv for dependency management and update CI workflow
+  ([`2dc3b89`](https://github.com/mbari-org/vars-gridview/commit/2dc3b891feb110e9cf5ca96ea0e324142ed46079))
+
+
 ## v0.16.2 (2025-02-04)
 
 ### Bug Fixes
