@@ -237,9 +237,9 @@ class ImageMosaic(QtCore.QObject):
                             video_sequence_data = None
 
                         # Store in dict
-                        self.video_sequences_by_name[
-                            video_sequence_name
-                        ] = video_sequence_data
+                        self.video_sequences_by_name[video_sequence_name] = (
+                            video_sequence_data
+                        )
 
                     if imaged_moment_uuid not in self.moment_mp4_data:
                         # Get imaged moment's time index

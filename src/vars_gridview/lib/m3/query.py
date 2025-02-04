@@ -53,9 +53,10 @@ class QueryRequest:
             "select": self.select,
             "distinct": self.distinct,
             "where": [
-                constraint.to_dict(skip_null=skip_null) 
-                for constraint in self.where
-            ] if self.where else None,
+                constraint.to_dict(skip_null=skip_null) for constraint in self.where
+            ]
+            if self.where
+            else None,
             "orderBy": self.order_by,
             "limit": self.limit,
             "offset": self.offset,

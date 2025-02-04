@@ -167,7 +167,7 @@ class HueMeanCenterRegion(SortMethod):
             rect.localization.height // 3 : rect.localization.height * 2 // 3,
             rect.localization.width // 3 : rect.localization.width * 2 // 3,
         ]
-        
+
         roi_hsv = cv2.cvtColor(sub_roi, cv2.COLOR_BGR2HSV)
         hue = roi_hsv[:, :, 0]
         return np.mean(hue.ravel())
@@ -199,11 +199,12 @@ class LaplacianVarianceSort(SortMethod):
 def localization_meta_sort(key: str, default: Any) -> SortMethod:
     """
     Decorator factory for creating a sort method that sorts by a localization meta key.
-    
+
     Args:
         key: The localization meta key to sort by.
         default: The default value to use if the key is not present.
     """
+
     def decorator(cls):
         class LocalizationMetaSort(SortMethod):
             NAME = cls.NAME
@@ -213,7 +214,7 @@ def localization_meta_sort(key: str, default: Any) -> SortMethod:
                 return rect.localization.meta.get(key, default)
 
         return LocalizationMetaSort
-    
+
     return decorator
 
 

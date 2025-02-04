@@ -2,7 +2,6 @@
 Utilities.
 """
 
-
 import subprocess
 import sys
 from datetime import datetime, timedelta

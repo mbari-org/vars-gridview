@@ -42,6 +42,8 @@ class JSONTree(QTreeWidget):
             if item:
                 self.setCurrentItem(item)
                 menu = QMenu()
-                menu.addAction("Copy value", lambda: QApplication.clipboard().setText(item.text(1)))
+                menu.addAction(
+                    "Copy value", lambda: QApplication.clipboard().setText(item.text(1))
+                )
                 menu.exec(e.globalPosition().toPoint())
         super(JSONTree, self).mousePressEvent(e)

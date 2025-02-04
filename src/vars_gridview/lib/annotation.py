@@ -26,7 +26,7 @@ class VARSLocalization:
         width: int,
         height: int,
         image_reference_uuid: Optional[str] = None,
-        **meta
+        **meta,
     ):
         self._x = x
         self._y = y

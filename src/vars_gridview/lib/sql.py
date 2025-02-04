@@ -35,7 +35,7 @@ class ORList:
     @property
     def values(self):
         return self._values
-    
+
     def to_constraint(self) -> QueryConstraint:
         constraint = QueryConstraint(
             column=self._key,
@@ -66,9 +66,7 @@ class ConstraintSpec:
         ]  # Flatten all values
 
     def to_constraints(self) -> list[QueryConstraint]:
-        return [
-            list_.to_constraint() for list_ in self._lists
-        ]
+        return [list_.to_constraint() for list_ in self._lists]
 
     @classmethod
     def from_dict(cls, d):
