@@ -13,7 +13,7 @@ Authors: Kevin Barnard ([kbarnard@mbari.org](mailto:kbarnard@mbari.org)), Paul R
 
 ## :hammer: Installation
 
-> ![NOTE]
+> [!NOTE]
 > VARS GridView requires Python 3.8 or later.
 
 To install VARS GridView, run:
