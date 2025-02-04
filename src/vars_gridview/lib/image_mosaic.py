@@ -96,10 +96,10 @@ class ImageMosaic(QtCore.QObject):
                 progress += 1
 
                 # Extract fields
-                imaged_moment_uuid = str(query_item["imaged_moment_uuid"])
-                image_reference_uuid = str(query_item["image_reference_uuid"])
-                observation_uuid = str(query_item["observation_uuid"])
-                association_uuid = str(query_item["association_uuid"])
+                imaged_moment_uuid = str(query_item["imaged_moment_uuid"]).lower()
+                image_reference_uuid = str(query_item["image_reference_uuid"]).lower()
+                observation_uuid = str(query_item["observation_uuid"]).lower()
+                association_uuid = str(query_item["association_uuid"]).lower()
 
                 image_url = str(query_item["image_url"])
 
@@ -148,7 +148,7 @@ class ImageMosaic(QtCore.QObject):
                     "video_start_timestamp": parse_date,
                     "video_uri": str,
                     "video_container": str,
-                    "video_reference_uuid": str,
+                    "video_reference_uuid": lambda x: str(x).lower(),
                     "video_sequence_name": str,
                     "video_width": int,
                     "video_height": int,
