@@ -13,7 +13,7 @@ Authors: Kevin Barnard ([kbarnard@mbari.org](mailto:kbarnard@mbari.org)), Paul R
 
 ---
 
-## :hammer: Install
+## :hammer: Installation
 
 ### From PyPI
 
