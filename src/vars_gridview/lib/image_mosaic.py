@@ -168,10 +168,10 @@ class ImageMosaic(QtCore.QObject):
                 timecode = video_data.get("index_timecode", None)
 
                 # Video sequence data
-                video_sequence_name = video_data["video_sequence_name"]
+                video_sequence_name = video_data.get("video_sequence_name", None)
 
                 # Video data
-                video_start_timestamp = video_data["video_start_timestamp"]
+                video_start_timestamp = video_data.get("video_start_timestamp", None)
 
                 # ------------------
 
