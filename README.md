@@ -2,15 +2,18 @@
 
 **VARS GridView** is a tool for reviewing and correcting VARS localizations in bulk.
 
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![vars-gridview pypi](https://img.shields.io/pypi/v/vars-gridview.svg)](https://pypi.python.org/pypi/vars-gridview)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/language-Python-blue.svg)](https://www.python.org/downloads/)
 [![.github/workflows/ci.yml](https://github.com/mbari-org/vars-gridview/actions/workflows/ci.yml/badge.svg)](https://github.com/mbari-org/vars-gridview/actions/workflows/ci.yml)
+[![Rye](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/rye/main/artwork/badge.json)](https://rye.astral.sh)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://docs.astral.sh/ruff/)
 
 Authors: Kevin Barnard ([kbarnard@mbari.org](mailto:kbarnard@mbari.org)), Paul Roberts ([proberts@mbari.org](mailto:proberts@mbari.org))
 
 ---
 
-## Install
+## :hammer: Install
 
 ### From PyPI
 
@@ -22,13 +25,13 @@ pip install vars-gridview
 
 ### From source
 
-This project is built with [Poetry](https://python-poetry.org/). To install from source, run (in the project root):
+This project is built with [hatch](https://hatch.pypa.io/) and managed with [Rye](https://rye.astral.sh/). To install from source, clone the repository and run:
 
 ```bash
-poetry install
+pip install .
 ```
 
-## Run
+## :rocket: Usage
 
 Once VARS GridView is installed, you can run it from the command line:
 
@@ -46,4 +49,4 @@ Icons courtesy of [Font Awesome](https://fontawesome.com/).
 
 ---
 
-Copyright &copy; 2020&ndash;2023 [Monterey Bay Aquarium Research Institute](https://www.mbari.org)
+Copyright &copy; 2020 [Monterey Bay Aquarium Research Institute](https://www.mbari.org)
