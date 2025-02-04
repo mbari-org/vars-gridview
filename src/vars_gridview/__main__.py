@@ -17,7 +17,6 @@ http://synapses.awardspace.info/pages-scripts/python/pages/python-pyqt_qgraphics
 """
 
 import argparse
-import json
 import logging
 import os
 import sys
@@ -120,9 +119,7 @@ class MainWindow(TemplateBaseClass):
         # Embedding model
         self._embedding_model: Optional[Embedding] = None
 
-        self.cached_moment_concepts = (
-            {}
-        )  # Cache for imaged moment -> set of observed concepts
+        self.cached_moment_concepts = {}  # Cache for imaged moment -> set of observed concepts
 
         self.sharktopoda_client = None  # Sharktopoda client
         self.sharktopoda_connected = (
@@ -734,7 +731,7 @@ class MainWindow(TemplateBaseClass):
             self.image_mosaic.delete_selected()
             self.box_handler.roi_detail.clear()
             self.box_handler.clear()
-            self.boundingBoxInfoTree.clear()
+            self.ui.boundingBoxInfoTree.clear()
             self.ui.imageInfoList.clear()
 
             self.image_mosaic.render_mosaic()
