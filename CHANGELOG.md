@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.16.4 (2025-02-06)
+
+### Bug Fixes
+
+- Add missing pydantic dep
+  ([`f3120cc`](https://github.com/mbari-org/vars-gridview/commit/f3120cc8f4535becc89c56c842f218c385113f21))
+
+- Correct subprocess call syntax for macOS file browser
+  ([`636eb68`](https://github.com/mbari-org/vars-gridview/commit/636eb68e15db2ac5935f7b5999417af2f00cf0f1))
+
+### Chores
+
+- Fix CI attempting to publish version behind latest release
+  ([`3a5772c`](https://github.com/mbari-org/vars-gridview/commit/3a5772ccd122e61f19bb1387454b47b73f5583c3))
+
+
 ## v0.16.3 (2025-02-04)
 
 ### Bug Fixes
