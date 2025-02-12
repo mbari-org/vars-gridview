@@ -2,8 +2,6 @@ from typing import Optional
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from vars_gridview.lib.settings import SettingsManager
-
 
 class AbstractSettingsTab(QtWidgets.QWidget):
     """
@@ -16,8 +14,6 @@ class AbstractSettingsTab(QtWidgets.QWidget):
 
     def __init__(self, name: str, icon: Optional[QtGui.QIcon] = None, parent=None):
         super().__init__(parent)
-
-        self._settings = SettingsManager.get_instance()
 
         self._name = name
         self._icon = icon

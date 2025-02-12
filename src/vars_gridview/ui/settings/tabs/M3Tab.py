@@ -1,5 +1,6 @@
 from PyQt6 import QtWidgets
 
+from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
 
@@ -11,9 +12,9 @@ class M3Tab(AbstractSettingsTab):
     def __init__(self, parent=None):
         super().__init__("M3", parent=parent)
 
-        self.raziel_url_edit = QtWidgets.QLineEdit(self._settings.raz_url.value)
+        self.raziel_url_edit = QtWidgets.QLineEdit(SETTINGS.raz_url.value)
         self.raziel_url_edit.textChanged.connect(self.settingsChanged.emit)
-        self._settings.raz_url.valueChanged.connect(self.raziel_url_edit.setText)
+        SETTINGS.raz_url.valueChanged.connect(self.raziel_url_edit.setText)
 
         self.raziel_url_edit.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
@@ -32,4 +33,4 @@ class M3Tab(AbstractSettingsTab):
         self.setLayout(layout)
 
     def apply_settings(self):
-        self._settings.raz_url.value = self.raziel_url_edit.text()
+        SETTINGS.raz_url.value = self.raziel_url_edit.text()

@@ -1,6 +1,6 @@
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib.settings import SettingsManager
+from vars_gridview.lib.constants import SETTINGS
 
 
 class LoginDialog(QtWidgets.QDialog):
@@ -16,8 +16,6 @@ class LoginDialog(QtWidgets.QDialog):
         def __init__(self, parent=None, completer=None):
             super().__init__(parent)
 
-            settings = SettingsManager.get_instance()
-
             self._username_line_edit = QtWidgets.QLineEdit()
             if completer is not None:
                 self._username_line_edit.setCompleter(completer)
@@ -25,7 +23,7 @@ class LoginDialog(QtWidgets.QDialog):
             self._password_line_edit = QtWidgets.QLineEdit()
             self._password_line_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
 
-            raziel_url = settings.raz_url.value
+            raziel_url = SETTINGS.raz_url.value
             self._raziel_url_line_edit = QtWidgets.QLineEdit()
             self._raziel_url_line_edit.setText(raziel_url)
             self._raziel_url_line_edit.setPlaceholderText(raziel_url)
@@ -63,8 +61,7 @@ class LoginDialog(QtWidgets.QDialog):
 
         @QtCore.pyqtSlot(str)
         def _update_raziel_url_setting(self, text):
-            settings = SettingsManager.get_instance()
-            settings.raz_url.value = text
+            SETTINGS.raz_url.value = text
 
         @property
         def credentials(self):

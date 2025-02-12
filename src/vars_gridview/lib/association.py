@@ -1,7 +1,5 @@
 """
-rectlabel.py -- Tools to implement a labeling UI for bounding boxes in images
-Copyright 2020  Monterey Bay Aquarium Research Institute
-Distributed under MIT license. See license.txt for more information.
+VARS bounding box association.
 """
 
 import json
@@ -16,8 +14,10 @@ from vars_gridview.lib.m3.operations import (
 )
 
 
-class VARSLocalization:
-    """Representation of VARS localizations (bounding boxes)"""
+class BoundingBoxAssociation:
+    """
+    VARS bounding box association.
+    """
 
     def __init__(
         self,
@@ -57,7 +57,7 @@ class VARSLocalization:
         if isinstance(data, str):
             data = json.loads(data)
 
-        return VARSLocalization(**data)
+        return BoundingBoxAssociation(**data)
 
     @property
     def json(self):

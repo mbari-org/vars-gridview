@@ -7,7 +7,7 @@ from dreamsim import dreamsim
 from PIL import Image
 from torch.types import Device
 
-from vars_gridview.lib.settings import SettingsManager
+from vars_gridview.lib.constants import SETTINGS
 
 
 def get_torch_device() -> Device:
@@ -59,8 +59,7 @@ class DreamSimEmbedding(Embedding):
     CACHE_SUBDIR_NAME = "dreamsim"
 
     def __init__(self) -> None:
-        settings = SettingsManager.get_instance()
-        base_cache_dir = Path(settings.cache_dir.value)
+        base_cache_dir = Path(SETTINGS.cache_dir.value)
         dreamsim_cache_dir = base_cache_dir / DreamSimEmbedding.CACHE_SUBDIR_NAME
 
         # Get the appropriate torch device

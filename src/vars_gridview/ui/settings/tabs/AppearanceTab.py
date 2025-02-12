@@ -1,5 +1,6 @@
 from PyQt6 import QtWidgets
 
+from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
 
@@ -14,17 +15,17 @@ class AppearanceTab(AbstractSettingsTab):
         self.label_font_size_spinbox = QtWidgets.QSpinBox()
         self.label_font_size_spinbox.setMinimum(4)
         self.label_font_size_spinbox.setMaximum(12)
-        self.label_font_size_spinbox.setValue(self._settings.label_font_size.value)
+        self.label_font_size_spinbox.setValue(SETTINGS.label_font_size.value)
         self.label_font_size_spinbox.valueChanged.connect(self.settingsChanged.emit)
-        self._settings.label_font_size.valueChanged.connect(
+        SETTINGS.label_font_size.valueChanged.connect(
             self.label_font_size_spinbox.setValue
         )
 
         self.selection_highlight_color_button = QtWidgets.QPushButton()
         self.selection_highlight_color_button.clicked.connect(self.select_color)
-        self._selection_highlight_color = self._settings.selection_highlight_color.value
+        self._selection_highlight_color = SETTINGS.selection_highlight_color.value
         self._update_selection_highlight_color_button()
-        self._settings.selection_highlight_color.valueChanged.connect(
+        SETTINGS.selection_highlight_color.valueChanged.connect(
             self._update_selection_highlight_color_button
         )
 
@@ -41,9 +42,7 @@ class AppearanceTab(AbstractSettingsTab):
         color = QtWidgets.QColorDialog.getColor()
         if color.isValid():
             self._selection_highlight_color = color.name()
-            self._settings.selection_highlight_color.value = (
-                self._selection_highlight_color
-            )
+            SETTINGS.selection_highlight_color.value = self._selection_highlight_color
 
     def _update_selection_highlight_color_button(self):
         self.selection_highlight_color_button.setStyleSheet(
@@ -64,5 +63,5 @@ class AppearanceTab(AbstractSettingsTab):
         self.setLayout(layout)
 
     def apply_settings(self):
-        self._settings.label_font_size.value = self.label_font_size_spinbox.value()
-        self._settings.selection_highlight_color.value = self._selection_highlight_color
+        SETTINGS.label_font_size.value = self.label_font_size_spinbox.value()
+        SETTINGS.selection_highlight_color.value = self._selection_highlight_color

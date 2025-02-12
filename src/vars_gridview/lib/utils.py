@@ -7,6 +7,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+import shlex
 
 
 def get_timestamp(
@@ -50,16 +51,41 @@ def get_timestamp(
     return None
 
 
-def open_file_browser(path: Path):
+def open_file_browser(path: Path) -> subprocess.Popen:
     """
     Open a file browser to the given path. Implementation varies by platform.
 
     Args:
         path: The path to open.
+
+    Returns:
+        The Popen object of the opened process.
     """
+    path_str = shlex.quote(str(path))
     if sys.platform == "win32":
-        subprocess.Popen(f'explorer /select,"{path}"')
+        process = subprocess.Popen(f"explorer /select,{path_str}")
     elif sys.platform == "darwin":
-        subprocess.Popen(["open", "-R", path] if path.is_file() else ["open", path])
+        process = subprocess.Popen(
+            ["open", "-R", path_str] if path.is_file() else ["open", path_str]
+        )
     else:
-        subprocess.Popen(["xdg-open", path.parent if path.is_file() else path])
+        process = subprocess.Popen(
+            ["xdg-open", path.parent if path.is_file() else path_str]
+        )
+    return process
+
+
+def parse_tsv(data: str) -> tuple[list[str], list[list[str]]]:
+    """
+    Parse a TSV string into a header and rows.
+
+    Args:
+        data (str): TSV data.
+
+    Returns:
+        tuple[list[str], list[list[str]]]: Header and rows.
+    """
+    lines = data.split("\n")
+    header = lines[0].split("\t")
+    rows = [line.split("\t") for line in lines[1:] if line]
+    return header, rows

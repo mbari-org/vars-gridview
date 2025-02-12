@@ -1,3 +1,7 @@
+"""
+M3 querying utilities.
+"""
+
 from pydantic.dataclasses import dataclass
 
 
@@ -73,17 +77,42 @@ class QueryRequest:
         return d
 
 
-def parse_tsv(data: str) -> tuple[list[str], list[list[str]]]:
-    """
-    Parse a TSV string into a header and rows.
+class ORList:
+    @staticmethod
+    def typestr(value):
+        if isinstance(value, str):
+            return f"'{value}'"
+        elif isinstance(value, int):
+            return f"{value}"
+        else:
+            raise ValueError("Unsupported type: {}".format(type(value)))
 
-    Args:
-        data (str): TSV data.
+    def __init__(self, key: str, values=None):
+        self._key = key
+        self._values = values or []
 
-    Returns:
-        tuple[list[str], list[list[str]]]: Header and rows.
-    """
-    lines = data.split("\n")
-    header = lines[0].split("\t")
-    rows = [line.split("\t") for line in lines[1:] if line]
-    return header, rows
+    def __iadd__(self, value):
+        self._values.append(value)
+        return self
+
+    def to_constraint(self) -> QueryConstraint:
+        constraint = QueryConstraint(
+            column=self._key,
+        )
+        if len(self._values) == 1:
+            constraint.equals = self._values[0]
+        else:
+            constraint.in_ = self._values
+        return constraint
+
+
+class ConstraintSpec:
+    def __init__(self, lists: list[ORList] = None):
+        self._lists = lists or []
+
+    def to_constraints(self) -> list[QueryConstraint]:
+        return [list_.to_constraint() for list_ in self._lists]
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(lists=[ORList(key, values) for key, values in d.items()])

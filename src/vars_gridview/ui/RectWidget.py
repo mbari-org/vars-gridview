@@ -1,12 +1,8 @@
-# -*- coding: utf-8 -*-
 """
-widgets.py -- A set of classes to extend widgets from pyqtgraph and pyqt for annotation purposes
-Copyright 2020  Monterey Bay Aquarium Research Institute
-Distributed under MIT license. See license.txt for more information.
-
+RectWidget class for displaying a single localization in the grid view.
 """
 
-import datetime
+from datetime import datetime
 from typing import List, Optional
 
 import cv2
@@ -14,12 +10,12 @@ import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
 from scipy.spatial.distance import cosine
 
-from vars_gridview.lib.annotation import VARSLocalization
+from vars_gridview.lib.association import BoundingBoxAssociation
+from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.lib.embedding import Embedding
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
-from vars_gridview.lib.settings import SettingsManager
-from vars_gridview.lib.util import get_timestamp
+from vars_gridview.lib.utils import get_timestamp
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
@@ -30,7 +26,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def __init__(
         self,
-        localizations: List[VARSLocalization],
+        localizations: List[BoundingBoxAssociation],
         image: np.ndarray,
         ancillary_data: dict,
         video_data: dict,
@@ -188,7 +184,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         return self.localizations[self.localization_index].verified
 
     @property
-    def localization(self) -> VARSLocalization:
+    def localization(self) -> BoundingBoxAssociation:
         return self.localizations[self.localization_index]
 
     @property
@@ -199,7 +195,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def image_height(self):
         return self.image.shape[0]
 
-    def annotation_datetime(self) -> Optional[datetime.datetime]:
+    def annotation_datetime(self) -> Optional[datetime]:
         video_start_datetime = self.video_data["video_start_timestamp"]
 
         elapsed_time_millis = self.video_data.get("index_elapsed_time_millis", None)
@@ -408,9 +404,6 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         return orpixmap
 
     def paint(self, painter, option, widget):
-        # Get app settings
-        settings = SettingsManager.get_instance()
-
         pen = QtGui.QPen()
         pen.setWidth(1)
         pen.setBrush(QtCore.Qt.GlobalColor.black)
@@ -426,7 +419,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         if self.is_selected:
             painter.fillRect(
                 self.outline_rect,
-                QtGui.QColor.fromString(settings.selection_highlight_color.value),
+                QtGui.QColor.fromString(SETTINGS.selection_highlight_color.value),
             )
 
         # Fill border background if verified
@@ -457,7 +450,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         # Set font
         font = QtGui.QFont(
-            "Arial", settings.label_font_size.value, QtGui.QFont.Weight.Bold, False
+            "Arial", SETTINGS.label_font_size.value, QtGui.QFont.Weight.Bold, False
         )
         painter.setFont(font)
 

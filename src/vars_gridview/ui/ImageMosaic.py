@@ -1,13 +1,9 @@
-# -*- coding: utf-8 -*-
 """
-image_mosaic.py -- A set of classes to extend widgets from pyqtgraph and pyqt for annotation purposes
-Copyright 2020  Monterey Bay Aquarium Research Institute
-Distributed under MIT license. See license.txt for more infomation.
-
+Image mosaic widget manager.
 """
 
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 import cv2
 import numpy as np
@@ -17,16 +13,16 @@ from iso8601 import parse_date
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib import m3
-from vars_gridview.lib.annotation import VARSLocalization
+from vars_gridview.lib.association import BoundingBoxAssociation
 from vars_gridview.lib.cache import CacheController
-from vars_gridview.lib.embedding import Embedding
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.sort_methods import SortMethod
-from vars_gridview.lib.util import get_timestamp
-from vars_gridview.lib.widgets import RectWidget
+from vars_gridview.lib.utils import get_timestamp
+from vars_gridview.ui.RectWidget import RectWidget
 
-# from vars_gridview.lib.constants import IMAGE_TYPE
+if TYPE_CHECKING:
+    from vars_gridview.lib.embedding import Embedding
 
 
 class ImageMosaic(QtCore.QObject):
@@ -43,7 +39,7 @@ class ImageMosaic(QtCore.QObject):
         rect_clicked_slot: callable,
         verifier: str,
         zoom: float = 1.0,
-        embedding_model: Optional[Embedding] = None,
+        embedding_model: Optional["Embedding"] = None,
     ):
         super().__init__()
 
@@ -199,7 +195,7 @@ class ImageMosaic(QtCore.QObject):
                     continue
 
                 # Parse the localization from the association link_value
-                localization = VARSLocalization.from_json(link_value)
+                localization = BoundingBoxAssociation.from_json(link_value)
                 localization.set_concept(concept, to_concept)
                 localization.imaged_moment_uuid = imaged_moment_uuid  # The imaged moment of the annotation. Does not necessarily correspond to the imaged moment of the bounding box association's image.
                 localization.observation_uuid = observation_uuid
@@ -524,7 +520,7 @@ class ImageMosaic(QtCore.QObject):
         # Re-render the mosaic
         self.render_mosaic()
 
-    def update_embedding_model(self, embedding_model: Embedding):
+    def update_embedding_model(self, embedding_model: "Embedding"):
         self._embedding_model = embedding_model
         for rect_widget in self._rect_widgets:
             rect_widget.update_embedding_model(embedding_model)

@@ -1,10 +1,8 @@
-# -*- coding: utf-8 -*-
 """
-rectlabel.py -- Tools to implement a labeling UI for bounding boxes in images
-Copyright 2020  Monterey Bay Aquarium Research Institute
-Distributed under MIT license. See license.txt for more information.
+Bounding box widget in the image view.
+"""
 
-"""
+from typing import List, Optional, Tuple
 
 import numpy as np
 import pyqtgraph as pg
@@ -12,22 +10,50 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
-from vars_gridview.lib.settings import SettingsManager
 
 
 class BoundingBox(pg.RectROI):
+    """
+    A class to represent a bounding box in an image.
+
+    Attributes:
+        view (pg.ViewBox): The view box to which the bounding box is added.
+        pos (tuple): The position of the bounding box.
+        size (tuple): The size of the bounding box.
+        rect (object): The rectangle object associated with the bounding box.
+        localization (object): The localization object associated with the bounding box.
+        verifier (object): The verifier object associated with the bounding box.
+        image_mosaic (object): The image mosaic object associated with the bounding box.
+        color (tuple): The color of the bounding box. Default is red.
+        label (str): The label of the bounding box. Default is "ROI".
+    """
+
     def __init__(
         self,
-        view,
-        pos,
-        size,
-        rect,
-        localization,
-        verifier,
-        image_mosaic,
-        color=(255, 0, 0),
-        label="ROI",
-    ):
+        view: pg.ViewBox,
+        pos: Tuple[float, float],
+        size: Tuple[float, float],
+        rect: object,
+        localization: object,
+        verifier: object,
+        image_mosaic: object,
+        color: Tuple[int, int, int] = (255, 0, 0),
+        label: str = "ROI",
+    ) -> None:
+        """
+        Constructs all the necessary attributes for the bounding box object.
+
+        Args:
+            view (pg.ViewBox): The view box to which the bounding box is added.
+            pos (tuple): The position of the bounding box.
+            size (tuple): The size of the bounding box.
+            rect (object): The rectangle object associated with the bounding box.
+            localization (object): The localization object associated with the bounding box.
+            verifier (object): The verifier object associated with the bounding box.
+            image_mosaic (object): The image mosaic object associated with the bounding box.
+            color (tuple, optional): The color of the bounding box. Default is red.
+            label (str, optional): The label of the bounding box. Default is "ROI".
+        """
         pg.RectROI.__init__(
             self,
             pos,
@@ -75,7 +101,7 @@ class BoundingBox(pg.RectROI):
             lambda bbox, ev: self.rect.clicked.emit(self.rect, ev)
         )  # Pass click event to rect
 
-    def _setup_menu(self):
+    def _setup_menu(self) -> None:
         """
         Set up the context menu for the bounding box.
         """
@@ -84,22 +110,25 @@ class BoundingBox(pg.RectROI):
         self._menu.addSeparator()
         self._menu.addAction("Delete", self._do_delete)
 
-    def contextMenuEvent(self, ev):
+    def contextMenuEvent(self, ev: QtGui.QContextMenuEvent) -> None:
         """
         Show the context menu.
+
+        Args:
+            ev (QtGui.QContextMenuEvent): The context menu event.
         """
         self._menu.popup(ev.screenPos())
 
-    def _do_delete(self):
+    def _do_delete(self) -> None:
         """
-        Delete (clicked from context menu).
+        Delete the bounding box (clicked from context menu).
         """
         self.image_mosaic.select(self.rect)
         self.image_mosaic.delete_selected()
 
-    def _do_change_concept(self):
+    def _do_change_concept(self) -> None:
         """
-        Change concept (clicked from context menu).
+        Change the concept of the bounding box (clicked from context menu).
         """
         try:
             kb_concepts = get_kb_concepts()
@@ -117,9 +146,9 @@ class BoundingBox(pg.RectROI):
         self.image_mosaic.select(self.rect)
         self.image_mosaic.label_selected(concept, None)
 
-    def _do_change_part(self):
+    def _do_change_part(self) -> None:
         """
-        Change part (clicked from context menu).
+        Change the part of the bounding box (clicked from context menu).
         """
         try:
             kb_parts = get_kb_parts()
@@ -137,7 +166,10 @@ class BoundingBox(pg.RectROI):
         self.image_mosaic.select(self.rect)
         self.image_mosaic.label_selected(None, part)
 
-    def check_bounds(self):
+    def check_bounds(self) -> None:
+        """
+        Check and adjust the bounds of the bounding box to ensure it stays within the image.
+        """
         x, y = self.pos()
         w, h = self.size()
         h = -h  # Fix negative height
@@ -152,27 +184,51 @@ class BoundingBox(pg.RectROI):
             self.setPos(min(max_x, max(min_x, x)), min(max_y, max(min_y, y)))
 
     @property
-    def is_selected(self):
+    def is_selected(self) -> bool:
+        """
+        bool: Whether the bounding box is selected.
+        """
         return self.rect.is_selected
 
-    def _dirty(self):
+    def _dirty(self) -> None:
+        """
+        Mark the bounding box as dirty (modified).
+        """
         self.dirty = True
 
-    def update_localization_box(self):
+    def update_localization_box(self) -> None:
+        """
+        Update the localization box with the current bounding box coordinates.
+        """
         x, y, w, h = self.get_box()
         y = self.rect.image_height - y
         self.localization.set_box(x, y, w, h)
         self.localization.rect.update_roi_pic()
 
-    def update_label(self):
+    def update_label(self) -> None:
+        """
+        Update the label of the bounding box.
+        """
         self.label = self.localization.text_label
         self.draw_name()
 
-    def remove(self, dummy):
+    def remove(self, dummy: Optional[object]) -> None:
+        """
+        Remove the bounding box from the view.
+
+        Args:
+            dummy: A dummy argument to match the signal signature.
+        """
         self.view.removeItem(self.textItem)
         self.view.removeItem(self)
 
-    def get_box(self):
+    def get_box(self) -> List[float]:
+        """
+        Get the coordinates of the bounding box.
+
+        Returns:
+            list: A list containing the x, y, width, and height of the bounding box.
+        """
         x, y = self.pos()
         w, h = self.size()
 
@@ -185,7 +241,10 @@ class BoundingBox(pg.RectROI):
 
         return [x, y, np.abs(w), np.abs(h)]
 
-    def draw_name(self):
+    def draw_name(self) -> None:
+        """
+        Draw the label of the bounding box on the image.
+        """
         roiSize = self.size()
         w = roiSize[0]
         h = roiSize[1]
@@ -207,88 +266,3 @@ class BoundingBox(pg.RectROI):
         else:
             self.textItem.setText(self.label)
             self.textItem.setPos(x, y)
-
-
-class BoxHandler:
-    def __init__(
-        self,
-        graphics_view,
-        image_mosaic,
-        localization=None,
-        all_labels=[],
-        verifier=None,
-    ):
-        self.boxes = []
-        self.dragging = False
-
-        self.view_box = pg.ViewBox()
-        self.graphics_view = graphics_view
-        self.graphics_view.setCentralItem(self.view_box)
-        self.view_box.setAspectLocked()
-        self.roi_detail = pg.ImageItem()
-        self.view_box.addItem(self.roi_detail)
-        self.localization = localization
-        self.all_labels = all_labels
-        self.verifier = verifier
-
-        self.image_mosaic = image_mosaic
-
-    def update_labels(self):
-        for box in self.boxes:
-            if box.is_selected:
-                box.update_label()
-
-    def add_annotation(self, obj_idx, rect):
-        settings = SettingsManager.get_instance()
-        q_color = QtGui.QColor.fromString(settings.selection_highlight_color.value)
-        for idx, localization in enumerate(rect.localizations):
-            if localization.deleted:
-                continue
-            selected_loc = idx == obj_idx
-
-            # Set color of the box
-            color = q_color.getRgb()
-            if not selected_loc:
-                avg = int(sum(color) / len(color))
-                color = (avg, avg, avg)  # Grayscale equivalent of original color
-
-            # Grab the bounds
-            xmin, ymin, xmax, ymax = localization.box
-            if xmax - xmin <= 0 or ymax - ymin <= 0:  # Bad box bounds check
-                LOGGER.warn("Bad box bounds, not adding to the view")
-            else:
-                label = localization.text_label
-                height = rect.image_height
-
-                # Create the bounding box
-                bb = BoundingBox(
-                    self.view_box,
-                    [xmin, height - ymin],
-                    [xmax - xmin, -1 * (ymax - ymin)],
-                    localization.rect,
-                    localization,
-                    self.verifier,
-                    self.image_mosaic,
-                    color=color,
-                    label=label,
-                )
-
-                # Add it to the list
-                self.boxes.append(bb)
-
-        self.localization = rect.localizations[obj_idx]
-
-    def save_all(self, verifier):
-        for box in self.boxes:
-            if box.dirty:
-                box.localization.push_changes(verifier)
-
-    def map_pos_to_item(self, pos):
-        pt = self.view_box.mapSceneToView(pos)
-        pt = self.view_box.mapFromViewToItem(self.roi_detail, pt)
-        return pt
-
-    def clear(self):
-        for box in self.boxes:
-            box.remove(None)
-        self.boxes = []

@@ -1,9 +1,5 @@
-# -*- coding: utf-8 -*-
 """
-rectlabel.py -- Tools to implement a labeling UI for bounding boxes in images
-Copyright 2020  Monterey Bay Aquarium Research Institute
-Distributed under MIT license. See license.txt for more information.
-
+Singleton class for logging.
 """
 
 import logging
@@ -13,8 +9,15 @@ from vars_gridview.lib.constants import LOG_DIR
 
 
 class AppLogger:
+    """
+    Singleton application logger. Use get_instance() to get the instance.
+    """
+
     @staticmethod
-    def get_instance():
+    def get_instance() -> "AppLogger":
+        """
+        Get the singleton instance.
+        """
         if not hasattr(AppLogger, "_instance"):
             AppLogger._instance = AppLogger()
         return AppLogger._instance
@@ -49,13 +52,25 @@ class AppLogger:
         self._logger.addHandler(self._file_handler)
 
     @property
-    def logger(self):
+    def logger(self) -> logging.Logger:
         return self._logger
 
-    def set_stream_level(self, level):
+    def set_stream_level(self, level) -> None:
+        """
+        Set the stream handler level.
+
+        Args:
+            level: The level to set.
+        """
         self._stream_handler.setLevel(level)
 
-    def set_file_level(self, level):
+    def set_file_level(self, level) -> None:
+        """
+        Set the file handler level.
+
+        Args:
+            level: The level to set.
+        """
         self._file_handler.setLevel(level)
 
 

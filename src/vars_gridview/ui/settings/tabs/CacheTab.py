@@ -1,5 +1,6 @@
 from PyQt6 import QtCore, QtWidgets
 
+from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.ui.FileSelectionLineEdit import DirectorySelectionLineEdit
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
@@ -17,19 +18,17 @@ class CacheTab(AbstractSettingsTab):
         self.clearCache.connect(clear_cache_slot)
 
         self.cache_dir_lineedit = DirectorySelectionLineEdit(parent=self)
-        self.cache_dir_lineedit.setText(self._settings.cache_dir.value)
+        self.cache_dir_lineedit.setText(SETTINGS.cache_dir.value)
         self.cache_dir_lineedit.textChanged.connect(self.settingsChanged.emit)
-        self._settings.cache_dir.valueChanged.connect(self.cache_dir_lineedit.setText)
+        SETTINGS.cache_dir.valueChanged.connect(self.cache_dir_lineedit.setText)
 
         self.cache_size_spinbox = QtWidgets.QSpinBox()
         self.cache_size_spinbox.setMinimum(1)
         self.cache_size_spinbox.setMaximum(1000000)
         self.cache_size_spinbox.setSuffix(" MB")
-        self.cache_size_spinbox.setValue(self._settings.cache_size_mb.value)
+        self.cache_size_spinbox.setValue(SETTINGS.cache_size_mb.value)
         self.cache_size_spinbox.valueChanged.connect(self.settingsChanged.emit)
-        self._settings.cache_size_mb.valueChanged.connect(
-            self.cache_size_spinbox.setValue
-        )
+        SETTINGS.cache_size_mb.valueChanged.connect(self.cache_size_spinbox.setValue)
 
         self.cache_dir_lineedit.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
@@ -63,5 +62,5 @@ class CacheTab(AbstractSettingsTab):
         self.setLayout(root_layout)
 
     def apply_settings(self):
-        self._settings.cache_dir.value = self.cache_dir_lineedit.text()
-        self._settings.cache_size_mb.value = self.cache_size_spinbox.value()
+        SETTINGS.cache_dir.value = self.cache_dir_lineedit.text()
+        SETTINGS.cache_size_mb.value = self.cache_size_spinbox.value()

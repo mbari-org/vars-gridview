@@ -3,10 +3,11 @@ from pathlib import Path
 from shutil import rmtree
 from typing import Iterable, Optional
 from uuid import uuid4
+from collections import OrderedDict
 
 from PyQt6 import QtCore
 
-from vars_gridview.lib.settings import SettingsManager
+from vars_gridview.lib.constants import SETTINGS
 
 
 class CacheController(QtCore.QObject):
@@ -16,8 +17,6 @@ class CacheController(QtCore.QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-
-        self._settings = SettingsManager.get_instance()
 
         self._manifest = self._load_manifest()
 
@@ -29,7 +28,7 @@ class CacheController(QtCore.QObject):
         Returns:
             The cache directory.
         """
-        cache_dir = Path(self._settings.cache_dir.value)
+        cache_dir = Path(SETTINGS.cache_dir.value)
         cache_dir.mkdir(parents=True, exist_ok=True)
         return cache_dir
 
@@ -41,7 +40,7 @@ class CacheController(QtCore.QObject):
         Returns:
             The cache size in MB.
         """
-        return self._settings.cache_size_mb.value
+        return SETTINGS.cache_size_mb.value
 
     @property
     def data_dir(self) -> Path:
@@ -65,7 +64,7 @@ class CacheController(QtCore.QObject):
         """
         return self.cache_dir / "manifest.json"
 
-    def _load_manifest(self) -> dict:
+    def _load_manifest(self) -> OrderedDict:
         """
         Load the manifest.
 
@@ -74,10 +73,10 @@ class CacheController(QtCore.QObject):
         """
         if self.manifest_path.exists():
             with open(self.manifest_path, "r") as f:
-                return json.load(f)
-        return {}
+                return OrderedDict(json.load(f))
+        return OrderedDict()
 
-    def _save_manifest(self, manifest: dict):
+    def _save_manifest(self, manifest: OrderedDict):
         """
         Save the manifest.
 
@@ -127,7 +126,7 @@ class CacheController(QtCore.QObject):
         if len(self._manifest) == 0:
             return None
 
-        return min(self._manifest, key=lambda key: self._manifest[key]["timestamp"])
+        return next(iter(self._manifest))
 
     def _balance_cache(self):
         """
@@ -135,11 +134,13 @@ class CacheController(QtCore.QObject):
 
         If the cache size exceeds the maximum size, delete the oldest files until the cache size is below the maximum.
         """
-        while self.cache_size > self.cache_size_mb * 1000000:
+        max_cache_size = self.cache_size_mb * 1024 * 1024
+        while self.cache_size > max_cache_size:
             lru_key = self.lru_key
             if lru_key is None:
                 break
 
+            print(f"Removing LRU key: {lru_key}")  # Debug statement
             self.remove(lru_key)
 
     def insert(self, key: str, data: bytes):
@@ -151,10 +152,9 @@ class CacheController(QtCore.QObject):
             data: The file data.
         """
         # Get a unique filename
-        output_path = None
-        while output_path is None or output_path.exists():
-            uuid = uuid4()
-            output_path = self.data_dir / str(uuid).lower()
+        output_path = self.data_dir / f"{uuid4().hex.lower()}"
+        while output_path.exists():
+            output_path = self.data_dir / f"{uuid4().hex.lower()}"
 
         # Write the file
         try:
@@ -215,8 +215,10 @@ class CacheController(QtCore.QObject):
 
         # Delete the file
         path = self.data_dir / entry["name"]
-        if path.exists():
+        try:
             path.unlink()
+        except FileNotFoundError:
+            pass
 
         # Update the manifest
         del self._manifest[key]
@@ -228,7 +230,16 @@ class CacheController(QtCore.QObject):
 
         WARNING: This will delete all files in the cache data directory.
         """
-        rmtree(self.data_dir)
+        rmtree(self.data_dir, ignore_errors=True)
 
-        self._manifest = {}
+        self._manifest = OrderedDict()
         self._save_manifest(self._manifest)
+
+    def current_cache_usage(self) -> int:
+        """
+        Get the current cache usage in bytes.
+
+        Returns:
+            The current cache usage in bytes.
+        """
+        return self.cache_size

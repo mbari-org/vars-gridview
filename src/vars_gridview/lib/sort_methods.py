@@ -1,3 +1,7 @@
+"""
+Grid sort methods.
+"""
+
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, List, Tuple
@@ -5,7 +9,7 @@ from typing import Any, List, Tuple
 import cv2
 import numpy as np
 
-from vars_gridview.lib.widgets import RectWidget
+from vars_gridview.ui.RectWidget import RectWidget
 
 
 class SortMethod(ABC):
