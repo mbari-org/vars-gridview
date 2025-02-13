@@ -8,6 +8,16 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 import shlex
+from urllib.parse import parse_qs, urlparse
+
+import cv2
+import numpy as np
+from cachetools import cached, LRUCache
+import requests
+
+from vars_gridview.lib.m3 import BEHOLDER_CLIENT
+
+image_cache = LRUCache(maxsize=128)
 
 
 def get_timestamp(
@@ -89,3 +99,40 @@ def parse_tsv(data: str) -> tuple[list[str], list[list[str]]]:
     header = lines[0].split("\t")
     rows = [line.split("\t") for line in lines[1:] if line]
     return header, rows
+
+
+@cached(image_cache)
+def fetch_image(url: str) -> np.ndarray:
+    """
+    Fetch an image from the given URL.
+
+    Args:
+        url (str): The URL to fetch the image from.
+
+    Returns:
+        np.ndarray: The image as a NumPy array.
+    """
+    parsed_url = urlparse(url)
+
+    image_bytes = None
+    if parsed_url.scheme in ("http", "https"):
+        response = requests.get(url)
+        response.raise_for_status()
+        image_bytes = response.content
+    elif parsed_url.scheme == "beholder":
+        video_url = (
+            f"https://{parsed_url.netloc}{parsed_url.path}"  # TODO: This is brittle
+        )
+        query = parse_qs(parsed_url.query)
+        query_ms = query.get("ms", None)
+        if not query_ms:
+            raise ValueError("Timestamp not provided in the query string.")
+        try:
+            timestamp_ms = int(query_ms[0])
+        except ValueError as e:
+            raise ValueError("Invalid timestamp provided in the query string.") from e
+        image_bytes = BEHOLDER_CLIENT.capture_raw(video_url, timestamp_ms)
+    else:
+        raise ValueError(f"Unsupported image URL scheme: {parsed_url.scheme}")
+
+    return cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)

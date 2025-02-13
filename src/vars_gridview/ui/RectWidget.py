@@ -15,7 +15,7 @@ from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.lib.embedding import Embedding
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
-from vars_gridview.lib.utils import get_timestamp
+from vars_gridview.lib.utils import fetch_image, get_timestamp
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
@@ -27,7 +27,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def __init__(
         self,
         localizations: List[BoundingBoxAssociation],
-        image: np.ndarray,
+        image_url: str,
         ancillary_data: dict,
         video_data: dict,
         observer: str,
@@ -39,7 +39,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         QtWidgets.QGraphicsWidget.__init__(self, parent)
 
         self.localizations = localizations
-        self.image = image
+        self.image_url = image_url
         self.ancillary_data = ancillary_data
         self.video_data = video_data
         self.observer = observer
@@ -66,6 +66,13 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.update_roi_pic()
 
         self._deleted = False  # Flag to indicate if this rect widget has been deleted. Used to prevent double deletion.
+
+    @property
+    def image(self) -> np.ndarray:
+        """
+        Get the image data for this rect widget.
+        """
+        return fetch_image(self.image_url)
 
     @property
     def deleted(self) -> bool:
@@ -154,11 +161,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             )
 
         self._embedding = self._embedding_model.embed(
-            self.localization.get_roi(self.image)[::-1]
+            self.localization.get_roi(self.image_url)[::-1]
         )
 
     def update_roi_pic(self):
-        self.roi = self.localization.get_roi(self.image)
+        self.roi = self.localization.get_roi(self.image_url)
         self.pic = self.getpic(self.roi)
         if self._embedding_model is not None:
             self.update_embedding()

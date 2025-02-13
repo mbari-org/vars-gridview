@@ -54,6 +54,9 @@ GUI_SPLITTER1_STATE_DEFAULT = None
 GUI_SPLITTER2_STATE_DEFAULT = None
 GUI_STYLE_DEFAULT = "default"
 
+# Skimmer
+SKIMMER_URL = "http://skimmer:5000"
+
 # Settings
 SETTINGS = SettingsManager(
     settings=QtCore.QSettings(

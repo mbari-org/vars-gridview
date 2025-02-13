@@ -5,14 +5,10 @@ Image mosaic widget manager.
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, List, Optional
 
-import cv2
-import numpy as np
 import pyqtgraph as pg
-import requests
 from iso8601 import parse_date
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib import m3
 from vars_gridview.lib.association import BoundingBoxAssociation
 from vars_gridview.lib.cache import CacheController
 from vars_gridview.lib.log import LOGGER
@@ -268,39 +264,33 @@ class ImageMosaic(QtCore.QObject):
 
         # Download the images
         with pg.ProgressDialog(
-            "Downloading images...", 0, len(set(self.localization_groups.keys()))
+            "Creating ROIs...",
+            0,
+            sum(len(locs) for locs in self.localization_groups.values()),
         ) as dlg:
             for group_key, localizations in self.localization_groups.items():
                 imaged_moment_uuid, image_reference_uuid = group_key
 
-                dlg += 1
                 if dlg.wasCanceled():
-                    LOGGER.info("Image loading cancelled by user")
+                    LOGGER.info("ROI loading cancelled by user")
                     break
 
-                # Check if we've already downloaded the image for this group
-                if group_key in self.images_by_group:
-                    LOGGER.debug(
-                        "Skipping, already downloaded image for group with imaged moment {} and image reference {}".format(
-                            imaged_moment_uuid, image_reference_uuid
-                        )
-                    )
-                    continue
-                LOGGER.debug(
-                    f"Downloading image for group with imaged moment {imaged_moment_uuid} and image reference {image_reference_uuid}"
-                )
+                # LOGGER.debug(
+                #     f"Downloading image for group with imaged moment {imaged_moment_uuid} and image reference {image_reference_uuid}"
+                # )
 
-                # Scale factors. Needed if the image is not the same size as the annotation's source image
-                scale_x = 1.0
-                scale_y = 1.0
+                # # Scale factors. Needed if the image is not the same size as the annotation's source image
+                # scale_x = 1.0
+                # scale_y = 1.0
 
-                img_raw = None
+                # img_raw = None
+                image_url = None
                 if image_reference_uuid is None:
                     # No image reference, need to use beholder
                     video_data = self.moment_video_data[imaged_moment_uuid]
 
-                    source_width = video_data["video_width"]
-                    source_height = video_data["video_height"]
+                    # source_width = video_data["video_width"]
+                    # source_height = video_data["video_height"]
 
                     # Find the video URI of the MP4 video
                     original_video_reference_uuid = video_data["video_reference_uuid"]
@@ -319,8 +309,8 @@ class ImageMosaic(QtCore.QObject):
 
                     # Get the MP4 video data
                     mp4_video_reference_uri = mp4_video_data["video_reference"]["uri"]
-                    mp4_width = mp4_video_data["video_reference"]["width"]
-                    mp4_height = mp4_video_data["video_reference"]["height"]
+                    # mp4_width = mp4_video_data["video_reference"]["width"]
+                    # mp4_height = mp4_video_data["video_reference"]["height"]
                     mp4_video_start_timestamp = parse_date(
                         mp4_video_data["video"]["start_timestamp"]
                     )  # datetime
@@ -332,45 +322,51 @@ class ImageMosaic(QtCore.QObject):
                         * 1000
                     )
 
-                    cache_key = (
-                        f"beholder | {mp4_video_reference_uri} | {elapsed_time_millis}"
+                    # cache_key = (
+                    #     f"beholder | {mp4_video_reference_uri} | {elapsed_time_millis}"
+                    # )
+                    # try:
+                    #     img_raw = self.cache_controller.get(cache_key)
+                    # except Exception:
+                    #     pass
+
+                    # if img_raw is not None:
+                    #     LOGGER.debug(
+                    #         f"Found image for moment {imaged_moment_uuid} in cache"
+                    #     )
+                    # else:
+                    #     # Get the capture from beholder
+                    #     LOGGER.debug(
+                    #         f"Getting capture from beholder for moment: {imaged_moment_uuid} ({mp4_video_reference_uri} @ {elapsed_time_millis} ms)"
+                    #     )
+                    #     try:
+                    #         img_raw = m3.BEHOLDER_CLIENT.capture_raw(
+                    #             mp4_video_reference_uri, elapsed_time_millis
+                    #         )
+                    #     except Exception:
+                    #         LOGGER.error(
+                    #             "Error getting capture from beholder for moment: {}, skipping".format(
+                    #                 imaged_moment_uuid
+                    #             )
+                    #         )
+                    #         continue
+
+                    #     try:
+                    #         self.cache_controller.insert(
+                    #             cache_key, img_raw
+                    #         )  # Cache the image
+                    #         LOGGER.debug(f"Cached image with key {cache_key}")
+                    #     except Exception as e:
+                    #         LOGGER.error(f"Error caching image: {e}")
+
+                    # scale_x = source_width / mp4_width
+                    # scale_y = source_height / mp4_height
+
+                    image_url = (
+                        mp4_video_reference_uri.replace("https://", "beholder://")
+                        + "?ms="
+                        + str(elapsed_time_millis)
                     )
-                    try:
-                        img_raw = self.cache_controller.get(cache_key)
-                    except Exception:
-                        pass
-
-                    if img_raw is not None:
-                        LOGGER.debug(
-                            f"Found image for moment {imaged_moment_uuid} in cache"
-                        )
-                    else:
-                        # Get the capture from beholder
-                        LOGGER.debug(
-                            f"Getting capture from beholder for moment: {imaged_moment_uuid} ({mp4_video_reference_uri} @ {elapsed_time_millis} ms)"
-                        )
-                        try:
-                            img_raw = m3.BEHOLDER_CLIENT.capture_raw(
-                                mp4_video_reference_uri, elapsed_time_millis
-                            )
-                        except Exception:
-                            LOGGER.error(
-                                "Error getting capture from beholder for moment: {}, skipping".format(
-                                    imaged_moment_uuid
-                                )
-                            )
-                            continue
-
-                        try:
-                            self.cache_controller.insert(
-                                cache_key, img_raw
-                            )  # Cache the image
-                            LOGGER.debug(f"Cached image with key {cache_key}")
-                        except Exception as e:
-                            LOGGER.error(f"Error caching image: {e}")
-
-                    scale_x = source_width / mp4_width
-                    scale_y = source_height / mp4_height
 
                 else:
                     # We have an image reference UUID, so we can get the image directly
@@ -402,61 +398,63 @@ class ImageMosaic(QtCore.QObject):
                             )
                             continue
 
-                    cache_key = f"url | {url}"
-                    try:
-                        img_raw = self.cache_controller.get(cache_key)
-                    except Exception:
-                        pass
+                    # cache_key = f"url | {url}"
+                    # try:
+                    #     img_raw = self.cache_controller.get(cache_key)
+                    # except Exception:
+                    #     pass
 
-                    if img_raw is not None:
-                        LOGGER.debug(
-                            f"Found image for moment {imaged_moment_uuid} in cache"
-                        )
-                    else:
-                        # Fetch the image from the URL
-                        res = requests.get(url)
+                    # if img_raw is not None:
+                    #     LOGGER.debug(
+                    #         f"Found image for moment {imaged_moment_uuid} in cache"
+                    #     )
+                    # else:
+                    #     # Fetch the image from the URL
+                    #     res = requests.get(url)
 
-                        # Check the status code and skip if not 200
-                        if res.status_code != 200:
-                            LOGGER.warn(
-                                "Unable to fetch image (status {}) at url: {}, skipping".format(
-                                    res.status_code, url
-                                )
-                            )
-                            continue
+                    #     # Check the status code and skip if not 200
+                    #     if res.status_code != 200:
+                    #         LOGGER.warn(
+                    #             "Unable to fetch image (status {}) at url: {}, skipping".format(
+                    #                 res.status_code, url
+                    #             )
+                    #         )
+                    #         continue
 
-                        img_raw = res.content
+                    #     img_raw = res.content
 
-                        try:
-                            self.cache_controller.insert(
-                                cache_key, img_raw
-                            )  # Cache the image
-                            LOGGER.debug(f"Cached image with key {cache_key}")
-                        except Exception as e:
-                            LOGGER.error(f"Error caching image: {e}")
+                    #     try:
+                    #         self.cache_controller.insert(
+                    #             cache_key, img_raw
+                    #         )  # Cache the image
+                    #         LOGGER.debug(f"Cached image with key {cache_key}")
+                    #     except Exception as e:
+                    #         LOGGER.error(f"Error caching image: {e}")
 
-                img_arr = np.fromstring(img_raw, np.uint8)
-                img = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
+                    image_url = url
 
-                # Rescale the image if needed
-                if scale_x != 1.0 or scale_y != 1.0:
-                    LOGGER.debug(
-                        f"Resizing image for moment {imaged_moment_uuid} by {scale_x}x{scale_y}"
-                    )
+                # img_arr = np.fromstring(img_raw, np.uint8)
+                # img = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
 
-                    if scale_x == 0 or scale_y == 0:
-                        LOGGER.warn(
-                            f"Invalid scale factors for moment {imaged_moment_uuid}: {scale_x}x{scale_y}, skipping"
-                        )
-                        continue
+                # # Rescale the image if needed
+                # if scale_x != 1.0 or scale_y != 1.0:
+                #     LOGGER.debug(
+                #         f"Resizing image for moment {imaged_moment_uuid} by {scale_x}x{scale_y}"
+                #     )
 
-                    img = cv2.resize(
-                        img,
-                        None,
-                        fx=scale_x,
-                        fy=scale_y,
-                        interpolation=cv2.INTER_CUBIC,  # see OpenCV docs: https://docs.opencv.org/4.8.0/da/d54/group__imgproc__transform.html#ga47a974309e9102f5f08231edc7e7529d
-                    )
+                #     if scale_x == 0 or scale_y == 0:
+                #         LOGGER.warn(
+                #             f"Invalid scale factors for moment {imaged_moment_uuid}: {scale_x}x{scale_y}, skipping"
+                #         )
+                #         continue
+
+                #     img = cv2.resize(
+                #         img,
+                #         None,
+                #         fx=scale_x,
+                #         fy=scale_y,
+                #         interpolation=cv2.INTER_CUBIC,  # see OpenCV docs: https://docs.opencv.org/4.8.0/da/d54/group__imgproc__transform.html#ga47a974309e9102f5f08231edc7e7529d
+                #     )
 
                 self.n_images += 1
 
@@ -464,17 +462,15 @@ class ImageMosaic(QtCore.QObject):
                     self.moment_ancillary_data.get(imaged_moment_uuid, None) or {}
                 )
                 video_data = self.moment_video_data.get(imaged_moment_uuid, None) or {}
-                min_x = 0
-                min_y = 0
-                max_x = img.shape[1]
-                max_y = img.shape[0]
+                # min_x = 0
+                # min_y = 0
+                # max_x = img.shape[1]
+                # max_y = img.shape[0]
 
                 # Filter out invalid boxes
                 valid_localizations = []
                 for loc in localizations:
-                    if not (
-                        loc.valid_box and loc.in_bounds(min_x, min_y, max_x, max_y)
-                    ):
+                    if not (loc.valid_box):
                         LOGGER.debug(
                             f"Skipping localization {loc.association_uuid} due to invalid box or out of bounds"
                         )
@@ -491,7 +487,7 @@ class ImageMosaic(QtCore.QObject):
                     other_locs.remove(localization)
                     rw = RectWidget(
                         other_locs + [localization],
-                        img,
+                        image_url,
                         ancillary_data,
                         video_data,
                         observer,
@@ -507,6 +503,7 @@ class ImageMosaic(QtCore.QObject):
                     localization.rect = rw  # Back reference
 
                     self.n_localizations += 1
+                    dlg += 1
 
     def _similarity_sort_slot(self, clicked_rect: RectWidget, same_class_only: bool):
         def key(rect_widget: RectWidget) -> float:
