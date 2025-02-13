@@ -7,10 +7,6 @@ from typing import Any, Dict, Optional
 from PyQt6 import QtCore
 
 
-# Use INI format for settings
-QtCore.QSettings.setDefaultFormat(QtCore.QSettings.Format.IniFormat)
-
-
 class SettingProxy(QtCore.QObject):
     valueChanged = QtCore.pyqtSignal(object)
 
@@ -55,12 +51,6 @@ class SettingsManager:
     """
 
     _instance: "SettingsManager" = None
-
-    @classmethod
-    def get_instance(cls) -> "SettingsManager":
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
 
     def __init__(self, settings: Optional[QtCore.QSettings] = None):
         self._settings = settings or QtCore.QSettings()

@@ -26,7 +26,6 @@ from vars_gridview.lib.constants import (
 )
 from vars_gridview.lib.box_handler import BoxHandler
 from vars_gridview.lib.cache import CacheController
-from vars_gridview.lib.constants import GUI_SETTINGS
 from vars_gridview.ui.ImageMosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.operations import (
@@ -537,20 +536,22 @@ class MainWindow(TemplateBaseClass):
         """
         Restore window size and splitter states
         """
-        finfo = QtCore.QFileInfo(GUI_SETTINGS.fileName())
-        if finfo.exists() and finfo.isFile():
-            self.restoreGeometry(GUI_SETTINGS.value("geometry"))
-            self.restoreState(GUI_SETTINGS.value("windowState"))
-            self.ui.splitter1.restoreState(GUI_SETTINGS.value("splitter1state"))
-            self.ui.splitter2.restoreState(GUI_SETTINGS.value("splitter2state"))
-            self.ui.styleComboBox.setCurrentText(GUI_SETTINGS.value("style"))
+        if SETTINGS.gui_geometry.value is not None:
+            self.restoreGeometry(SETTINGS.gui_geometry.value)
+        if SETTINGS.gui_window_state.value is not None:
+            self.restoreState(SETTINGS.gui_window_state.value)
+        if SETTINGS.gui_splitter1_state.value is not None:
+            self.ui.splitter1.restoreState(SETTINGS.gui_splitter1_state.value)
+        if SETTINGS.gui_splitter2_state.value is not None:
+            self.ui.splitter2.restoreState(SETTINGS.gui_splitter2_state.value)
+        self.ui.styleComboBox.setCurrentText(SETTINGS.gui_style.value)
 
     def _save_gui(self):
-        GUI_SETTINGS.setValue("geometry", self.saveGeometry())
-        GUI_SETTINGS.setValue("windowState", self.saveState())
-        GUI_SETTINGS.setValue("splitter1state", self.ui.splitter1.saveState())
-        GUI_SETTINGS.setValue("splitter2state", self.ui.splitter2.saveState())
-        GUI_SETTINGS.setValue("style", self.ui.styleComboBox.currentText())
+        SETTINGS.gui_geometry.value = self.saveGeometry()
+        SETTINGS.gui_window_state.value = self.saveState()
+        SETTINGS.gui_splitter1_state.value = self.ui.splitter1.saveState()
+        SETTINGS.gui_splitter2_state.value = self.ui.splitter2.saveState()
+        SETTINGS.gui_style.value = self.ui.styleComboBox.currentText()
 
     def _style_buttons(self):
         """

@@ -27,7 +27,6 @@ ASSETS_DIR = ROOT_DIR / "assets"
 ICONS_DIR = ASSETS_DIR / "icons"
 UI_FILE = ASSETS_DIR / "gridview.ui"
 STYLE_DIR = ASSETS_DIR / "style"
-GUI_SETTINGS_FILE = ASSETS_DIR / "gui.ini"
 LOG_DIR = Path(user_log_dir(APP_NAME, APP_ORGANIZATION))
 
 # Appearance defaults
@@ -48,8 +47,22 @@ SHARKTOPODA_APP_NAME = "Sharktopoda"
 # Embeddings
 EMBEDDINGS_ENABLED_DEFAULT = False
 
+# GUI settings defaults
+GUI_GEOMETRY_DEFAULT = None
+GUI_WINDOW_STATE_DEFAULT = None
+GUI_SPLITTER1_STATE_DEFAULT = None
+GUI_SPLITTER2_STATE_DEFAULT = None
+GUI_STYLE_DEFAULT = "default"
+
 # Settings
-SETTINGS = SettingsManager.get_instance()
+SETTINGS = SettingsManager(
+    settings=QtCore.QSettings(
+        QtCore.QSettings.Format.IniFormat,
+        QtCore.QSettings.Scope.UserScope,
+        APP_ORGANIZATION,
+        application=APP_NAME,
+    )
+)
 
 SETTINGS.raz_url = ("m3/raz_url", str, RAZIEL_URL_DEFAULT)
 
@@ -102,29 +115,35 @@ SETTINGS.embeddings_enabled = (
     EMBEDDINGS_ENABLED_DEFAULT,
 )
 
+SETTINGS.gui_geometry = ("gui/geometry", QtCore.QByteArray, GUI_GEOMETRY_DEFAULT)
+SETTINGS.gui_window_state = (
+    "gui/window_state",
+    QtCore.QByteArray,
+    GUI_WINDOW_STATE_DEFAULT,
+)
+SETTINGS.gui_splitter1_state = (
+    "gui/splitter1_state",
+    QtCore.QByteArray,
+    GUI_SPLITTER1_STATE_DEFAULT,
+)
+SETTINGS.gui_splitter2_state = (
+    "gui/splitter2_state",
+    QtCore.QByteArray,
+    GUI_SPLITTER2_STATE_DEFAULT,
+)
+SETTINGS.gui_style = ("gui/style", str, GUI_STYLE_DEFAULT)
+
 
 __all__ = [
     "APP_NAME",
     "APP_ORGANIZATION",
     "APP_VERSION",
-    "RAZIEL_URL_DEFAULT",
     "ROOT_DIR",
     "ASSETS_DIR",
     "ICONS_DIR",
     "UI_FILE",
     "STYLE_DIR",
-    "GUI_SETTINGS_FILE",
     "LOG_DIR",
-    "LABEL_FONT_SIZE_DEFAULT",
-    "SELECTION_HIGHLIGHT_COLOR_DEFAULT",
-    "SHARKTOPODA_HOST_DEFAULT",
-    "SHARKTOPODA_OUTGOING_PORT_DEFAULT",
-    "SHARKTOPODA_INCOMING_PORT_DEFAULT",
-    "CACHE_DIR_DEFAULT",
     "SHARKTOPODA_APP_NAME",
-    "EMBEDDINGS_ENABLED_DEFAULT",
     "SETTINGS",
 ]
-GUI_SETTINGS = QtCore.QSettings(
-    str(GUI_SETTINGS_FILE), QtCore.QSettings.Format.IniFormat
-)
