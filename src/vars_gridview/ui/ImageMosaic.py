@@ -119,7 +119,7 @@ class ImageMosaic(QtCore.QObject):
                     ancillary = dict()
                     ancillary_keys = {
                         "camera_platform": str,
-                        "dive_number": str,
+                        "video_sequence_name": str,
                         "depth_meters": float,
                         "latitude": float,
                         "longitude": float,

@@ -93,7 +93,7 @@
                           </font>
                         </property>
                       </widget>
-                      <widget class="QListWidget" name="imageInfoList">
+                      <widget class="QWidget" name="imageInfoTree">
                         <property name="sizePolicy">
                           <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
                             <horstretch>1</horstretch>

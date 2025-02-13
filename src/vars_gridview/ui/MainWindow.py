@@ -68,11 +68,18 @@ class MainWindow(TemplateBaseClass):
         # Create the main window
         self.ui = WindowTemplate()
         self.ui.setupUi(self)
+
+        # Patch UI
         bb_info_tree: QtWidgets.QWidget = self.ui.boundingBoxInfoTree
         bb_info_tree.setLayout(QtWidgets.QVBoxLayout())
         bb_json_tree = JSONTree()
         bb_info_tree.layout().addWidget(bb_json_tree)
         self.ui.boundingBoxInfoTree = bb_json_tree
+        ancillary_info_tree: QtWidgets.QWidget = self.ui.imageInfoTree
+        ancillary_info_tree.setLayout(QtWidgets.QVBoxLayout())
+        ancillary_json_tree = JSONTree()
+        ancillary_info_tree.layout().addWidget(ancillary_json_tree)
+        self.ui.imageInfoTree = ancillary_json_tree
 
         # Set the window title
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
@@ -713,7 +720,7 @@ class MainWindow(TemplateBaseClass):
             self.box_handler.roi_detail.clear()
             self.box_handler.clear()
             self.ui.boundingBoxInfoTree.clear()
-            self.ui.imageInfoList.clear()
+            self.ui.imageInfoTree.clear()
 
             self.image_mosaic.render_mosaic()
 
@@ -823,19 +830,12 @@ class MainWindow(TemplateBaseClass):
         self.ui.boundingBoxInfoTree.set_data(rect.localization.json)
 
         # Add ancillary data to the image info list
-        self.ui.imageInfoList.clear()
-        self.ui.imageInfoList.addItem(
-            "Derived timestamp: {}".format(
-                rect.annotation_datetime().strftime("%Y-%m-%d %H:%M:%S")
-            )
+        ancillary_data = rect.ancillary_data.copy()
+        ancillary_data["derived_timestamp"] = rect.annotation_datetime().strftime(
+            "%Y-%m-%d %H:%M:%S"
         )
-        self.ui.imageInfoList.addItem("Observation observer: {}".format(rect.observer))
-        self.ui.imageInfoList.addItems(
-            [
-                "{}: {}".format(key.replace("_", " ").capitalize(), value)
-                for key, value in rect.ancillary_data.items()
-            ]
-        )
+        ancillary_data["observation_observer"] = rect.observer
+        self.ui.imageInfoTree.set_data(ancillary_data)
 
     @QtCore.pyqtSlot()
     def open_video(self):
