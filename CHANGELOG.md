@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v0.17.0 (2025-02-13)
+
+### Bug Fixes
+
+- Update settings management, refactor GUI settings into same file
+  ([`ab0210a`](https://github.com/mbari-org/vars-gridview/commit/ab0210a18ccfd92b3356f6bd7f4dd49bc8427c2a))
+
+### Features
+
+- Add new sharpness sorting methods and update available sort names
+  ([`ec0ec03`](https://github.com/mbari-org/vars-gridview/commit/ec0ec039a2c116375f8a9395eef71d7f82cf9dcd))
+
+Thanks to @lonnylundsten for this contribution! #88
+
+- Rename imageInfoList to imageInfoTree and update data handling; replace `dive_number` with
+  `video_sequence_name`
+  ([`2f49bc7`](https://github.com/mbari-org/vars-gridview/commit/2f49bc7b149950aef7b002c809dcce2263b5555a))
+
+### Refactoring
+
+- Significant refactor of entire codebase
+  ([`5707d7b`](https://github.com/mbari-org/vars-gridview/commit/5707d7b0748cbeb16205b46c43ddd46a80326b92))
+
+
 ## v0.16.4 (2025-02-06)
 
 ### Bug Fixes
