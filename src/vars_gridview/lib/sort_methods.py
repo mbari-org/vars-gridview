@@ -191,13 +191,62 @@ class DepthSort(SortMethod):
 
 
 class LaplacianVarianceSort(SortMethod):
-    NAME = "Sharpness"
+    NAME = "Sharpness - Laplacian"
 
     @staticmethod
     def key(rect: RectWidget) -> float:
         roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
         lap_var = cv2.Laplacian(roi_gray, cv2.CV_64F).var()
         return lap_var
+
+
+class LaplacianOfGaussianSort(SortMethod):
+    NAME = "Sharpness - Laplacian of Gaussian"
+
+    @staticmethod
+    def key(rect: RectWidget) -> float:
+        roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(roi_gray, (5, 5), 0)
+        lap_var = cv2.Laplacian(blurred, cv2.CV_64F).var()
+        return lap_var
+
+
+class SobelSort(SortMethod):
+    NAME = "Sharpness - Sobel"
+
+    @staticmethod
+    def key(rect: RectWidget) -> float:
+        roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
+        sobelx = cv2.Sobel(roi_gray, cv2.CV_64F, 1, 0, ksize=3)
+        sobely = cv2.Sobel(roi_gray, cv2.CV_64F, 0, 1, ksize=3)
+        sobel_var = (sobelx**2 + sobely**2).var()
+        return sobel_var
+
+
+class CannySort(SortMethod):
+    NAME = "Sharpness - Canny"
+
+    @staticmethod
+    def key(rect: RectWidget) -> float:
+        roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(roi_gray, 100, 200)
+        canny_var = edges.var()
+        return canny_var
+
+
+class FrequencyDomainSort(SortMethod):
+    NAME = "Sharpness - Frequency Domain"
+
+    @staticmethod
+    def key(rect: RectWidget) -> float:
+        roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
+        f = np.fft.fft2(roi_gray)
+        fshift = np.fft.fftshift(f)
+        magnitude_spectrum = 20 * np.log(
+            np.abs(fshift) + 1e-10
+        )  # Add epsilon to avoid log(0)
+        freq_var = magnitude_spectrum.var()
+        return freq_var
 
 
 def localization_meta_sort(key: str, default: Any) -> SortMethod:

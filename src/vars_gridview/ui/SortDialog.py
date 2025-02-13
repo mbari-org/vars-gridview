@@ -44,6 +44,10 @@ class SortDialog(QDialog):
             sm.HueVarianceSort,
             sm.DepthSort,
             sm.LaplacianVarianceSort,
+            sm.LaplacianOfGaussianSort,
+            sm.SobelSort,
+            sm.CannySort,
+            sm.FrequencyDomainSort,
             sm.VerifierSort,
             sm.ConfidenceSort,
         ]
