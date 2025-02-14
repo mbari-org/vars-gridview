@@ -35,6 +35,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         embedding_model: Optional[Embedding] = None,
         parent=None,
         text_label="rect widget",
+        scale_x: float = 1.0,
+        scale_y: float = 1.0,
     ):
         QtWidgets.QGraphicsWidget.__init__(self, parent)
 
@@ -65,6 +67,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self._embedding = None
         self.update_roi_pic()
 
+        self._scale_x = scale_x
+        self._scale_y = scale_y
+
         self._deleted = False  # Flag to indicate if this rect widget has been deleted. Used to prevent double deletion.
 
     @property
@@ -72,7 +77,18 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """
         Get the image data for this rect widget.
         """
-        return fetch_image(self.image_url)
+        image = fetch_image(self.image_url)
+
+        if self._scale_x != 1.0 or self._scale_y != 1.0:
+            image = cv2.resize(
+                image,
+                None,
+                fx=self._scale_x,
+                fy=self._scale_y,
+                interpolation=cv2.INTER_CUBIC,  # see OpenCV docs: https://docs.opencv.org/4.8.0/da/d54/group__imgproc__transform.html#ga47a974309e9102f5f08231edc7e7529d
+            )
+
+        return image
 
     @property
     def deleted(self) -> bool:
