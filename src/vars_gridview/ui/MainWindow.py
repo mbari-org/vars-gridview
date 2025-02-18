@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 import webbrowser
 from time import sleep
 from typing import TYPE_CHECKING, Optional, Tuple
@@ -32,11 +33,11 @@ from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
     get_kb_name,
     get_kb_parts,
-    query,
+    query_paged,
 )
 from vars_gridview.lib.m3.query import QueryConstraint, QueryRequest, ConstraintSpec
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
-from vars_gridview.lib.utils import open_file_browser, parse_tsv
+from vars_gridview.lib.utils import open_file_browser
 from vars_gridview.ui.RectWidget import RectWidget
 from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
 from vars_gridview.ui.JSONTree import JSONTree
@@ -421,17 +422,23 @@ class MainWindow(TemplateBaseClass):
         constraint_spec = ConstraintSpec.from_dict(constraint_dict)
         query_request = QueryRequest(
             select=[
-                "imaged_moment_uuid",
-                "image_reference_uuid",
-                "observation_uuid",
                 "video_reference_uuid",
+                "imaged_moment_uuid",
+                "observation_uuid",
+                "association_uuid",
+                "image_reference_uuid",
+                "video_sequence_name",
+                "chief_scientist",
+                "camera_platform",
+                "dive_number",
+                "video_start_timestamp",
+                "video_container",
+                "video_uri",
+                "video_width",
+                "video_height",
                 "index_elapsed_time_millis",
                 "index_recorded_timestamp",
                 "index_timecode",
-                "video_start_timestamp",
-                "video_uri",
-                "video_container",
-                "association_uuid",
                 "image_url",
                 "image_format",
                 "observer",
@@ -439,12 +446,6 @@ class MainWindow(TemplateBaseClass):
                 "link_name",
                 "to_concept",
                 "link_value",
-                "chief_scientist",
-                "dive_number",
-                "video_sequence_name",
-                "video_width",
-                "video_height",
-                "camera_platform",
                 "depth_meters",
                 "latitude",
                 "longitude",
@@ -456,12 +457,20 @@ class MainWindow(TemplateBaseClass):
             ],
             where=[
                 QueryConstraint("link_name", equals="bounding box"),
-                QueryConstraint("link_value", like="{%}"),
             ],
         )
         query_request.where.extend(constraint_spec.to_constraints())
-        query_data = query(query_request)
-        query_headers, query_rows = parse_tsv(query_data)
+        try:
+            query_data_gen = query_paged(query_request, page_size=10000)
+            query_headers = next(query_data_gen)
+            query_rows = list(query_data_gen)
+        except Exception as e:
+            LOGGER.error(f"Query failed: {e}")
+            LOGGER.debug(f"Failed query request: {query_request}")
+            LOGGER.debug(f"Query {traceback.format_exc()}")
+            QtWidgets.QMessageBox.critical(self, "Query Failed", f"Query failed: {e}")
+            return
+        # query_headers, query_rows = parse_tsv(query_data)
 
         # Create the image mosaic
         self.image_mosaic = ImageMosaic(
@@ -808,7 +817,9 @@ class MainWindow(TemplateBaseClass):
             self.last_selected_rect.update()
 
             # Check if new rect image is different than last rect image
-            needs_autorange = rect.image is not self.last_selected_rect.image
+            needs_autorange = (
+                rect.get_image() is not self.last_selected_rect.get_image()
+            )
 
         # Update the last selection
         rect.is_last_selected = True
