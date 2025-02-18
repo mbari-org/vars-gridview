@@ -2,12 +2,15 @@
 Image mosaic widget manager.
 """
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, List, Optional
+from uuid import UUID
 
 import pyqtgraph as pg
 from iso8601 import parse_date
 from PyQt6 import QtCore, QtWidgets
+from pydantic.dataclasses import dataclass
 
 from vars_gridview.lib.association import BoundingBoxAssociation
 from vars_gridview.lib.cache import CacheController
@@ -19,6 +22,80 @@ from vars_gridview.ui.RectWidget import RectWidget
 
 if TYPE_CHECKING:
     from vars_gridview.lib.embedding import Embedding
+
+
+@dataclass
+class Row:
+    # Keys
+    video_reference_uuid: UUID
+    imaged_moment_uuid: UUID
+    observation_uuid: UUID
+    association_uuid: UUID
+    image_reference_uuid: UUID | None
+
+    # Video sequence
+    video_sequence_name: str | None
+    chief_scientist: str | None
+    camera_platform: str | None
+    dive_number: str | None  # from cached video reference info
+
+    # Video/video reference
+    video_start_timestamp: datetime | None
+    video_container: str | None
+    video_uri: str | None
+    video_width: int | None
+    video_height: int | None
+
+    # Imaged moment
+    index_elapsed_time_millis: int | None
+    index_recorded_timestamp: datetime | None
+    index_timecode: str | None
+
+    # Image reference
+    image_url: str | None
+    image_format: str | None
+
+    # Observation
+    observer: str | None
+    concept: str | None
+
+    # Association
+    link_name: str | None
+    to_concept: str | None
+    link_value: str | None
+
+    # Ancillary data
+    depth_meters: float | None
+    latitude: float | None
+    longitude: float | None
+    oxygen_ml_per_l: float | None
+    pressure_dbar: float | None
+    salinity: float | None
+    temperature_celsius: float | None
+    light_transmission: float | None
+
+    @classmethod
+    def parse(cls, row: List[str]) -> "Row":
+        """
+        Parse a row of data into a Row object.
+
+        Args:
+            row (List[str]): The row of data.
+
+        Returns:
+            Row: The parsed row.
+
+        Raises:
+            pydantic.ValidationError: If the row is invalid.
+        """
+        # Turn "null" into None
+        row = list(map(lambda v: None if v == "null" else v, row))
+
+        # Parse ISO8601 dates
+        row[9] = parse_date(row[9]) if row[9] is not None else None
+        row[15] = parse_date(row[15]) if row[15] is not None else None
+
+        return cls(*row)
 
 
 class ImageMosaic(QtCore.QObject):
@@ -61,7 +138,7 @@ class ImageMosaic(QtCore.QObject):
         self.verifier = verifier
 
         self.image_reference_urls = {}
-        self.localization_groups = {}
+        self.association_groups = {}
         self.moment_video_data = {}
         self.moment_mp4_data = {}
         self.moment_timestamps = {}
@@ -71,219 +148,220 @@ class ImageMosaic(QtCore.QObject):
         self.video_reference_uuid_to_mp4_video_reference = {}
         self.video_sequences_by_name = {}
 
-        self.localization_groups = {}
+        self.association_groups = {}
         self.moment_ancillary_data = {}
 
         self.n_images = 0
         self.n_localizations = 0
 
-        # Munge query items into corresponding dicts
+        self._zoom = zoom
+
+        # Parse rows
+        rows = [Row.parse(row) for row in query_data]
+        self._map_metadata(rows)
+        self._extract_associations(rows)
+        self._fetch_video_sequence_data()
+        self._map_mp4_data(rows)
+        self._create_rois()
+
+    def _map_metadata(self, rows: List[Row]) -> None:
+        """
+        Map the given rows to populate internal lookup tables.
+
+        Args:
+            rows (List[Row]): The rows of data.
+        """
+        for row in rows:
+            # Map image_reference_uuid -> image_url
+            if row.image_reference_uuid not in self.image_reference_urls:
+                self.image_reference_urls[row.image_reference_uuid] = row.image_url
+
+            # Map observation_uuid -> observer
+            self.observation_observer[row.observation_uuid] = row.observer
+
+            # Map imaged_moment_uuid -> ancillary data
+            # Note: this assumes a single imaged moment UUID will not have multiple ancillary data entries. This is a safe assumption for now but is not strictly necessary
+            if row.imaged_moment_uuid not in self.moment_ancillary_data:
+                ancillary = {
+                    "camera_platform": row.camera_platform,
+                    "video_sequence_name": row.video_sequence_name,
+                    "depth_meters": row.depth_meters,
+                    "latitude": row.latitude,
+                    "longitude": row.longitude,
+                    "oxygen_ml_per_l": row.oxygen_ml_per_l,
+                    "pressure_dbar": row.pressure_dbar,
+                    "salinity": row.salinity,
+                    "temperature_celsius": row.temperature_celsius,
+                    "light_transmission": row.light_transmission,
+                }
+                ancillary = {k: v for k, v in ancillary.items() if v is not None}
+                self.moment_ancillary_data[row.imaged_moment_uuid] = ancillary
+
+            # Map imaged_moment_uuid -> video data
+            if (
+                row.video_uri is not None
+                and row.imaged_moment_uuid not in self.moment_video_data
+            ):
+                video_data = {
+                    "index_elapsed_time_millis": row.index_elapsed_time_millis,
+                    "index_timecode": row.index_timecode,
+                    "index_recorded_timestamp": row.index_recorded_timestamp,
+                    "video_start_timestamp": row.video_start_timestamp,
+                    "video_uri": row.video_uri,
+                    "video_container": row.video_container,
+                    "video_reference_uuid": str(row.video_reference_uuid).lower(),
+                    "video_sequence_name": row.video_sequence_name,
+                    "video_width": row.video_width,
+                    "video_height": row.video_height,
+                }
+                video_data = {k: v for k, v in video_data.items() if v is not None}
+                self.moment_video_data[row.imaged_moment_uuid] = video_data
+
+    def _extract_associations(self, rows: List[Row]):
+        """
+        Extract bounding box associations from the given rows.
+
+        Args:
+            rows (List[Row]): The rows of data.
+        """
         seen_associations = set()
-        with pg.ProgressDialog(
-            "Processing query data...", maximum=len(query_data)
-        ) as progress:
-            for query_item in (
-                dict(zip(query_headers, i)) for i in query_data
-            ):  # TODO Make pagination
+        for row in rows:
+            # Skip if the row is something other than a bounding box association
+            if row.link_name != "bounding box":
+                continue
+
+            # Skip if we've already seen this association
+            if row.association_uuid in seen_associations:
+                continue
+            seen_associations.add(row.association_uuid)
+
+            # Skip if the video start timestamp is not set
+            if row.video_start_timestamp is None:
+                LOGGER.warning(
+                    f"Imaged moment {row.imaged_moment_uuid} has no video start timestamp, skipping"
+                )
+                continue
+
+            # Skip if the video sequence name is not set
+            if row.video_sequence_name is None:
+                LOGGER.warning(
+                    f"Imaged moment {row.imaged_moment_uuid} has no video sequence name, skipping"
+                )
+                continue
+
+            # Parse the bounding box association from the association link_value
+            association = BoundingBoxAssociation.from_json(row.link_value)
+            association.set_concept(row.concept, row.to_concept)
+            association.imaged_moment_uuid = str(
+                row.imaged_moment_uuid
+            ).lower()  # The imaged moment of the annotation. Does not necessarily correspond to the imaged moment of the bounding box association's image.
+            association.observation_uuid = str(row.observation_uuid).lower()
+            association.association_uuid = str(row.association_uuid).lower()
+
+            # Each group corresponds to an image to be downloaded.
+            # The key is the imaged moment UUID + image reference UUID.
+            # This is done to support when a bounding box association is tied to an image reference that is not under its annotation's imaged moment.
+            # Under this model (so as not to break anything) localizations for the same image reference but different imaged moments will be grouped SEPARATELY. This is not ideal but is the best we can do for now.
+            group_key = (row.imaged_moment_uuid, association.image_reference_uuid)
+
+            if group_key not in self.association_groups:
+                self.association_groups[group_key] = []
+            self.association_groups[group_key].append(association)
+
+    def _fetch_video_sequence_data(self) -> None:
+        # Identify the set of video sequence names we need to fetch
+        video_sequence_names = set(
+            video_data["video_sequence_name"]
+            for video_data in self.moment_video_data.values()
+            if video_data.get("video_sequence_name", None) is not None
+        )
+
+        # Fetch video sequence data
+        with (
+            pg.ProgressDialog(
+                "Fetching video sequence data...", maximum=len(video_sequence_names)
+            ) as progress,
+            ThreadPoolExecutor(max_workers=10) as executor,
+        ):
+            vs_futures = []
+
+            # Submit video sequence lookup tasks
+            for video_sequence_name in video_sequence_names:
+                vs_future = executor.submit(
+                    operations.get_video_sequence_by_name, video_sequence_name
+                )
+                vs_futures.append(vs_future)
+
+            # Wait for all video sequence lookups to complete
+            for vs_future in as_completed(vs_futures):
+                try:
+                    video_sequence_data = vs_future.result()
+                except Exception as e:
+                    LOGGER.error(
+                        f"Failed to get video sequence data for {video_sequence_name}: {e}"
+                    )
+                    video_sequence_data = None
+
+                # Store in dict
+                self.video_sequences_by_name[video_sequence_name] = video_sequence_data
+
                 progress += 1
 
-                # Extract fields
-                imaged_moment_uuid = str(query_item["imaged_moment_uuid"]).lower()
-                image_reference_uuid = str(query_item["image_reference_uuid"]).lower()
-                observation_uuid = str(query_item["observation_uuid"]).lower()
-                association_uuid = str(query_item["association_uuid"]).lower()
+    def _map_mp4_data(self, rows: List[Row]) -> None:
+        for row in rows:
+            if row.imaged_moment_uuid not in self.moment_mp4_data:
+                # Get imaged moment's time index
+                moment_timestamp = get_timestamp(
+                    row.video_start_timestamp,
+                    row.index_recorded_timestamp,
+                    row.index_elapsed_time_millis,
+                    row.index_timecode,
+                )
+                self.moment_timestamps[row.imaged_moment_uuid] = moment_timestamp
 
-                image_url = str(query_item["image_url"])
-
-                observer = str(query_item["observer"])
-                concept = str(query_item["concept"])
-
-                link_name = str(query_item["link_name"])
-                to_concept = str(query_item["to_concept"])
-                link_value = str(query_item["link_value"])
-
-                # Fill image_reference_uuid -> image_url
-                if image_reference_uuid not in self.image_reference_urls:
-                    self.image_reference_urls[image_reference_uuid] = image_url
-
-                # Fill observation_uuid -> observer
-                self.observation_observer[observation_uuid] = observer
-
-                # Tag in ancillary data
-                # Note: this assumes a single imaged moment UUID will not have multiple ancillary data entries. This is a safe assumption for now but is not strictly necessary
-                if imaged_moment_uuid not in self.moment_ancillary_data:
-                    ancillary = dict()
-                    ancillary_keys = {
-                        "camera_platform": str,
-                        "video_sequence_name": str,
-                        "depth_meters": float,
-                        "latitude": float,
-                        "longitude": float,
-                        "oxygen_ml_per_l": float,
-                        "pressure_dbar": float,
-                        "salinity": float,
-                        "temperature_celsius": float,
-                        "light_transmission": float,
-                    }
-                    for k, v in ancillary_keys.items():
-                        if k in query_item and query_item[k] != "null":
-                            ancillary[k] = v(query_item[k])
-
-                    self.moment_ancillary_data[imaged_moment_uuid] = ancillary
-
-                # Extract video data
-                video_data = dict()
-                video_keys = {
-                    "index_elapsed_time_millis": int,
-                    "index_timecode": str,
-                    "index_recorded_timestamp": parse_date,
-                    "video_start_timestamp": parse_date,
-                    "video_uri": str,
-                    "video_container": str,
-                    "video_reference_uuid": lambda x: str(x).lower(),
-                    "video_sequence_name": str,
-                    "video_width": int,
-                    "video_height": int,
-                }
-                for k, v in video_keys.items():
-                    if k in query_item and query_item[k] != "null":
-                        video_data[k] = v(query_item[k])
-
-                # Tag in video data
-                if video_data.get("video_uri", None) is not None:  # valid video
-                    if imaged_moment_uuid not in self.moment_video_data:
-                        self.moment_video_data[imaged_moment_uuid] = video_data
-
-                # Observation data
-                recorded_timestamp = video_data.get("index_recorded_timestamp", None)
-                elapsed_time_millis = video_data.get("index_elapsed_time_millis", None)
-                timecode = video_data.get("index_timecode", None)
-
-                # Video sequence data
-                video_sequence_name = video_data.get("video_sequence_name", None)
-
-                # Video data
-                video_start_timestamp = video_data.get("video_start_timestamp", None)
-
-                # ------------------
-
-                # Skip if the row is something other than a bounding box association
-                if link_name != "bounding box":
+                if moment_timestamp is None:  # No timestamp, can't use
                     continue
 
-                # Skip if we've already seen this association
-                if association_uuid in seen_associations:
-                    continue
-                seen_associations.add(association_uuid)
+                # Find the corresponding MP4 video reference (in the same video sequence) for this imaged moment, if there is one
+                mp4_video_data = self.find_mp4_video_data(
+                    row.video_sequence_name, moment_timestamp
+                )
 
-                # Skip if the video start timestamp is not set
-                if video_start_timestamp is None:
-                    LOGGER.warning(
-                        f"Imaged moment {imaged_moment_uuid} has no video start timestamp, skipping"
+                if mp4_video_data is not None:
+                    LOGGER.debug(
+                        f"Found MP4 video reference {mp4_video_data['video_reference']['uuid']} for imaged moment {row.imaged_moment_uuid}"
                     )
-                    continue
-
-                # Skip if the video sequence name is not set
-                if video_sequence_name is None:
+                else:
                     LOGGER.warning(
-                        f"Imaged moment {imaged_moment_uuid} has no video sequence name, skipping"
+                        f"Could not find MP4 video reference for imaged moment {row.imaged_moment_uuid}"
                     )
-                    continue
 
-                # Parse the localization from the association link_value
-                localization = BoundingBoxAssociation.from_json(link_value)
-                localization.set_concept(concept, to_concept)
-                localization.imaged_moment_uuid = imaged_moment_uuid  # The imaged moment of the annotation. Does not necessarily correspond to the imaged moment of the bounding box association's image.
-                localization.observation_uuid = observation_uuid
-                localization.association_uuid = association_uuid
+                self.moment_mp4_data[row.imaged_moment_uuid] = mp4_video_data
 
-                # Each group corresponds to an image to be downloaded.
-                # The key is the imaged moment UUID + image reference UUID.
-                # This is done to support when a bounding box association is tied to an image reference that is not under its annotation's imaged moment.
-                # Under this model (so as not to break anything) localizations for the same image reference but different imaged moments will be grouped SEPARATELY. This is not ideal but is the best we can do for now.
-                group_key = (imaged_moment_uuid, localization.image_reference_uuid)
-
-                if group_key not in self.localization_groups:
-                    self.localization_groups[group_key] = []
-                self.localization_groups[group_key].append(localization)
-
-                # Determine if the localization needs video info
-                needs_video_info = True  # localization.image_reference_uuid is None
-
-                # ------------------
-
-                # If the localization needs video info, make sure we have it
-                # LOGGER.debug(f"Localization with {localization.association_uuid=} {needs_video_info=}")
-                if needs_video_info:
-                    # Get full video sequence data if not already fetched
-                    if video_sequence_name not in self.video_sequences_by_name:
-                        # Try to fetch
-                        try:
-                            video_sequence_data = operations.get_video_sequence_by_name(
-                                video_sequence_name
-                            )
-                        except Exception as e:
-                            LOGGER.error(
-                                f"Failed to get video sequence data for {video_sequence_name}: {e}"
-                            )
-                            video_sequence_data = None
-
-                        # Store in dict
-                        self.video_sequences_by_name[video_sequence_name] = (
-                            video_sequence_data
-                        )
-
-                    if imaged_moment_uuid not in self.moment_mp4_data:
-                        # Get imaged moment's time index
-                        moment_timestamp = get_timestamp(
-                            video_start_timestamp,
-                            recorded_timestamp,
-                            elapsed_time_millis,
-                            timecode,
-                        )
-                        self.moment_timestamps[imaged_moment_uuid] = moment_timestamp
-
-                        if moment_timestamp is None:  # No timestamp, can't use
-                            continue
-
-                        # Find the corresponding MP4 video reference (in the same video sequence) for this imaged moment, if there is one
-                        mp4_video_data = self.find_mp4_video_data(
-                            video_sequence_name, moment_timestamp
-                        )
-
-                        if mp4_video_data is not None:
-                            LOGGER.debug(
-                                f"Found MP4 video reference {mp4_video_data['video_reference']['uuid']} for imaged moment {imaged_moment_uuid}"
-                            )
-                        else:
-                            LOGGER.warning(
-                                f"Could not find MP4 video reference for imaged moment {imaged_moment_uuid}"
-                            )
-
-                        self.moment_mp4_data[imaged_moment_uuid] = mp4_video_data
-
-        # Download the images
-        with pg.ProgressDialog(
-            "Creating ROIs...",
-            0,
-            sum(len(locs) for locs in self.localization_groups.values()),
-        ) as dlg:
-            for group_key, localizations in self.localization_groups.items():
+    def _create_rois(self) -> None:
+        # Create the ROIs
+        with (
+            pg.ProgressDialog(
+                "Creating ROIs...",
+                0,
+                sum(len(group) for group in self.association_groups.values()),
+            ) as dlg,
+            ThreadPoolExecutor(max_workers=10) as executor,
+        ):
+            rw_futures = []
+            for group_key, associations in self.association_groups.items():
                 imaged_moment_uuid, image_reference_uuid = group_key
 
                 if dlg.wasCanceled():
                     LOGGER.info("ROI loading cancelled by user")
                     break
 
-                # LOGGER.debug(
-                #     f"Downloading image for group with imaged moment {imaged_moment_uuid} and image reference {image_reference_uuid}"
-                # )
-
                 # Scale factors. Needed if the image is not the same size as the annotation's source image
                 scale_x = 1.0
                 scale_y = 1.0
 
-                image_url = None
+                source_url = None
+                elapsed_time_millis = None
                 if image_reference_uuid is None:
                     # No image reference, need to use beholder
                     video_data = self.moment_video_data[imaged_moment_uuid]
@@ -324,11 +402,7 @@ class ImageMosaic(QtCore.QObject):
                     scale_x = source_width / mp4_width
                     scale_y = source_height / mp4_height
 
-                    image_url = (
-                        mp4_video_reference_uri.replace("https://", "beholder://")
-                        + "?ms="
-                        + str(elapsed_time_millis)
-                    )
+                    source_url = mp4_video_reference_uri
 
                 else:
                     # We have an image reference UUID, so we can get the image directly
@@ -360,7 +434,7 @@ class ImageMosaic(QtCore.QObject):
                             )
                             continue
 
-                    image_url = url
+                    source_url = url
 
                 self.n_images += 1
 
@@ -370,44 +444,47 @@ class ImageMosaic(QtCore.QObject):
                 video_data = self.moment_video_data.get(imaged_moment_uuid, None) or {}
 
                 # Filter out invalid boxes
-                valid_localizations = []
-                for loc in localizations:
-                    if not (loc.valid_box):
+                valid_associations = []
+                for association in associations:
+                    if not (association.valid_box):
                         LOGGER.debug(
-                            f"Skipping localization {loc.association_uuid} due to invalid box or out of bounds"
+                            f"Skipping association {association.association_uuid} due to invalid box"
                         )
                         continue
-                    valid_localizations.append(loc)
-                localizations = valid_localizations
+                    valid_associations.append(association)
+                associations = valid_associations
 
                 # Create the widgets
-                for localization in localizations:
+                for association in associations:
                     observer = self.observation_observer.get(
-                        localization.observation_uuid, None
+                        association.observation_uuid, None
                     )
-                    other_locs = list(localizations)
-                    other_locs.remove(localization)
-                    rw = RectWidget(
-                        other_locs + [localization],
-                        image_url,
+                    other_locs = list(associations)
+                    other_locs.remove(association)
+                    rw_future = executor.submit(
+                        RectWidget,
+                        other_locs + [association],
+                        source_url,
                         ancillary_data,
                         video_data,
                         observer,
                         len(other_locs),
+                        self._rect_clicked_slot,
+                        self._similarity_sort_slot,
+                        text_label=association.text_label,
                         embedding_model=self._embedding_model,
                         scale_x=scale_x,
                         scale_y=scale_y,
+                        zoom=self._zoom,
+                        elapsed_time_millis=elapsed_time_millis,
                     )
-                    rw.text_label = localization.text_label
-                    rw.update_zoom(zoom)
-                    rw.clicked.connect(rect_clicked_slot)
-                    rw.similaritySort.connect(self._similarity_sort_slot)
-                    self._rect_widgets.append(rw)
+                    rw_futures.append(rw_future)
 
-                    localization.rect = rw  # Back reference
-
-                    self.n_localizations += 1
-                    dlg += 1
+            for rw_future in as_completed(rw_futures):
+                rw = rw_future.result()
+                self._rect_widgets.append(rw)
+                self.n_localizations += 1
+                dlg += 1
 
     def _similarity_sort_slot(self, clicked_rect: RectWidget, same_class_only: bool):
         def key(rect_widget: RectWidget) -> float:

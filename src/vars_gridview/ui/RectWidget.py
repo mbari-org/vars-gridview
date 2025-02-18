@@ -27,21 +27,26 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def __init__(
         self,
         localizations: List[BoundingBoxAssociation],
-        image_url: str,
+        source_url: str,
         ancillary_data: dict,
         video_data: dict,
         observer: str,
         localization_index: int,
+        clicked_slot: callable,
+        similarity_sort_slot: callable,
         embedding_model: Optional[Embedding] = None,
         parent=None,
         text_label="rect widget",
         scale_x: float = 1.0,
         scale_y: float = 1.0,
+        zoom: float = 0.6,
+        elapsed_time_millis: Optional[int] = None,
     ):
         QtWidgets.QGraphicsWidget.__init__(self, parent)
 
         self.localizations = localizations
-        self.image_url = image_url
+        self.source_url = source_url
+        self.elapsed_time_millis = elapsed_time_millis
         self.ancillary_data = ancillary_data
         self.video_data = video_data
         self.observer = observer
@@ -51,7 +56,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.bordersize = 6
         self.outlinesize = 12
         self.picdims = [240, 240]
-        self.zoom = 0.5
+        self.zoom = zoom
         self.text_label = text_label
         self._boundingRect = QtCore.QRect()
         self.background_color = QtGui.QColor.fromRgb(25, 35, 45)
@@ -70,14 +75,18 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self._scale_x = scale_x
         self._scale_y = scale_y
 
+        self.clicked.connect(clicked_slot)
+        self.similaritySort.connect(similarity_sort_slot)
+
+        self.localization.rect = self  # back-reference
+
         self._deleted = False  # Flag to indicate if this rect widget has been deleted. Used to prevent double deletion.
 
-    @property
-    def image(self) -> np.ndarray:
+    def get_image(self) -> np.ndarray:
         """
         Get the image data for this rect widget.
         """
-        image = fetch_image(self.image_url)
+        image = fetch_image(self.source_url, self.elapsed_time_millis)
 
         if self._scale_x != 1.0 or self._scale_y != 1.0:
             image = cv2.resize(
@@ -177,11 +186,14 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             )
 
         self._embedding = self._embedding_model.embed(
-            self.localization.get_roi(self.image_url)[::-1]
+            self.localization.get_roi(
+                self.source_url,
+                self.elapsed_time_millis,
+            )[::-1],
         )
 
     def update_roi_pic(self):
-        self.roi = self.localization.get_roi(self.image_url)
+        self.roi = self.localization.get_roi(self.source_url, self.elapsed_time_millis)
         self.pic = self.getpic(self.roi)
         if self._embedding_model is not None:
             self.update_embedding()
@@ -212,11 +224,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     @property
     def image_width(self):
-        return self.image.shape[1]
+        return self.get_image().shape[1]
 
     @property
     def image_height(self):
-        return self.image.shape[0]
+        return self.get_image().shape[0]
 
     def annotation_datetime(self) -> Optional[datetime]:
         video_start_datetime = self.video_data["video_start_timestamp"]
@@ -246,7 +258,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.updateGeometry()
 
     def get_full_image(self):
-        return np.rot90(self.image, 3, (0, 1))
+        return np.rot90(self.get_image(), 3, (0, 1))
 
     # def boundingRect(self):
     #     # scale and zoom
