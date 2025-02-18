@@ -161,27 +161,30 @@ class BoundingBoxAssociation:
             del self.meta["verifier"]
             self._dirty_verifier = True
 
-    def get_roi(self, image_url: str) -> np.ndarray:
+    def get_roi(
+        self, image_url: str, elapsed_time_millis: Optional[int] = None
+    ) -> np.ndarray:
         """
         Get the region of interest from the image at the given URL.
 
         Args:
             image_url (str): The URL of the image.
+            elapsed_time_millis (int, optional): The elapsed time in milliseconds.
 
         Returns:
             np.ndarray: The region of interest.
         """
         # Call Skimmer
-        response = requests.get(
-            f"{SKIMMER_URL}/crop",
-            params={
-                "url": image_url,
-                "left": self._x,
-                "top": self._y,
-                "right": self.xf,
-                "bottom": self.yf,
-            },
-        )
+        params = {
+            "url": image_url,
+            "left": self._x,
+            "top": self._y,
+            "right": self.xf,
+            "bottom": self.yf,
+        }
+        if elapsed_time_millis is not None:
+            params["ms"] = elapsed_time_millis
+        response = requests.get(f"{SKIMMER_URL}/crop", params=params)
         response.raise_for_status()
 
         # Decode the image
