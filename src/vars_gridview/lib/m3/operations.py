@@ -3,13 +3,14 @@ M3 operations. Make use of the clients defined in __init__.py.
 """
 
 import json
-from typing import Dict, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 import requests
 
 from vars_gridview.lib import m3
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.query import QueryRequest
+from vars_gridview.lib.utils import parse_tsv
 
 KB_CONCEPTS: Dict[str, Optional[str]] = None
 KB_PARTS: List[str] = None
@@ -305,3 +306,39 @@ def query(query_request: QueryRequest) -> str:
         raise e
 
     return response.text
+
+
+def query_paged(
+    query_request: QueryRequest, page_size: int = 5000
+) -> Iterable[List[str]]:
+    """
+    Query the M3 API, paginating the requests.
+
+    Args:
+        query_request (QueryRequest): The query request.
+        page_size (int): The number of results to request per page.
+
+    Yields:
+        Iterable[List[str]]: Generator of result row lists. The first row is the header.
+    """
+    request = QueryRequest(**query_request.to_dict())
+    request.limit = page_size
+    request.offset = 0
+
+    headers_yielded = False
+    while True:
+        LOGGER.debug(
+            f"Querying Annosaurus with offset {request.offset} and limit {request.limit}"
+        )
+        response = query(request)
+        headers, rows = parse_tsv(response)
+
+        if not headers_yielded:
+            yield headers
+            headers_yielded = True
+
+        yield from rows
+
+        request.offset += page_size
+        if len(rows) < page_size:
+            break
