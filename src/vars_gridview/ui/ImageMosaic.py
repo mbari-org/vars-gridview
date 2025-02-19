@@ -157,7 +157,12 @@ class ImageMosaic(QtCore.QObject):
         self._zoom = zoom
 
         # Parse rows
-        rows = [Row.parse(row) for row in query_data]
+        rows = []
+        for row in query_data:
+            try:
+                rows.append(Row.parse(row))
+            except Exception as e:
+                LOGGER.error(f"Error parsing row {row}: {e}")
         self._map_metadata(rows)
         self._extract_associations(rows)
         self._fetch_video_sequence_data()
@@ -262,7 +267,7 @@ class ImageMosaic(QtCore.QObject):
             # The key is the imaged moment UUID + image reference UUID.
             # This is done to support when a bounding box association is tied to an image reference that is not under its annotation's imaged moment.
             # Under this model (so as not to break anything) localizations for the same image reference but different imaged moments will be grouped SEPARATELY. This is not ideal but is the best we can do for now.
-            group_key = (row.imaged_moment_uuid, association.image_reference_uuid)
+            group_key = (row.imaged_moment_uuid, row.image_reference_uuid)
 
             if group_key not in self.association_groups:
                 self.association_groups[group_key] = []
@@ -481,8 +486,11 @@ class ImageMosaic(QtCore.QObject):
                     rw_futures.append(rw_future)
 
             for rw_future in as_completed(rw_futures):
-                rw = rw_future.result()
-                self._rect_widgets.append(rw)
+                try:
+                    rw = rw_future.result()
+                    self._rect_widgets.append(rw)
+                except Exception as e:
+                    LOGGER.error(f"Error creating rect widget: {e}")
                 self.n_localizations += 1
                 dlg += 1
 
