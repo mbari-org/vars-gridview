@@ -267,7 +267,12 @@ class ImageMosaic(QtCore.QObject):
             # The key is the imaged moment UUID + image reference UUID.
             # This is done to support when a bounding box association is tied to an image reference that is not under its annotation's imaged moment.
             # Under this model (so as not to break anything) localizations for the same image reference but different imaged moments will be grouped SEPARATELY. This is not ideal but is the best we can do for now.
-            group_key = (row.imaged_moment_uuid, row.image_reference_uuid)
+            group_key = (
+                row.imaged_moment_uuid,
+                UUID(association.image_reference_uuid)
+                if association.image_reference_uuid
+                else None,
+            )
 
             if group_key not in self.association_groups:
                 self.association_groups[group_key] = []
