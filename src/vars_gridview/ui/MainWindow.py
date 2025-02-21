@@ -179,9 +179,6 @@ class MainWindow(TemplateBaseClass):
         login_ok = self._login_procedure()
         if not login_ok:
             LOGGER.error("Login failed")
-            QtWidgets.QMessageBox.critical(
-                self, "Login failed", "Login failed, exiting."
-            )
             sys.exit(1)
 
         # Set up the label combo boxes
@@ -425,8 +422,13 @@ class MainWindow(TemplateBaseClass):
         if constraint_dict is None:  # User cancelled, do nothing
             return
         else:  # Unload
+            if self.last_selected_rect is not None:
+                self.image_mosaic.deselect(self.last_selected_rect)
             self.last_selected_rect = None
             self.box_handler = None
+            self.clear_selected()
+            self.ui.boundingBoxInfoTree.clear()
+            self.ui.imageInfoTree.clear()
 
         # Run the query
         constraint_spec = ConstraintSpec.from_dict(constraint_dict)
@@ -480,15 +482,13 @@ class MainWindow(TemplateBaseClass):
             LOGGER.debug(f"Query {traceback.format_exc()}")
             QtWidgets.QMessageBox.critical(self, "Query Failed", f"Query failed: {e}")
             return
-        # query_headers, query_rows = parse_tsv(query_data)
+
+        # Set the display flags
+        self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
+        self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
         # Populate the image mosaic
         self.image_mosaic.populate(query_rows)
-
-        self.image_mosaic.hide_discarded = False
-        self.image_mosaic.hide_to_review = False
-        self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
-        self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
         # Reset sort dialog and default sort method
         self.sort_dialog.clear()

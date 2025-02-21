@@ -124,10 +124,8 @@ class ImageMosaic(QtCore.QObject):
         self._n_columns = 0
 
         # Display flags
-        self.hide_labeled = True
-        self.hide_unlabeled = True
-        self.hide_discarded = True
-        self.hide_to_review = True
+        self.hide_labeled = False
+        self.hide_unlabeled = False
 
         # Metadata caches
         self.image_reference_urls = {}
@@ -156,6 +154,9 @@ class ImageMosaic(QtCore.QObject):
         """
         # Clear derived association groups
         self.association_groups.clear()
+
+        # Clear existing widgets
+        self._rect_widgets.clear()
 
         # Parse rows
         rows = []
@@ -297,6 +298,9 @@ class ImageMosaic(QtCore.QObject):
             if video_data.get("video_sequence_name", None) is not None
         )
 
+        # Remove any video sequence names we've already fetched
+        video_sequence_names -= set(self.video_sequences_by_name.keys())
+
         # Fetch video sequence data
         with (
             pg.ProgressDialog(
@@ -324,7 +328,9 @@ class ImageMosaic(QtCore.QObject):
                     video_sequence_data = None
 
                 # Store in dict
-                self.video_sequences_by_name[video_sequence_name] = video_sequence_data
+                self.video_sequences_by_name[video_sequence_data["name"]] = (
+                    video_sequence_data
+                )
 
                 progress += 1
 
@@ -361,6 +367,8 @@ class ImageMosaic(QtCore.QObject):
 
     def _create_rois(self) -> None:
         # Create the ROIs
+        self.n_images = 0
+        self.n_localizations = 0
         with (
             pg.ProgressDialog(
                 "Creating ROIs...",
