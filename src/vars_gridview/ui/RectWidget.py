@@ -26,12 +26,12 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def __init__(
         self,
-        localizations: List[BoundingBoxAssociation],
+        associations: List[BoundingBoxAssociation],
         source_url: str,
         ancillary_data: dict,
         video_data: dict,
         observer: str,
-        localization_index: int,
+        association_index: int,
         clicked_slot: callable,
         similarity_sort_slot: callable,
         embedding_model: Optional[Embedding] = None,
@@ -39,24 +39,23 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         text_label="rect widget",
         scale_x: float = 1.0,
         scale_y: float = 1.0,
-        zoom: float = 0.6,
         elapsed_time_millis: Optional[int] = None,
     ):
         QtWidgets.QGraphicsWidget.__init__(self, parent)
 
-        self.localizations = localizations
+        self.associations = associations
         self.source_url = source_url
         self.elapsed_time_millis = elapsed_time_millis
         self.ancillary_data = ancillary_data
         self.video_data = video_data
         self.observer = observer
-        self.localization_index = localization_index
+        self.localization_index = association_index
+        self._zoom = SETTINGS.gui_zoom.value
 
         self.labelheight = 30
         self.bordersize = 6
         self.outlinesize = 12
         self.picdims = [240, 240]
-        self.zoom = zoom
         self.text_label = text_label
         self._boundingRect = QtCore.QRect()
         self.background_color = QtGui.QColor.fromRgb(25, 35, 45)
@@ -75,12 +74,21 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self._scale_x = scale_x
         self._scale_y = scale_y
 
-        self.clicked.connect(clicked_slot)
-        self.similaritySort.connect(similarity_sort_slot)
+        self._clicked_slot = clicked_slot
+        self._similarity_sort_slot = similarity_sort_slot
 
-        self.localization.rect = self  # back-reference
+        self.association.rect_widget = self  # back-reference
 
         self._deleted = False  # Flag to indicate if this rect widget has been deleted. Used to prevent double deletion.
+
+        self._connect()
+
+    def _connect(self) -> None:
+        """
+        Connect signals and slots.
+        """
+        self.clicked.connect(self._clicked_slot)
+        self.similaritySort.connect(self._similarity_sort_slot)
 
     def get_image(self) -> np.ndarray:
         """
@@ -112,7 +120,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         Set the deleted flag for this rect widget and its localization.
         """
         self._deleted = value
-        self.localization.deleted = value
+        self.association.deleted = value
 
     def delete(self, observation: bool = False) -> bool:
         """
@@ -151,21 +159,21 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """
         Get the UUID of the imaged moment associated with this rect widget.
         """
-        return self.localization.imaged_moment_uuid
+        return self.association.imaged_moment_uuid
 
     @property
     def observation_uuid(self) -> str:
         """
         Get the UUID of the observation associated with this rect widget.
         """
-        return self.localization.observation_uuid
+        return self.association.observation_uuid
 
     @property
     def association_uuid(self) -> str:
         """
         Get the UUID of the association associated with this rect widget.
         """
-        return self.localization.association_uuid
+        return self.association.association_uuid
 
     @property
     def embedding(self):
@@ -186,14 +194,14 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             )
 
         self._embedding = self._embedding_model.embed(
-            self.localization.get_roi(
+            self.association.get_roi(
                 self.source_url,
                 self.elapsed_time_millis,
             )[::-1],
         )
 
     def update_roi_pic(self):
-        self.roi = self.localization.get_roi(self.source_url, self.elapsed_time_millis)
+        self.roi = self.association.get_roi(self.source_url, self.elapsed_time_millis)
         self.pic = self.getpic(self.roi)
         if self._embedding_model is not None:
             self.update_embedding()
@@ -216,11 +224,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     @property
     def is_verified(self) -> bool:
-        return self.localizations[self.localization_index].verified
+        return self.associations[self.localization_index].verified
 
     @property
-    def localization(self) -> BoundingBoxAssociation:
-        return self.localizations[self.localization_index]
+    def association(self) -> BoundingBoxAssociation:
+        return self.associations[self.localization_index]
 
     @property
     def image_width(self):
@@ -252,23 +260,13 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         return qimg
 
-    def update_zoom(self, zoom):
-        self.zoom = zoom
+    def update_zoom(self, zoom: int):
+        self._zoom = zoom
         self.boundingRect()
         self.updateGeometry()
 
     def get_full_image(self):
         return np.rot90(self.get_image(), 3, (0, 1))
-
-    # def boundingRect(self):
-    #     # scale and zoom
-    #     width = self.zoom * (self.picdims[0] + self.bordersize * 2)
-    #     height = self.zoom * (self.picdims[1] + self.labelheight + self.bordersize * 2)
-
-    #     thumb_widget_rect = QtCore.QRectF(0.0, 0.0, width, height)
-    #     self._boundingRect = thumb_widget_rect
-
-    #     return thumb_widget_rect
 
     @property
     def outline_x(self):
@@ -341,10 +339,10 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def scale_rect(self, rect: QtCore.QRectF) -> QtCore.QRect:
         return QtCore.QRect(
-            round(rect.x() * self.zoom),
-            round(rect.y() * self.zoom),
-            round(rect.width() * self.zoom),
-            round(rect.height() * self.zoom),
+            round(rect.x() * self._zoom),
+            round(rect.y() * self._zoom),
+            round(rect.width() * self._zoom),
+            round(rect.height() * self._zoom),
         )
 
     @property
@@ -389,10 +387,10 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def boundingRect(self):
         return QtCore.QRectF(
-            self.zoom * self.outline_x,
-            self.zoom * self.outline_y,
-            self.zoom * self.outline_width,
-            self.zoom * self.outline_height,
+            self._zoom * self.outline_x,
+            self._zoom * self.outline_y,
+            self._zoom * self.outline_width,
+            self._zoom * self.outline_height,
         )
 
     def sizeHint(self, which, constraint=QtCore.QSizeF()):

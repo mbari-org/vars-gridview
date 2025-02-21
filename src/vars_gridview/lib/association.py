@@ -3,18 +3,21 @@ VARS bounding box association.
 """
 
 import json
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 import cv2
 import numpy as np
 import requests
 
-from vars_gridview.lib.constants import SKIMMER_URL
+from vars_gridview.lib.constants import SETTINGS, SKIMMER_URL
 from vars_gridview.lib.m3.operations import (
     update_bounding_box_data,
     update_bounding_box_part,
     update_observation_concept,
 )
+
+if TYPE_CHECKING:
+    from vars_gridview.ui.RectWidget import RectWidget
 
 
 class BoundingBoxAssociation:
@@ -52,30 +55,38 @@ class BoundingBoxAssociation:
         # Deleted flag
         self._deleted = False
 
-        # Dreaded back-reference
-        self.rect = None
+        # Back-reference
+        self.rect_widget: Optional["RectWidget"] = None
 
-    @staticmethod
-    def from_json(data: Union[str, dict]):
+    @classmethod
+    def from_json(cls, data: str) -> "BoundingBoxAssociation":
         if isinstance(data, str):
             data = json.loads(data)
 
-        return BoundingBoxAssociation(**data)
+        return cls.from_dict(data)
 
-    @property
-    def json(self):
-        return {
+    @classmethod
+    def from_dict(cls, data: dict) -> "BoundingBoxAssociation":
+        return cls(**data)
+
+    def to_dict(self) -> dict:
+        d = {
             "x": self._x,
             "y": self._y,
             "width": self._width,
             "height": self._height,
-            "image_reference_uuid": self.image_reference_uuid,
-            **self.meta,
         }
 
-    @property
-    def json_str(self):
-        return json.dumps(self.json)
+        # Only add the image reference UUID if it is not None
+        if self.image_reference_uuid is not None:
+            d["image_reference_uuid"] = self.image_reference_uuid
+
+        d.update(self.meta)
+
+        return d
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
 
     @property
     def x(self):
@@ -173,6 +184,9 @@ class BoundingBoxAssociation:
 
         Returns:
             np.ndarray: The region of interest.
+
+        Raises:
+            requests.exceptions.HTTPError: If the request to the Skimmer fails.
         """
         # Call Skimmer
         params = {
@@ -205,14 +219,16 @@ class BoundingBoxAssociation:
             and self.yf <= max_y
         )
 
-    def push_changes(self, verifier: str):
+    def push_changes(self):
         if self._deleted:
             return
 
         do_modify_box = False
 
+        username = SETTINGS.username.value
+
         if self._dirty_concept:
-            update_observation_concept(self.observation_uuid, self._concept, verifier)
+            update_observation_concept(self.observation_uuid, self._concept, username)
             self._dirty_concept = False
             do_modify_box = True
 
@@ -223,7 +239,7 @@ class BoundingBoxAssociation:
 
         if self._dirty_box:
             self.meta["generator"] = "gridview"  # Only changes when box moved/resized
-            self.meta["observer"] = verifier
+            self.meta["observer"] = username
             self._dirty_box = False
             do_modify_box = True
 
@@ -232,4 +248,4 @@ class BoundingBoxAssociation:
             self._dirty_verifier = False
 
         if do_modify_box:
-            update_bounding_box_data(self.association_uuid, self.json)
+            update_bounding_box_data(self.association_uuid, self.to_dict())

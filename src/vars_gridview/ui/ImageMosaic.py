@@ -13,7 +13,7 @@ from PyQt6 import QtCore, QtWidgets
 from pydantic.dataclasses import dataclass
 
 from vars_gridview.lib.association import BoundingBoxAssociation
-from vars_gridview.lib.cache import CacheController
+from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.sort_methods import SortMethod
@@ -106,55 +106,56 @@ class ImageMosaic(QtCore.QObject):
     def __init__(
         self,
         graphics_view: QtWidgets.QGraphicsView,
-        cache_controller: CacheController,
-        query_data: List[List],
-        query_headers: List[str],
         rect_clicked_slot: callable,
-        verifier: str,
-        zoom: float = 1.0,
         embedding_model: Optional["Embedding"] = None,
     ):
         super().__init__()
 
-        self._rect_widgets: List[RectWidget] = []
-        self.roi_map = {}
-        self._hide_labeled = True
-        self._hide_unlabeled = True
-        self.hide_discarded = True
-        self.hide_to_review = True
-        self.n_columns = 0
-        self._rect_clicked_slot = rect_clicked_slot
-
         # Initialize the graphics
-        self._graphics_view: QtWidgets.QGraphicsView = graphics_view
-        self._graphics_scene: QtWidgets.QGraphicsScene = None
-        self._graphics_widget: QtWidgets.QGraphicsWidget = None
+        self._graphics_view = graphics_view
+        self._graphics_scene = QtWidgets.QGraphicsScene()
+        self._graphics_widget = QtWidgets.QGraphicsWidget()
         self._init_graphics()
 
-        self.cache_controller = cache_controller
-
+        self._rect_clicked_slot = rect_clicked_slot
         self._embedding_model = embedding_model
 
-        self.verifier = verifier
+        self._rect_widgets: List[RectWidget] = []
+        self._n_columns = 0
 
+        # Display flags
+        self.hide_labeled = True
+        self.hide_unlabeled = True
+        self.hide_discarded = True
+        self.hide_to_review = True
+
+        # Metadata caches
         self.image_reference_urls = {}
         self.association_groups = {}
         self.moment_video_data = {}
         self.moment_mp4_data = {}
         self.moment_timestamps = {}
         self.observation_observer = {}
-        self.images_by_group = {}  # Big
-
         self.video_reference_uuid_to_mp4_video_reference = {}
         self.video_sequences_by_name = {}
+        self.moment_ancillary_data = {}
 
         self.association_groups = {}
-        self.moment_ancillary_data = {}
 
         self.n_images = 0
         self.n_localizations = 0
 
-        self._zoom = zoom
+        SETTINGS.gui_zoom.valueChanged.connect(self.zoom_updated)
+
+    def populate(self, query_data: List[List[str]]) -> None:
+        """
+        Populate the image mosaic with query data. Update internal metadata caches by fetching needed info from M3.
+
+        Args:
+            query_data (List[List[str]]): The rows of the query results.
+        """
+        # Clear derived association groups
+        self.association_groups.clear()
 
         # Parse rows
         rows = []
@@ -163,10 +164,20 @@ class ImageMosaic(QtCore.QObject):
                 rows.append(Row.parse(row))
             except Exception as e:
                 LOGGER.error(f"Error parsing row {row}: {e}")
+
+        # Populate metadata from the rows
         self._map_metadata(rows)
+
+        # Extract associations into groups
         self._extract_associations(rows)
+
+        # Fetch video sequence data for the given groups
         self._fetch_video_sequence_data()
+
+        # Derive and map MP4 image metadata
         self._map_mp4_data(rows)
+
+        # Create the ROI widgets
         self._create_rois()
 
     def _map_metadata(self, rows: List[Row]) -> None:
@@ -485,7 +496,6 @@ class ImageMosaic(QtCore.QObject):
                         embedding_model=self._embedding_model,
                         scale_x=scale_x,
                         scale_y=scale_y,
-                        zoom=self._zoom,
                         elapsed_time_millis=elapsed_time_millis,
                     )
                     rw_futures.append(rw_future)
@@ -516,6 +526,12 @@ class ImageMosaic(QtCore.QObject):
         for rect_widget in self._rect_widgets:
             rect_widget.update_embedding_model(embedding_model)
             rect_widget.update_embedding()
+
+    @QtCore.pyqtSlot(object)
+    def zoom_updated(self, zoom: float):
+        for rect_widget in self._rect_widgets:
+            rect_widget.update_zoom(zoom)
+        self.render_mosaic()
 
     def find_mp4_video_data(
         self, video_sequence_name: str, timestamp: datetime
@@ -588,17 +604,10 @@ class ImageMosaic(QtCore.QObject):
         """
         Initialize the graphics scene, widget, and layout
         """
-        if self._graphics_view is None:
-            raise ValueError("Graphics view must be set before calling this method")
-        elif self._graphics_scene is not None:
-            raise ValueError("Graphics already initialized")
-
-        # Create and assign the QGraphicsScene
-        self._graphics_scene = QtWidgets.QGraphicsScene()
+        # Assign the graphics scene to the view
         self._graphics_view.setScene(self._graphics_scene)
 
-        # Create the single QGraphicsWidget and add it to the scene
-        self._graphics_widget = QtWidgets.QGraphicsWidget()
+        # Add the single graphics widget to the scene
         self._graphics_scene.addItem(self._graphics_widget)
 
         # Create the QGraphicsLayout
@@ -647,8 +656,8 @@ class ImageMosaic(QtCore.QObject):
         rect_widgets_to_render = [
             rw
             for rw in self._rect_widgets
-            if (not rw.is_verified and not self._hide_unlabeled)
-            or (rw.is_verified and not self._hide_labeled)
+            if (not rw.is_verified and not self.hide_unlabeled)
+            or (rw.is_verified and not self.hide_labeled)
         ]
 
         # Hide all rect widgets that we aren't rendering
@@ -671,7 +680,7 @@ class ImageMosaic(QtCore.QObject):
         )
         self._graphics_scene.setSceneRect(self._graphics_widget.boundingRect())
 
-        self.n_columns = columns
+        self._n_columns = columns
 
     def label_selected(self, concept: Optional[str], part: Optional[str]):
         """
@@ -683,26 +692,26 @@ class ImageMosaic(QtCore.QObject):
         """
         for rect in self.get_selected():
             # Set the new concept and immediately push to VARS
-            rect.localization.set_verified_concept(
-                concept if concept is not None else rect.localization.concept,
-                part if part is not None else rect.localization.part,
-                self.verifier,
+            rect.association.set_verified_concept(
+                concept if concept is not None else rect.association.concept,
+                part if part is not None else rect.association.part,
+                SETTINGS.username.value,
             )
 
             try:
-                rect.localization.push_changes(self.verifier)
+                rect.association.push_changes(SETTINGS.username.value)
             except Exception as e:
                 LOGGER.error(
-                    f"Error pushing changes for localization {rect.localization.association_uuid}: {e}"
+                    f"Error pushing changes for localization {rect.association.association_uuid}: {e}"
                 )
                 QtWidgets.QMessageBox.critical(
                     self._graphics_view,
                     "Error",
-                    f"An error occurred while pushing changes for localization {rect.localization.association_uuid}.",
+                    f"An error occurred while pushing changes for localization {rect.association.association_uuid}.",
                 )
 
             # Update the widget's text label and deselect it
-            rect.text_label = rect.localization.text_label
+            rect.text_label = rect.association.text_label
             rect.is_selected = False
 
             # Propagate visual changes
@@ -722,22 +731,22 @@ class ImageMosaic(QtCore.QObject):
         """
         for rect in self.get_selected():
             # Unverify the localization and immediately push to VARS
-            rect.localization.unverify()
+            rect.association.unverify()
 
             try:
-                rect.localization.push_changes(self.verifier)
+                rect.association.push_changes(SETTINGS.username.value)
             except Exception as e:
                 LOGGER.error(
-                    f"Error pushing changes for localization {rect.localization.association_uuid}: {e}"
+                    f"Error pushing changes for localization {rect.association.association_uuid}: {e}"
                 )
                 QtWidgets.QMessageBox.critical(
                     self._graphics_view,
                     "Error",
-                    f"An error occurred while pushing changes for localization {rect.localization.association_uuid}.",
+                    f"An error occurred while pushing changes for localization {rect.association.association_uuid}.",
                 )
 
             # Update the widget's text label and deselect it
-            rect.text_label = rect.localization.text_label
+            rect.text_label = rect.association.text_label
             rect.is_selected = False
 
             # Propagate visual changes
@@ -765,10 +774,10 @@ class ImageMosaic(QtCore.QObject):
         selected = self.get_selected()
 
         bounding_box_association_uuids_to_delete = [
-            rw.localization.association_uuid for rw in selected
+            rw.association.association_uuid for rw in selected
         ]
 
-        observation_uuids = [rw.localization.observation_uuid for rw in selected]
+        observation_uuids = [rw.association.observation_uuid for rw in selected]
 
         # Get the UUIDs of the bounding box associations tied to the observations
         bounding_box_association_uuids_by_observation_uuid = dict()
@@ -842,7 +851,7 @@ class ImageMosaic(QtCore.QObject):
             for rw in selected:
                 delete_observation = (
                     delete_observations
-                    and rw.localization.observation_uuid
+                    and rw.association.observation_uuid
                     in dangling_observations_uuids_to_delete
                 )  # Only delete the observation if it's in the list of dangling observations
                 rw.delete(observation=delete_observation)
@@ -911,11 +920,6 @@ class ImageMosaic(QtCore.QObject):
             self._rect_widgets[ind].is_selected = False
             self._rect_widgets[ind].update()
 
-    def update_zoom(self, zoom):
-        for rect in self._rect_widgets:
-            rect.update_zoom(zoom)
-        self.render_mosaic()
-
     def select_relative(self, key: QtCore.Qt.Key):
         """
         Select a rect widget relative to the currently selected one.
@@ -939,9 +943,9 @@ class ImageMosaic(QtCore.QObject):
         elif key == QtCore.Qt.Key.Key_Right:
             next_idx = first_idx + 1
         elif key == QtCore.Qt.Key.Key_Up:
-            next_idx = first_idx - self.n_columns
+            next_idx = first_idx - self._n_columns
         elif key == QtCore.Qt.Key.Key_Down:
-            next_idx = first_idx + self.n_columns
+            next_idx = first_idx + self._n_columns
         else:
             return
 

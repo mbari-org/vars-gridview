@@ -1,6 +1,6 @@
 from typing import Optional
 
-from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtCore, QtWidgets
 
 
 class AbstractSettingsTab(QtWidgets.QWidget):
@@ -11,23 +11,27 @@ class AbstractSettingsTab(QtWidgets.QWidget):
     """
 
     settingsChanged = QtCore.pyqtSignal()
+    """
+    Signal emitted when settings are changed.
+    """
 
-    def __init__(self, name: str, icon: Optional[QtGui.QIcon] = None, parent=None):
+    def __init__(self, name: str, parent: Optional[QtWidgets.QWidget] = None):
         super().__init__(parent)
 
         self._name = name
-        self._icon = icon
 
     @property
     def name(self):
         return self._name
 
-    @property
-    def icon(self) -> Optional[QtGui.QIcon]:
-        return None
-
     def apply_settings(self):
+        """
+        Apply values from the tab to the application settings. Subclasses should implement this method.
+        """
         raise NotImplementedError()
 
     def _settings_changed(self):
+        """
+        Called when settings are changed. Emits settingsChanged.
+        """
         self.settingsChanged.emit()

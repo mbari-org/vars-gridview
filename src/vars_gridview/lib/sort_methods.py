@@ -3,8 +3,9 @@ Grid sort methods.
 """
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, TypeVar
 
 import cv2
 import numpy as np
@@ -91,7 +92,7 @@ class ImageReferenceUUIDSort(SortMethod):
 
     @staticmethod
     def key(rect: RectWidget) -> str:
-        return rect.localization.image_reference_uuid or ""
+        return rect.association.image_reference_uuid or ""
 
 
 class LabelSort(SortMethod):
@@ -107,7 +108,7 @@ class WidthSort(SortMethod):
 
     @staticmethod
     def key(rect: RectWidget) -> int:
-        return rect.localization.width
+        return rect.association.width
 
 
 class HeightSort(SortMethod):
@@ -115,7 +116,7 @@ class HeightSort(SortMethod):
 
     @staticmethod
     def key(rect: RectWidget) -> int:
-        return rect.localization.height
+        return rect.association.height
 
 
 class AreaSort(SortMethod):
@@ -168,8 +169,8 @@ class HueMeanCenterRegion(SortMethod):
     @staticmethod
     def key(rect: RectWidget) -> float:
         sub_roi = rect.roi[
-            rect.localization.height // 3 : rect.localization.height * 2 // 3,
-            rect.localization.width // 3 : rect.localization.width * 2 // 3,
+            rect.association.height // 3 : rect.association.height * 2 // 3,
+            rect.association.width // 3 : rect.association.width * 2 // 3,
         ]
 
         roi_hsv = cv2.cvtColor(sub_roi, cv2.COLOR_BGR2HSV)
@@ -249,33 +250,38 @@ class FrequencyDomainSort(SortMethod):
         return freq_var
 
 
-def localization_meta_sort(key: str, default: Any) -> SortMethod:
+SortMethodT = TypeVar("SortMethodT", bound=SortMethod)
+
+
+def association_meta_sort(
+    key: str, default: Any
+) -> Callable[[SortMethodT], SortMethodT]:
     """
-    Decorator factory for creating a sort method that sorts by a localization meta key.
+    Decorator factory for creating a sort method that sorts by an association meta key.
 
     Args:
-        key: The localization meta key to sort by.
+        key: The meta key to sort by.
         default: The default value to use if the key is not present.
     """
 
-    def decorator(cls):
+    def decorator(cls: SortMethodT) -> SortMethodT:
         class LocalizationMetaSort(SortMethod):
             NAME = cls.NAME
 
             @staticmethod
             def key(rect: RectWidget) -> Any:
-                return rect.localization.meta.get(key, default)
+                return rect.association.meta.get(key, default)
 
         return LocalizationMetaSort
 
     return decorator
 
 
-@localization_meta_sort("verifier", "")
+@association_meta_sort("verifier", "")
 class VerifierSort(SortMethod):
     NAME = "Verifier"
 
 
-@localization_meta_sort("confidence", 0.0)
+@association_meta_sort("confidence", 0.0)
 class ConfidenceSort(SortMethod):
     NAME = "Confidence"

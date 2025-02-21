@@ -1,11 +1,7 @@
+from typing import Tuple
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
-from vars_gridview.ui.settings.tabs.AppearanceTab import AppearanceTab
-from vars_gridview.ui.settings.tabs.CacheTab import CacheTab
-from vars_gridview.ui.settings.tabs.EmbeddingsTab import EmbeddingsTab
-from vars_gridview.ui.settings.tabs.M3Tab import M3Tab
-from vars_gridview.ui.settings.tabs.VideoPlayerTab import VideoPlayerTab
 
 
 class SettingsDialog(QtWidgets.QDialog):
@@ -16,8 +12,11 @@ class SettingsDialog(QtWidgets.QDialog):
     """
 
     applySettings = QtCore.pyqtSignal()
+    """
+    Signal emitted when the apply button is pressed.
+    """
 
-    def __init__(self, connect_slot, connected_signal, clear_cache_slot, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
 
         self.setWindowTitle("Settings")
@@ -47,13 +46,13 @@ class SettingsDialog(QtWidgets.QDialog):
         self._needs_apply = False
         self._update_apply_enabled()
 
-        # Add tabs
-        self._add_tabs(connect_slot, connected_signal, clear_cache_slot)
-
         # Arrange the dialog layout
         self._arrange()
 
-    def _arrange(self):
+    def _arrange(self) -> None:
+        """
+        Arrange the widget.
+        """
         layout = QtWidgets.QVBoxLayout()
 
         layout.addWidget(self._tab_widget)
@@ -61,39 +60,45 @@ class SettingsDialog(QtWidgets.QDialog):
 
         self.setLayout(layout)
 
-    def _update_apply_enabled(self):
+    def _update_apply_enabled(self) -> None:
+        """
+        Update the enabled state of the apply button.
+        """
         self._button_box.button(
             QtWidgets.QDialogButtonBox.StandardButton.Apply
         ).setEnabled(self._needs_apply)
 
-    def _on_settings_changed(self):
+    @QtCore.pyqtSlot()
+    def _on_settings_changed(self) -> None:
         self._needs_apply = True
         self._update_apply_enabled()
 
-    def _on_apply_pressed(self):
+    @QtCore.pyqtSlot()
+    def _on_apply_pressed(self) -> None:
         self._apply()
 
         self._needs_apply = False
         self._update_apply_enabled()
 
-    def _apply(self):
+    @QtCore.pyqtSlot()
+    def _apply(self) -> None:
+        """
+        Apply settings if needed.
+        """
         if self._needs_apply:
             self.applySettings.emit()
 
-    def _register_tab(self, tab: AbstractSettingsTab):
-        # Add tab to tab widget
-        if tab.icon is not None:
-            self._tab_widget.addTab(tab, tab.icon, tab.name)
-        else:
+    def register(self, *tabs: Tuple[AbstractSettingsTab]) -> None:
+        """
+        Register tabs with the dialog.
+
+        Args:
+            tabs (Tuple[AbstractSettingsTab]): The tab to register.
+        """
+        for tab in tabs:
+            # Add tab to tab widget
             self._tab_widget.addTab(tab, tab.name)
 
-        # Connect signals/slots
-        tab.settingsChanged.connect(self._on_settings_changed)
-        self.applySettings.connect(tab.apply_settings)
-
-    def _add_tabs(self, connect_slot, connected_signal, clear_cache_slot):
-        self._register_tab(M3Tab())
-        self._register_tab(AppearanceTab())
-        self._register_tab(VideoPlayerTab(connect_slot, connected_signal))
-        self._register_tab(CacheTab(clear_cache_slot))
-        self._register_tab(EmbeddingsTab())
+            # Connect signals/slots
+            tab.settingsChanged.connect(self._on_settings_changed)
+            self.applySettings.connect(tab.apply_settings)

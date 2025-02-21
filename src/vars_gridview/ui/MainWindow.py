@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+from shutil import rmtree
 import sys
 import traceback
 import webbrowser
@@ -26,7 +28,6 @@ from vars_gridview.lib.constants import (
     STYLE_DIR,
 )
 from vars_gridview.lib.box_handler import BoxHandler
-from vars_gridview.lib.cache import CacheController
 from vars_gridview.ui.ImageMosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.operations import (
@@ -45,6 +46,11 @@ from vars_gridview.ui.LoginDialog import LoginDialog
 from vars_gridview.ui.QueryDialog import QueryDialog
 from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
 from vars_gridview.ui.SortDialog import SortDialog
+from vars_gridview.ui.settings.tabs.AppearanceTab import AppearanceTab
+from vars_gridview.ui.settings.tabs.CacheTab import CacheTab
+from vars_gridview.ui.settings.tabs.EmbeddingsTab import EmbeddingsTab
+from vars_gridview.ui.settings.tabs.M3Tab import M3Tab
+from vars_gridview.ui.settings.tabs.VideoPlayerTab import VideoPlayerTab
 
 if TYPE_CHECKING:
     from vars_gridview.lib.embedding import Embedding
@@ -95,19 +101,22 @@ class MainWindow(TemplateBaseClass):
         self._restore_gui()
         self._style_gui()
 
-        self.verifier = None  # The username of the current verifier
         self.endpoints = None  # The list of endpoint data from Raziel
 
         self.last_selected_rect = None  # Last selected ROI
 
+        # Embedding model
+        self._embedding_model: Optional[Embedding] = None
+
         # Image mosaic (holds the thumbnails as a grid of RectWidgets)
-        self.image_mosaic: Optional[ImageMosaic] = None
+        self.image_mosaic = ImageMosaic(
+            self.ui.roiGraphicsView,
+            self.rect_clicked,
+            embedding_model=self._embedding_model,
+        )
 
         # Box handler (handles the ROIs and annotations)
         self.box_handler: Optional[BoxHandler] = None
-
-        # Embedding model
-        self._embedding_model: Optional[Embedding] = None
 
         self.cached_moment_concepts = {}  # Cache for imaged moment -> set of observed concepts
 
@@ -115,8 +124,6 @@ class MainWindow(TemplateBaseClass):
         self.sharktopoda_connected = (
             False  # Whether the Sharktopoda client is connected
         )
-
-        self.cache_controller = CacheController()
 
         self._sort_method = RecordedTimestampSort
 
@@ -127,7 +134,6 @@ class MainWindow(TemplateBaseClass):
         self.ui.verifySelectedButton.clicked.connect(self.verify_selected)
         self.ui.unverifySelectedButton.clicked.connect(self.unverify_selected)
         self.ui.zoomSpinBox.valueChanged.connect(self.update_zoom)
-        # self.ui.sortMethod.currentTextChanged.connect(self.update_layout)
         self.ui.hideLabeled.stateChanged.connect(self.update_layout)
         self.ui.hideUnlabeled.stateChanged.connect(self.update_layout)
         self.ui.styleComboBox.currentTextChanged.connect(self._style_gui)
@@ -137,13 +143,17 @@ class MainWindow(TemplateBaseClass):
         SETTINGS.label_font_size.valueChanged.connect(self.update_layout)
         SETTINGS.embeddings_enabled.valueChanged.connect(self.update_embeddings_enabled)
 
-        self.settings_dialog = SettingsDialog(
-            self._setup_sharktopoda_client,
-            self.sharktopodaConnected,
-            self._clear_cache,
-            parent=self,
+        # Create the settings dialog and register tabs
+        self.settings_dialog = SettingsDialog(parent=self)
+        self.settings_dialog.register(
+            M3Tab(),
+            AppearanceTab(),
+            VideoPlayerTab(self._setup_sharktopoda_client, self.sharktopodaConnected),
+            CacheTab(self._clear_cache),
+            EmbeddingsTab(),
         )
 
+        # Create the sort dialog
         self.sort_dialog = SortDialog(parent=self)
 
         self.ui.roiGraphicsView.viewport().setAttribute(
@@ -230,8 +240,8 @@ class MainWindow(TemplateBaseClass):
         if not ok:
             return False
 
-        # Set the verifier and endpoint data
-        self.verifier = username
+        # Set the username setting and endpoint data
+        SETTINGS.username.value = username
         self.endpoints = endpoints
 
         return True
@@ -345,15 +355,16 @@ class MainWindow(TemplateBaseClass):
         Clear the cache.
         """
         # Confirm
+        cache_dir = Path(SETTINGS.cache_dir.value)
         confirm = ConfirmationDialog.confirm(
             self,
             "Clear Cache",
-            "Are you sure you want to clear the cache? This will delete all cached data.",
+            f"Are you sure you want to clear the cache? This will delete the directory:\n{cache_dir.resolve().absolute()}",
         )
 
         if confirm:
             try:
-                self.cache_controller.clear()
+                rmtree(cache_dir)
                 LOGGER.info("Cache cleared")
                 QtWidgets.QMessageBox.information(
                     self,
@@ -415,7 +426,6 @@ class MainWindow(TemplateBaseClass):
             return
         else:  # Unload
             self.last_selected_rect = None
-            self.image_mosaic = None
             self.box_handler = None
 
         # Run the query
@@ -462,7 +472,7 @@ class MainWindow(TemplateBaseClass):
         query_request.where.extend(constraint_spec.to_constraints())
         try:
             query_data_gen = query_paged(query_request, page_size=10000)
-            query_headers = next(query_data_gen)
+            _ = next(query_data_gen)  # consume headers
             query_rows = list(query_data_gen)
         except Exception as e:
             LOGGER.error(f"Query failed: {e}")
@@ -472,22 +482,13 @@ class MainWindow(TemplateBaseClass):
             return
         # query_headers, query_rows = parse_tsv(query_data)
 
-        # Create the image mosaic
-        self.image_mosaic = ImageMosaic(
-            self.ui.roiGraphicsView,
-            self.cache_controller,
-            query_rows,
-            query_headers,
-            self.rect_clicked,
-            self.verifier,
-            zoom=self.ui.zoomSpinBox.value() / 100,
-            embedding_model=self._embedding_model,
-        )
+        # Populate the image mosaic
+        self.image_mosaic.populate(query_rows)
 
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
-        self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
-        self.image_mosaic._hide_unlabeled = self.ui.hideUnlabeled.isChecked()
+        self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
+        self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
         # Reset sort dialog and default sort method
         self.sort_dialog.clear()
@@ -515,7 +516,6 @@ class MainWindow(TemplateBaseClass):
             self.ui.roiDetailGraphicsView,
             self.image_mosaic,
             all_labels=kb_concepts,
-            verifier=self.verifier,
         )
 
     def _setup_label_boxes(self):
@@ -560,6 +560,7 @@ class MainWindow(TemplateBaseClass):
             self.ui.splitter1.restoreState(SETTINGS.gui_splitter1_state.value)
         if SETTINGS.gui_splitter2_state.value is not None:
             self.ui.splitter2.restoreState(SETTINGS.gui_splitter2_state.value)
+        self.ui.zoomSpinBox.setValue(int(SETTINGS.gui_zoom.value * 100))
         self.ui.styleComboBox.setCurrentText(SETTINGS.gui_style.value)
 
     def _save_gui(self):
@@ -747,17 +748,14 @@ class MainWindow(TemplateBaseClass):
 
         self.image_mosaic.hide_discarded = False
         self.image_mosaic.hide_to_review = False
-        self.image_mosaic._hide_labeled = self.ui.hideLabeled.isChecked()
-        self.image_mosaic._hide_unlabeled = self.ui.hideUnlabeled.isChecked()
+        self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
+        self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
         self.image_mosaic.render_mosaic()
 
     @QtCore.pyqtSlot(int)
-    def update_zoom(self, zoom):
-        if not self.loaded:
-            return
-
-        self.image_mosaic.update_zoom(zoom / 100)
+    def update_zoom(self, zoom: int):
+        SETTINGS.gui_zoom.value = zoom / 100
 
     @QtCore.pyqtSlot(object)
     def update_embeddings_enabled(self, embeddings_enabled: bool):
@@ -793,7 +791,7 @@ class MainWindow(TemplateBaseClass):
 
         # Save information to VARS for any moved/resized boxes
         try:
-            self.box_handler.save_all(self.verifier)
+            self.box_handler.save_all()
         except Exception as e:
             LOGGER.error(f"Could not save localizations: {e}")
             QtWidgets.QMessageBox.critical(
@@ -838,7 +836,7 @@ class MainWindow(TemplateBaseClass):
         self.box_handler.add_annotation(rect.localization_index, rect)
 
         # Add localization data to the panel
-        self.ui.boundingBoxInfoTree.set_data(rect.localization.json)
+        self.ui.boundingBoxInfoTree.set_data(rect.association.to_dict())
 
         # Add ancillary data to the image info list
         ancillary_data = rect.ancillary_data.copy()
@@ -956,14 +954,14 @@ class MainWindow(TemplateBaseClass):
 
             localization = Localization(
                 uuid=uuid4(),
-                concept=rect.localization.concept,
+                concept=rect.association.concept,
                 elapsed_time_millis=annotation_milliseconds_other,
-                x=rescale_x * rect.localization.x,
-                y=rescale_y * rect.localization.y,
-                width=rescale_x * rect.localization.width,
-                height=rescale_y * rect.localization.height,
+                x=rescale_x * rect.association.x,
+                y=rescale_y * rect.association.y,
+                width=rescale_x * rect.association.width,
+                height=rescale_y * rect.association.height,
                 duration_millis=1000,
-                color=color_for_concept(rect.localization.concept).name(),
+                color=color_for_concept(rect.association.concept).name(),
             )
 
             localizations.append(localization)
@@ -1023,7 +1021,7 @@ class MainWindow(TemplateBaseClass):
     def closeEvent(self, event):
         self._save_gui()
         if self.loaded:
-            self.box_handler.save_all(self.verifier)
+            self.box_handler.save_all()
         QtWidgets.QMainWindow.closeEvent(self, event)
 
     def run_query(self) -> Optional[dict]:

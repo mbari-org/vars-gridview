@@ -6,8 +6,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
-import shlex
+from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -69,7 +68,9 @@ def open_file_browser(path: Path) -> subprocess.Popen:
     Returns:
         The Popen object of the opened process.
     """
-    path_str = shlex.quote(str(path))
+    if not path.exists():
+        raise FileNotFoundError(f"Path does not exist: {path}")
+    path_str = str(path)
     if sys.platform == "win32":
         process = subprocess.Popen(f"explorer /select,{path_str}")
     elif sys.platform == "darwin":
@@ -78,12 +79,12 @@ def open_file_browser(path: Path) -> subprocess.Popen:
         )
     else:
         process = subprocess.Popen(
-            ["xdg-open", path.parent if path.is_file() else path_str]
+            ["xdg-open", str(path.parent) if path.is_file() else path_str]
         )
     return process
 
 
-def parse_tsv(data: str) -> tuple[list[str], list[list[str]]]:
+def parse_tsv(data: str) -> Tuple[List[str], List[List[str]]]:
     """
     Parse a TSV string into a header and rows.
 
@@ -91,7 +92,7 @@ def parse_tsv(data: str) -> tuple[list[str], list[list[str]]]:
         data (str): TSV data.
 
     Returns:
-        tuple[list[str], list[list[str]]]: Header and rows.
+        Tuple[List[str], List[List[str]]]: Header and rows.
     """
     lines = data.split("\n")
     header = lines[0].split("\t")
