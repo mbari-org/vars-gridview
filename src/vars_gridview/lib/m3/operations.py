@@ -342,3 +342,30 @@ def query_paged(
         request.offset += page_size
         if len(rows) < page_size:
             break
+
+
+def crop(
+    url: str, left: int, top: int, right: int, bottom: int, ms: Optional[int] = None
+) -> requests.Response:
+    """
+    Crop an image or video using Skimmer.
+
+    Args:
+        url (str): URL of the image or video.
+        left (int): Left crop coordinate.
+        top (int): Top crop coordinate.
+        right (int): Right crop coordinate.
+        bottom (int): Bottom crop coordinate.
+        ms (Optional[int]): Millisecond to crop for videos.
+    """
+    timestamp_str = f" at {ms} ms" if ms is not None else ""
+    LOGGER.debug(f"Cropping {url}{timestamp_str} to {left}, {top}, {right}, {bottom}")
+    response = m3.SKIMMER_CLIENT.crop(url, left, top, right, bottom, ms)
+
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error cropping {url}: {e}")
+        raise e
+
+    return response

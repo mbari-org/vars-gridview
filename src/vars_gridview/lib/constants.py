@@ -56,9 +56,6 @@ GUI_SPLITTER2_STATE_DEFAULT = None
 GUI_STYLE_DEFAULT = "default"
 GUI_ZOOM_DEFAULT = 0.60
 
-# Skimmer
-SKIMMER_URL = "http://localhost:8000"
-
 # Settings
 SETTINGS = SettingsManager(
     settings=QtCore.QSettings(

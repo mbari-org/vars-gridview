@@ -2,6 +2,7 @@
 M3 REST API clients.
 """
 
+from typing import Optional
 import requests
 import requests.auth
 
@@ -108,9 +109,6 @@ class AnnosaurusClient(M3Client):
     Annosaurus (v1) client.
     """
 
-    def url_to(self, path: str) -> str:
-        return super().url_to(path)
-
     @needs_auth
     def create_association(self, data: dict) -> requests.Response:
         return self.post("/associations", data=data)
@@ -160,9 +158,6 @@ class VampireSquidClient(M3Client):
     Vampire Squid (v1) client.
     """
 
-    def url_to(self, path: str) -> str:
-        return super().url_to(path)
-
     def get_videos_at_timestamp(self, timestamp: str) -> requests.Response:
         return self.get(f"/videos/timestamp/{timestamp}")
 
@@ -195,9 +190,6 @@ class VARSKBServerClient(M3Client):
     VARS KB server (v1) client.
     """
 
-    def url_to(self, path: str) -> str:
-        return super().url_to(path)
-
     def get_concepts(self) -> requests.Response:
         return self.get("/concept")
 
@@ -209,3 +201,29 @@ class VARSKBServerClient(M3Client):
 
     def get_phylogeny_taxa(self, concept: str) -> requests.Response:
         return self.get(f"/phylogeny/taxa/{concept}")
+
+
+class SkimmerClient(M3Client):
+    """
+    Skimmer client.
+    """
+
+    def crop(
+        self,
+        url: str,
+        left: int,
+        top: int,
+        right: int,
+        bottom: int,
+        ms: Optional[int] = None,
+    ) -> requests.Response:
+        params = {
+            "url": url,
+            "left": left,
+            "top": top,
+            "right": right,
+            "bottom": bottom,
+        }
+        if ms is not None:
+            params["ms"] = ms
+        return self.get("/crop", params=params)

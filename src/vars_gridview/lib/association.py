@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Optional
 
 import cv2
 import numpy as np
-import requests
 
-from vars_gridview.lib.constants import SETTINGS, SKIMMER_URL
+from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.lib.m3.operations import (
+    crop,
     update_bounding_box_data,
     update_bounding_box_part,
     update_observation_concept,
@@ -188,18 +188,10 @@ class BoundingBoxAssociation:
         Raises:
             requests.exceptions.HTTPError: If the request to the Skimmer fails.
         """
-        # Call Skimmer
-        params = {
-            "url": image_url,
-            "left": self._x,
-            "top": self._y,
-            "right": self.xf,
-            "bottom": self.yf,
-        }
-        if elapsed_time_millis is not None:
-            params["ms"] = elapsed_time_millis
-        response = requests.get(f"{SKIMMER_URL}/crop", params=params)
-        response.raise_for_status()
+        # Get the image from the Skimmer
+        response = crop(
+            image_url, self.x, self.y, self.xf, self.yf, ms=elapsed_time_millis
+        )
 
         # Decode the image
         image = cv2.imdecode(
