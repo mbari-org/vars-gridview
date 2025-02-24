@@ -2,7 +2,9 @@
 M3 REST API clients.
 """
 
-from typing import Optional
+from collections.abc import Callable
+from functools import wraps
+from typing import Optional, ParamSpec, TypeVar, Concatenate
 import requests
 import requests.auth
 
@@ -30,17 +32,23 @@ class NotAuthenticated(Exception):
     pass
 
 
-def needs_auth(f):
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def needs_auth(
+    f: Callable[Concatenate["M3Client", P], R],
+) -> Callable[Concatenate["M3Client", P], R]:
     """
     Decorator to ensure that the client is authenticated.
     Raises NotAuthenticated if not.
     """
 
-    def wrapper(self, *args, **kwargs):
+    @wraps(f)
+    def wrapper(self: M3Client, *args: P.args, **kwargs: P.kwargs) -> R:
         if not self.authenticated:
             raise NotAuthenticated
-        else:
-            return f(self, *args, **kwargs)
+        return f(self, *args, **kwargs)
 
     return wrapper
 

@@ -21,6 +21,12 @@ VIDEO_SEQUENCE_NAMES = None
 def get_kb_concepts() -> Dict[str, Optional[str]]:
     """
     Get a list of all concepts in the KB.
+
+    Returns:
+        Dict[str, Optional[str]]: Dictionary of concepts mapped to their common names. If the name is not cached, it is None.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     global KB_CONCEPTS
     if not KB_CONCEPTS:
@@ -43,6 +49,15 @@ def get_kb_concepts() -> Dict[str, Optional[str]]:
 def get_kb_name(concept: str) -> Optional[str]:
     """
     Get the name of a concept in the KB.
+
+    Args:
+        concept (str): The concept to get the name for.
+
+    Returns:
+        Optional[str]: The name of the concept.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     kb_concepts = get_kb_concepts()
     if kb_concepts.get(concept, None) is None:
@@ -65,6 +80,12 @@ def get_kb_name(concept: str) -> Optional[str]:
 def get_kb_parts() -> List[str]:
     """
     Get a list of all parts in the KB.
+
+    Returns:
+        List[str]: List of part names.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     global KB_PARTS
     if not KB_PARTS:
@@ -86,6 +107,15 @@ def get_kb_parts() -> List[str]:
 def get_kb_descendants(concept: str) -> List[str]:
     """
     Get a list of all descendants of a concept in the KB, including the concept.
+
+    Args:
+        concept (str): The concept to get the descendants for.
+
+    Returns:
+        List[str]: List of descendant names.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     LOGGER.debug(f"Getting descendants of {concept} from KB")
     response = m3.VARS_KB_SERVER_CLIENT.get_phylogeny_taxa(concept)
@@ -108,6 +138,12 @@ def get_kb_descendants(concept: str) -> List[str]:
 def get_users() -> List[dict]:
     """
     Get a list of all users as dicts.
+
+    Returns:
+        List[dict]: List of user data dicts.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     global USERS
     if not USERS:
@@ -129,6 +165,16 @@ def get_users() -> List[dict]:
 def update_bounding_box_data(association_uuid: str, box_dict: dict) -> dict:
     """
     Update a bounding box's JSON data (link_value field of association).
+
+    Args:
+        association_uuid (str): UUID of the association to update.
+        box_dict (dict): The bounding box data.
+
+    Returns:
+        dict: The updated association data.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     request_data = {
         "link_value": json.dumps(box_dict),
@@ -148,6 +194,16 @@ def update_bounding_box_data(association_uuid: str, box_dict: dict) -> dict:
 def update_bounding_box_part(association_uuid: str, part: str) -> dict:
     """
     Update a bounding box's part (to_concept field of association).
+
+    Args:
+        association_uuid (str): UUID of the association to update.
+        part (str): The part to set.
+
+    Returns:
+        dict: The updated association data.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     request_data = {
         "to_concept": part,
@@ -169,6 +225,17 @@ def update_observation_concept(
 ) -> dict:
     """
     Update an observation's concept and observer.
+
+    Args:
+        observation_uuid (str): UUID of the observation to update.
+        concept (str): The concept to set.
+        observer (str): The observer to set.
+
+    Returns:
+        dict: The updated observation data.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     request_data = {
         "concept": concept,
@@ -189,12 +256,15 @@ def update_observation_concept(
     return response.json()
 
 
-def delete_association(association_uuid: str):
+def delete_association(association_uuid: str) -> None:
     """
     Delete an association.
 
     Args:
-        association_uuid: UUID of the association to delete.
+        association_uuid (str): UUID of the association to delete.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     LOGGER.debug(f"Deleting association {association_uuid}")
     response = m3.ANNOSAURUS_CLIENT.delete_association(association_uuid)
@@ -206,9 +276,18 @@ def delete_association(association_uuid: str):
         raise e
 
 
-def get_observation(observation_uuid: str) -> requests.Response:
+def get_observation(observation_uuid: str) -> dict:
     """
     Get an observation by UUID.
+
+    Args:
+        observation_uuid (str): The observation UUID.
+
+    Returns:
+        dict: The observation data.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     LOGGER.debug(f"Getting observation {observation_uuid}")
     response = m3.ANNOSAURUS_CLIENT.get_observation(observation_uuid)
@@ -222,12 +301,15 @@ def get_observation(observation_uuid: str) -> requests.Response:
     return response.json()
 
 
-def delete_observation(observation_uuid: str):
+def delete_observation(observation_uuid: str) -> None:
     """
     Delete an observation.
 
     Args:
-        observation_uuid: UUID of the observation to delete.
+        observation_uuid (str): UUID of the observation to delete.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     LOGGER.debug(f"Deleting observation {observation_uuid}")
     response = m3.ANNOSAURUS_CLIENT.delete_observation(observation_uuid)
@@ -242,6 +324,15 @@ def delete_observation(observation_uuid: str):
 def get_video_sequence_by_name(name: str) -> dict:
     """
     Get a video sequence by name.
+
+    Args:
+        name (str): The video sequence name.
+
+    Returns:
+        dict: The video sequence data.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     LOGGER.debug(f"Getting video sequence by name {name}")
     response = m3.VAMPIRE_SQUID_CLIENT.get_video_sequence_by_name(name)
@@ -258,6 +349,15 @@ def get_video_sequence_by_name(name: str) -> dict:
 def get_image_reference(image_reference_uuid: str) -> dict:
     """
     Get an image reference by UUID.
+
+    Args:
+        image_reference_uuid (str): The image reference UUID.
+
+    Returns:
+        dict: The image reference data.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     LOGGER.debug(f"Getting image reference {image_reference_uuid}")
     response = m3.ANNOSAURUS_CLIENT.get_image_reference(image_reference_uuid)
@@ -274,6 +374,12 @@ def get_image_reference(image_reference_uuid: str) -> dict:
 def get_video_sequence_names() -> List[str]:
     """
     Get a list of all video sequence names.
+
+    Returns:
+        List[str]: List of video sequence names.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     global VIDEO_SEQUENCE_NAMES
     if not VIDEO_SEQUENCE_NAMES:
@@ -295,6 +401,15 @@ def get_video_sequence_names() -> List[str]:
 def query(query_request: QueryRequest) -> str:
     """
     Query the M3 API.
+
+    Args:
+        query_request (QueryRequest): The query request.
+
+    Returns:
+        str: The response text.
+
+    Raises:
+        requests.exceptions.HTTPError: If the query fails.
     """
     LOGGER.debug("Querying Annosaurus")
     response = m3.ANNOSAURUS_CLIENT.query(query_request)
@@ -320,6 +435,9 @@ def query_paged(
 
     Yields:
         Iterable[List[str]]: Generator of result row lists. The first row is the header.
+
+    Raises:
+        requests.exceptions.HTTPError: If the query fails.
     """
     request = QueryRequest(**query_request.to_dict())
     request.limit = page_size
@@ -347,6 +465,15 @@ def query_paged(
 def query_download(query_request: QueryRequest) -> str:
     """
     Query the M3 API using the download endpoint.
+
+    Args:
+        query_request (QueryRequest): The query request.
+
+    Returns:
+        str: The response text.
+
+    Raises:
+        requests.exceptions.HTTPError: If the query fails.
     """
     LOGGER.debug("Querying Annosaurus (download)")
     response = m3.ANNOSAURUS_CLIENT.query_download(query_request)
@@ -373,6 +500,12 @@ def crop(
         right (int): Right crop coordinate.
         bottom (int): Bottom crop coordinate.
         ms (Optional[int]): Millisecond to crop for videos.
+
+    Returns:
+        requests.Response: The response object.
+
+    Raises:
+        requests.exceptions.HTTPError: If the request fails.
     """
     timestamp_str = f" at {ms} ms" if ms is not None else ""
     LOGGER.debug(f"Cropping {url}{timestamp_str} to {left}, {top}, {right}, {bottom}")
