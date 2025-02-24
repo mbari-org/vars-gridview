@@ -10,7 +10,7 @@ from uuid import UUID
 import pyqtgraph as pg
 from iso8601 import parse_date
 from PyQt6 import QtCore, QtWidgets
-from pydantic.dataclasses import dataclass
+from pydantic import BaseModel
 
 from vars_gridview.lib.association import BoundingBoxAssociation
 from vars_gridview.lib.constants import SETTINGS
@@ -24,8 +24,7 @@ if TYPE_CHECKING:
     from vars_gridview.lib.embedding import Embedding
 
 
-@dataclass
-class Row:
+class Row(BaseModel):
     # Keys
     video_reference_uuid: UUID
     imaged_moment_uuid: UUID
@@ -75,11 +74,12 @@ class Row:
     light_transmission: float | None
 
     @classmethod
-    def parse(cls, row: List[str]) -> "Row":
+    def parse(cls, headers: List[str], row: List[str]) -> "Row":
         """
         Parse a row of data into a Row object.
 
         Args:
+            headers (List[str]): The headers of the data.
             row (List[str]): The row of data.
 
         Returns:
@@ -91,11 +91,23 @@ class Row:
         # Turn "null" into None
         row = list(map(lambda v: None if v == "null" else v, row))
 
-        # Parse ISO8601 dates
-        row[9] = parse_date(row[9]) if row[9] is not None else None
-        row[15] = parse_date(row[15]) if row[15] is not None else None
+        # Turn empty fields into None
+        row = list(map(lambda v: None if v == "" and v is not None else v, row))
 
-        return cls(*row)
+        # Create a dictionary of the row data
+        row_dict = dict(zip(headers, row))
+
+        # Parse ISO8601 dates
+        if row_dict["index_recorded_timestamp"] is not None:
+            row_dict["index_recorded_timestamp"] = parse_date(
+                row_dict["index_recorded_timestamp"]
+            )
+        if row_dict["video_start_timestamp"] is not None:
+            row_dict["video_start_timestamp"] = parse_date(
+                row_dict["video_start_timestamp"]
+            )
+
+        return cls(**row_dict)
 
 
 class ImageMosaic(QtCore.QObject):
@@ -145,12 +157,13 @@ class ImageMosaic(QtCore.QObject):
 
         SETTINGS.gui_zoom.valueChanged.connect(self.zoom_updated)
 
-    def populate(self, query_data: List[List[str]]) -> None:
+    def populate(self, query_headers: List[str], query_rows: List[List[str]]) -> None:
         """
         Populate the image mosaic with query data. Update internal metadata caches by fetching needed info from M3.
 
         Args:
-            query_data (List[List[str]]): The rows of the query results.
+            query_headers (List[str]): The headers of the query results.
+            query_rows (List[List[str]]): The rows of the query results.
         """
         # Clear derived association groups
         self.association_groups.clear()
@@ -160,9 +173,9 @@ class ImageMosaic(QtCore.QObject):
 
         # Parse rows
         rows = []
-        for row in query_data:
+        for row in query_rows:
             try:
-                rows.append(Row.parse(row))
+                rows.append(Row.parse(query_headers, row))
             except Exception as e:
                 LOGGER.error(f"Error parsing row {row}: {e}")
 

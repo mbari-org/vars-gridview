@@ -344,6 +344,22 @@ def query_paged(
             break
 
 
+def query_download(query_request: QueryRequest) -> str:
+    """
+    Query the M3 API using the download endpoint.
+    """
+    LOGGER.debug("Querying Annosaurus (download)")
+    response = m3.ANNOSAURUS_CLIENT.query_download(query_request)
+
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error during query: {e}")
+        raise e
+
+    return response.text
+
+
 def crop(
     url: str, left: int, top: int, right: int, bottom: int, ms: Optional[int] = None
 ) -> requests.Response:

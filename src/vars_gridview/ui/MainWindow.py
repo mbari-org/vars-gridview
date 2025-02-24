@@ -34,11 +34,11 @@ from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
     get_kb_name,
     get_kb_parts,
-    query_paged,
+    query_download,
 )
 from vars_gridview.lib.m3.query import QueryConstraint, QueryRequest, ConstraintSpec
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
-from vars_gridview.lib.utils import open_file_browser
+from vars_gridview.lib.utils import open_file_browser, parse_tsv
 from vars_gridview.ui.RectWidget import RectWidget
 from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
 from vars_gridview.ui.JSONTree import JSONTree
@@ -473,9 +473,8 @@ class MainWindow(TemplateBaseClass):
         )
         query_request.where.extend(constraint_spec.to_constraints())
         try:
-            query_data_gen = query_paged(query_request, page_size=10000)
-            _ = next(query_data_gen)  # consume headers
-            query_rows = list(query_data_gen)
+            query_data_raw = query_download(query_request)
+            query_headers, query_rows = parse_tsv(query_data_raw)
         except Exception as e:
             LOGGER.error(f"Query failed: {e}")
             LOGGER.debug(f"Failed query request: {query_request}")
@@ -488,7 +487,7 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
 
         # Populate the image mosaic
-        self.image_mosaic.populate(query_rows)
+        self.image_mosaic.populate(query_headers, query_rows)
 
         # Reset sort dialog and default sort method
         self.sort_dialog.clear()
