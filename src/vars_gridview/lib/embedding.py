@@ -9,6 +9,9 @@ from torch.types import Device
 
 from vars_gridview.lib.constants import SETTINGS
 
+# Patch torch.hub._validate_not_a_forked_repo to avoid error while downloading weights
+torch.hub._validate_not_a_forked_repo = lambda *_: True
+
 
 def get_torch_device() -> Device:
     """
@@ -70,6 +73,7 @@ class DreamSimEmbedding(Embedding):
             pretrained=True,
             device=self._device,
             cache_dir=str(dreamsim_cache_dir.resolve().absolute()),
+            dreamsim_type="clip_vitb32",
         )
 
     def embed(self, image: np.ndarray) -> np.ndarray:
