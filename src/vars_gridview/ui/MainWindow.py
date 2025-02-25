@@ -807,32 +807,40 @@ class MainWindow(TemplateBaseClass):
             self.image_mosaic.select(rect, clear=not ctrl)
 
         # Remove highlight from the last selected ROI
-        needs_autorange = True
         if self.last_selected_rect is not None:
             self.box_handler.clear()
             self.last_selected_rect.is_last_selected = False
             self.last_selected_rect.update()
 
-            # Check if new rect image is different than last rect image
-            needs_autorange = (
-                rect.get_image() is not self.last_selected_rect.get_image()
-            )
+        # Check if the roiGraphicsView is minimized
+        image_view_minimized = (
+            self.ui.roiDetailGraphicsView.width() == 0
+            or self.ui.roiDetailGraphicsView.height() == 0
+        )
+
+        # Check if new rect image is different than last rect image
+        needs_autorange = (
+            not image_view_minimized
+            and self.last_selected_rect is not None
+            and rect.get_image() is not self.last_selected_rect.get_image()
+        )
 
         # Update the last selection
         rect.is_last_selected = True
         rect.update()
         self.last_selected_rect = rect
 
-        # Update the image and add the boxes
-        rect_full_image = rect.get_full_image()
-        if rect_full_image is None:
-            return
-        self.box_handler.roi_detail.setImage(
-            cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB)
-        )
-        if needs_autorange:
-            self.box_handler.view_box.autoRange()
-        self.box_handler.add_annotation(rect.localization_index, rect)
+        # Update the image and add the boxes (only if the roiGraphicsView isn't minimized by the splitter)
+        if not image_view_minimized:
+            rect_full_image = rect.get_full_image()
+            if rect_full_image is None:
+                return
+            self.box_handler.roi_detail.setImage(
+                cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB)
+            )
+            if needs_autorange:
+                self.box_handler.view_box.autoRange()
+            self.box_handler.add_annotation(rect.localization_index, rect)
 
         # Add localization data to the panel
         self.ui.boundingBoxInfoTree.set_data(rect.association.to_dict())
