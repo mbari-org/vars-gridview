@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.19.1 (2025-02-25)
+
+### Bug Fixes
+
+- Update Sharktopoda 2 video open code
+  ([`fe53f25`](https://github.com/mbari-org/vars-gridview/commit/fe53f25d218d9e0d4b7f26ee12403bee4a0dd08c))
+
+- Use clip_vitb32 features via dreamsim to avoid DINO concatenation error
+  ([`f395e50`](https://github.com/mbari-org/vars-gridview/commit/f395e50571de68d8b5381b78736ffcdb4f7113f8))
+
+### Performance Improvements
+
+- Skip image download when ROI detail image view is collapsed
+  ([`895ad8f`](https://github.com/mbari-org/vars-gridview/commit/895ad8f34a3b68e404ff396306989f91d6a7b0ea))
+
+
 ## v0.19.0 (2025-02-25)
 
 ### Features
