@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.18.0 (2025-02-25)
+
+### Features
+
+- Integrate diskcache for improved caching management and remove legacy cache handling
+  ([`e1ffd10`](https://github.com/mbari-org/vars-gridview/commit/e1ffd100169a190ce89361dffdbc59a2b33e32b2))
+
+
 ## v0.17.0 (2025-02-13)
 
 ### Bug Fixes
