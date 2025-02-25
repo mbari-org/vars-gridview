@@ -3,9 +3,17 @@ from base64 import b64encode
 import requests
 
 
-def authenticate(url: str, username: str, password: str):
+def authenticate(url: str, username: str, password: str) -> list:
     """
     Authenticate with Raziel and get the endpoint information.
+
+    Args:
+        url (str): The URL of the Raziel server.
+        username (str): The username to authenticate with.
+        password (str): The password to authenticate with.
+
+    Returns:
+        list: The endpoint information.
     """
     # Encode the username and password
     user_pass_base64 = "Basic " + b64encode(

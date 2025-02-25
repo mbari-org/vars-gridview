@@ -17,6 +17,7 @@ class LoginDialog(QtWidgets.QDialog):
             super().__init__(parent)
 
             self._username_line_edit = QtWidgets.QLineEdit()
+            self._username_line_edit.setText(SETTINGS.username.value)
             if completer is not None:
                 self._username_line_edit.setCompleter(completer)
 

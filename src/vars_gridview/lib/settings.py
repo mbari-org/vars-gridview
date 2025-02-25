@@ -8,7 +8,14 @@ from PyQt6 import QtCore
 
 
 class SettingProxy(QtCore.QObject):
+    """
+    Proxy for a single setting value. Emits valueChanged when the value is set.
+    """
+
     valueChanged = QtCore.pyqtSignal(object)
+    """
+    Signal emitted when the value is set.
+    """
 
     def __init__(self, settings: QtCore.QSettings, key: str, type=str, default=None):
         super().__init__()
@@ -23,12 +30,24 @@ class SettingProxy(QtCore.QObject):
 
     @property
     def value(self) -> Any:
+        """
+        Get the value of the setting.
+
+        Returns:
+            Any: The value of the setting.
+        """
         return self._settings.value(
             self._key, type=self._type, defaultValue=self._default
         )
 
     @value.setter
-    def value(self, value: Any):
+    def value(self, value: Any) -> None:
+        """
+        Set the value of the setting. Emits valueChanged with the new value.
+
+        Args:
+            value (Any): The new value of the setting.
+        """
         self._settings.setValue(self._key, value)
         self.valueChanged.emit(value)
 
@@ -56,7 +75,7 @@ class SettingsManager:
         self._settings = settings or QtCore.QSettings()
         self._proxies: Dict[str, SettingProxy] = {}
 
-    def __getattribute__(self, __name: str) -> Any:
+    def __getattribute__(self, __name: str) -> SettingProxy:
         if __name in ("_settings", "_proxies"):
             return super().__getattribute__(__name)
         elif __name in self._proxies:

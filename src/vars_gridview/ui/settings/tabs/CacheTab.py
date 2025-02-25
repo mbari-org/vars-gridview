@@ -22,18 +22,7 @@ class CacheTab(AbstractSettingsTab):
         self.cache_dir_lineedit.textChanged.connect(self.settingsChanged.emit)
         SETTINGS.cache_dir.valueChanged.connect(self.cache_dir_lineedit.setText)
 
-        self.cache_size_spinbox = QtWidgets.QSpinBox()
-        self.cache_size_spinbox.setMinimum(1)
-        self.cache_size_spinbox.setMaximum(1000000)
-        self.cache_size_spinbox.setSuffix(" MB")
-        self.cache_size_spinbox.setValue(SETTINGS.cache_size_mb.value)
-        self.cache_size_spinbox.valueChanged.connect(self.settingsChanged.emit)
-        SETTINGS.cache_size_mb.valueChanged.connect(self.cache_size_spinbox.setValue)
-
         self.cache_dir_lineedit.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
-        )
-        self.cache_size_spinbox.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
         )
 
@@ -54,7 +43,6 @@ class CacheTab(AbstractSettingsTab):
         )
 
         form_layout.addRow("Cache directory", self.cache_dir_lineedit)
-        form_layout.addRow("Cache size", self.cache_size_spinbox)
 
         root_layout.addLayout(form_layout)
         root_layout.addWidget(self.clear_cache_button)
@@ -63,4 +51,3 @@ class CacheTab(AbstractSettingsTab):
 
     def apply_settings(self):
         SETTINGS.cache_dir.value = self.cache_dir_lineedit.text()
-        SETTINGS.cache_size_mb.value = self.cache_size_spinbox.value()

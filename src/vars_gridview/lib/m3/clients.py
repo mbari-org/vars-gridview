@@ -2,6 +2,9 @@
 M3 REST API clients.
 """
 
+from collections.abc import Callable
+from functools import wraps
+from typing import Optional, ParamSpec, TypeVar, Concatenate
 import requests
 import requests.auth
 
@@ -29,17 +32,23 @@ class NotAuthenticated(Exception):
     pass
 
 
-def needs_auth(f):
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def needs_auth(
+    f: Callable[Concatenate["M3Client", P], R],
+) -> Callable[Concatenate["M3Client", P], R]:
     """
     Decorator to ensure that the client is authenticated.
     Raises NotAuthenticated if not.
     """
 
-    def wrapper(self, *args, **kwargs):
+    @wraps(f)
+    def wrapper(self: M3Client, *args: P.args, **kwargs: P.kwargs) -> R:
         if not self.authenticated:
             raise NotAuthenticated
-        else:
-            return f(self, *args, **kwargs)
+        return f(self, *args, **kwargs)
 
     return wrapper
 
@@ -108,9 +117,6 @@ class AnnosaurusClient(M3Client):
     Annosaurus (v1) client.
     """
 
-    def url_to(self, path: str) -> str:
-        return super().url_to(path)
-
     @needs_auth
     def create_association(self, data: dict) -> requests.Response:
         return self.post("/associations", data=data)
@@ -154,14 +160,14 @@ class AnnosaurusClient(M3Client):
     def count(self, query_request: QueryRequest) -> requests.Response:
         return self.post("/query/count", json=query_request.to_dict())
 
+    def query_download(self, query_request: QueryRequest) -> requests.Response:
+        return self.post("/query/download", json=query_request.to_dict())
+
 
 class VampireSquidClient(M3Client):
     """
     Vampire Squid (v1) client.
     """
-
-    def url_to(self, path: str) -> str:
-        return super().url_to(path)
 
     def get_videos_at_timestamp(self, timestamp: str) -> requests.Response:
         return self.get(f"/videos/timestamp/{timestamp}")
@@ -195,9 +201,6 @@ class VARSKBServerClient(M3Client):
     VARS KB server (v1) client.
     """
 
-    def url_to(self, path: str) -> str:
-        return super().url_to(path)
-
     def get_concepts(self) -> requests.Response:
         return self.get("/concept")
 
@@ -209,3 +212,29 @@ class VARSKBServerClient(M3Client):
 
     def get_phylogeny_taxa(self, concept: str) -> requests.Response:
         return self.get(f"/phylogeny/taxa/{concept}")
+
+
+class SkimmerClient(M3Client):
+    """
+    Skimmer client.
+    """
+
+    def crop(
+        self,
+        url: str,
+        left: int,
+        top: int,
+        right: int,
+        bottom: int,
+        ms: Optional[int] = None,
+    ) -> requests.Response:
+        params = {
+            "url": url,
+            "left": left,
+            "top": top,
+            "right": right,
+            "bottom": bottom,
+        }
+        if ms is not None:
+            params["ms"] = ms
+        return self.get("/crop", params=params)

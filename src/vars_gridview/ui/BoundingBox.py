@@ -2,14 +2,17 @@
 Bounding box widget in the image view.
 """
 
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import numpy as np
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui, QtWidgets
 
+from vars_gridview.lib.association import BoundingBoxAssociation
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
+from vars_gridview.ui.ImageMosaic import ImageMosaic
+from vars_gridview.ui.RectWidget import RectWidget
 
 
 class BoundingBox(pg.RectROI):
@@ -20,10 +23,9 @@ class BoundingBox(pg.RectROI):
         view (pg.ViewBox): The view box to which the bounding box is added.
         pos (tuple): The position of the bounding box.
         size (tuple): The size of the bounding box.
-        rect (object): The rectangle object associated with the bounding box.
-        localization (object): The localization object associated with the bounding box.
-        verifier (object): The verifier object associated with the bounding box.
-        image_mosaic (object): The image mosaic object associated with the bounding box.
+        rect (RectWidget): The ROI widget tied to this bounding box.
+        association (BoundingBoxAssociation): The bounding box association tied to this bounding box.
+        image_mosaic (ImageMosaic): The image mosaic widget.
         color (tuple): The color of the bounding box. Default is red.
         label (str): The label of the bounding box. Default is "ROI".
     """
@@ -33,10 +35,9 @@ class BoundingBox(pg.RectROI):
         view: pg.ViewBox,
         pos: Tuple[float, float],
         size: Tuple[float, float],
-        rect: object,
-        localization: object,
-        verifier: object,
-        image_mosaic: object,
+        rect_widget: RectWidget,
+        association: BoundingBoxAssociation,
+        image_mosaic: ImageMosaic,
         color: Tuple[int, int, int] = (255, 0, 0),
         label: str = "ROI",
     ) -> None:
@@ -47,10 +48,9 @@ class BoundingBox(pg.RectROI):
             view (pg.ViewBox): The view box to which the bounding box is added.
             pos (tuple): The position of the bounding box.
             size (tuple): The size of the bounding box.
-            rect (object): The rectangle object associated with the bounding box.
-            localization (object): The localization object associated with the bounding box.
-            verifier (object): The verifier object associated with the bounding box.
-            image_mosaic (object): The image mosaic object associated with the bounding box.
+            rect (RectWidget): The ROI widget tied to this bounding box.
+            association (BoundingBoxAssociation): The bounding box association tied to this bounding box.
+            image_mosaic (ImageMosaic): The image mosaic widget.
             color (tuple, optional): The color of the bounding box. Default is red.
             label (str, optional): The label of the bounding box. Default is "ROI".
         """
@@ -64,14 +64,14 @@ class BoundingBox(pg.RectROI):
             removable=False,
             sideScalers=True,
         )
+        self.association = association
+        self.rect_widget = rect_widget
+        self.image_mosaic = image_mosaic
+
         # GUI things
         self.addScaleHandle([1, 0], [0, 1])
         self.addScaleHandle([0, 1], [1, 0])
         self.addTranslateHandle([0.5, 0.5])
-        self.sigRemoveRequested.connect(self.remove)
-        self.sigRegionChanged.connect(self.draw_name)
-
-        self.sigRegionChangeFinished.connect(self.check_bounds)
 
         self.label = label
         self.color = color
@@ -81,25 +81,27 @@ class BoundingBox(pg.RectROI):
         self.view.addItem(self)
         self.draw_name()
 
-        self.verifier = verifier
-
         self.dirty = False
-        self.sigRegionChanged.connect(self._dirty)
-
-        self.sigRegionChangeFinished.connect(self.update_localization_box)
-
-        self.localization = localization
-        self.rect = rect
-
-        self.image_mosaic = image_mosaic
 
         self._menu = QtWidgets.QMenu()
         self._setup_menu()
 
         self.setAcceptedMouseButtons(QtCore.Qt.MouseButton.LeftButton)
+
+        self._connect()
+
+    def _connect(self) -> None:
+        """
+        Connect signals and slots.
+        """
+        self.sigRemoveRequested.connect(lambda _: self.remove())
+        self.sigRegionChanged.connect(self.draw_name)
+        self.sigRegionChanged.connect(self._dirty)
+        self.sigRegionChangeFinished.connect(self.check_bounds)
+        self.sigRegionChangeFinished.connect(self.update_association_box)
         self.sigClicked.connect(
-            lambda bbox, ev: self.rect.clicked.emit(self.rect, ev)
-        )  # Pass click event to rect
+            lambda _, ev: self.rect_widget.clicked.emit(self.rect_widget, ev)
+        )
 
     def _setup_menu(self) -> None:
         """
@@ -123,7 +125,7 @@ class BoundingBox(pg.RectROI):
         """
         Delete the bounding box (clicked from context menu).
         """
-        self.image_mosaic.select(self.rect)
+        self.image_mosaic.select(self.rect_widget)
         self.image_mosaic.delete_selected()
 
     def _do_change_concept(self) -> None:
@@ -143,7 +145,7 @@ class BoundingBox(pg.RectROI):
         if not ok:
             return
 
-        self.image_mosaic.select(self.rect)
+        self.image_mosaic.select(self.rect_widget)
         self.image_mosaic.label_selected(concept, None)
 
     def _do_change_part(self) -> None:
@@ -163,7 +165,7 @@ class BoundingBox(pg.RectROI):
         if not ok:
             return
 
-        self.image_mosaic.select(self.rect)
+        self.image_mosaic.select(self.rect_widget)
         self.image_mosaic.label_selected(None, part)
 
     def check_bounds(self) -> None:
@@ -175,10 +177,10 @@ class BoundingBox(pg.RectROI):
         h = -h  # Fix negative height
 
         min_x = 0
-        max_x = self.rect.image_width - w
+        max_x = self.rect_widget.image_width - w
 
         min_y = h
-        max_y = self.rect.image_height
+        max_y = self.rect_widget.image_height
 
         if x < min_x or y < min_y or x > max_x or y > max_y:
             self.setPos(min(max_x, max(min_x, x)), min(max_y, max(min_y, y)))
@@ -188,7 +190,7 @@ class BoundingBox(pg.RectROI):
         """
         bool: Whether the bounding box is selected.
         """
-        return self.rect.is_selected
+        return self.rect_widget.is_selected
 
     def _dirty(self) -> None:
         """
@@ -196,28 +198,25 @@ class BoundingBox(pg.RectROI):
         """
         self.dirty = True
 
-    def update_localization_box(self) -> None:
+    def update_association_box(self) -> None:
         """
-        Update the localization box with the current bounding box coordinates.
+        Update the bounding box association's coordinates with the current bounding box coordinates.
         """
         x, y, w, h = self.get_box()
-        y = self.rect.image_height - y
-        self.localization.set_box(x, y, w, h)
-        self.localization.rect.update_roi_pic()
+        y = self.rect_widget.image_height - y
+        self.association.set_box(x, y, w, h)
+        self.association.rect_widget.update_roi_pic()
 
     def update_label(self) -> None:
         """
         Update the label of the bounding box.
         """
-        self.label = self.localization.text_label
+        self.label = self.association.text_label
         self.draw_name()
 
-    def remove(self, dummy: Optional[object]) -> None:
+    def remove(self) -> None:
         """
         Remove the bounding box from the view.
-
-        Args:
-            dummy: A dummy argument to match the signal signature.
         """
         self.view.removeItem(self.textItem)
         self.view.removeItem(self)
@@ -241,6 +240,7 @@ class BoundingBox(pg.RectROI):
 
         return [x, y, np.abs(w), np.abs(h)]
 
+    @QtCore.pyqtSlot()
     def draw_name(self) -> None:
         """
         Draw the label of the bounding box on the image.

@@ -18,6 +18,7 @@ APP_VERSION = __version__
 
 # M3
 RAZIEL_URL_DEFAULT = "https://m3.shore.mbari.org/config"
+USERNAME_DEFAULT = ""
 
 # Asset paths
 ROOT_DIR = Path(__file__).parent.parent
@@ -53,6 +54,7 @@ GUI_WINDOW_STATE_DEFAULT = None
 GUI_SPLITTER1_STATE_DEFAULT = None
 GUI_SPLITTER2_STATE_DEFAULT = None
 GUI_STYLE_DEFAULT = "default"
+GUI_ZOOM_DEFAULT = 0.60
 
 # Settings
 SETTINGS = SettingsManager(
@@ -65,6 +67,7 @@ SETTINGS = SettingsManager(
 )
 
 SETTINGS.raz_url = ("m3/raz_url", str, RAZIEL_URL_DEFAULT)
+SETTINGS.username = ("m3/username", str, USERNAME_DEFAULT)
 
 SETTINGS.label_font_size = (
     "appearance/label_font_size",
@@ -103,11 +106,7 @@ SETTINGS.cache_dir = (
     str,
     str(CACHE_DIR_DEFAULT),
 )
-SETTINGS.cache_size_mb = (
-    "cache/size_mb",
-    int,
-    1000,
-)
+Path(SETTINGS.cache_dir.value).mkdir(parents=True, exist_ok=True)
 
 SETTINGS.embeddings_enabled = (
     "embeddings/enabled",
@@ -132,6 +131,7 @@ SETTINGS.gui_splitter2_state = (
     GUI_SPLITTER2_STATE_DEFAULT,
 )
 SETTINGS.gui_style = ("gui/style", str, GUI_STYLE_DEFAULT)
+SETTINGS.gui_zoom = ("gui/zoom", float, GUI_ZOOM_DEFAULT)
 
 
 __all__ = [

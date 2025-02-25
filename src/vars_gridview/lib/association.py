@@ -3,15 +3,21 @@ VARS bounding box association.
 """
 
 import json
-from typing import Optional, Union
+from typing import TYPE_CHECKING, Optional
 
+import cv2
 import numpy as np
 
+from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.lib.m3.operations import (
+    crop,
     update_bounding_box_data,
     update_bounding_box_part,
     update_observation_concept,
 )
+
+if TYPE_CHECKING:
+    from vars_gridview.ui.RectWidget import RectWidget
 
 
 class BoundingBoxAssociation:
@@ -49,30 +55,38 @@ class BoundingBoxAssociation:
         # Deleted flag
         self._deleted = False
 
-        # Dreaded back-reference
-        self.rect = None
+        # Back-reference
+        self.rect_widget: Optional["RectWidget"] = None
 
-    @staticmethod
-    def from_json(data: Union[str, dict]):
+    @classmethod
+    def from_json(cls, data: str) -> "BoundingBoxAssociation":
         if isinstance(data, str):
             data = json.loads(data)
 
-        return BoundingBoxAssociation(**data)
+        return cls.from_dict(data)
 
-    @property
-    def json(self):
-        return {
+    @classmethod
+    def from_dict(cls, data: dict) -> "BoundingBoxAssociation":
+        return cls(**data)
+
+    def to_dict(self) -> dict:
+        d = {
             "x": self._x,
             "y": self._y,
             "width": self._width,
             "height": self._height,
-            "image_reference_uuid": self.image_reference_uuid,
-            **self.meta,
         }
 
-    @property
-    def json_str(self):
-        return json.dumps(self.json)
+        # Only add the image reference UUID if it is not None
+        if self.image_reference_uuid is not None:
+            d["image_reference_uuid"] = self.image_reference_uuid
+
+        d.update(self.meta)
+
+        return d
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict())
 
     @property
     def x(self):
@@ -158,8 +172,32 @@ class BoundingBoxAssociation:
             del self.meta["verifier"]
             self._dirty_verifier = True
 
-    def get_roi(self, image: np.ndarray):
-        return image[self._y : self.yf, self._x : self.xf]
+    def get_roi(
+        self, image_url: str, elapsed_time_millis: Optional[int] = None
+    ) -> np.ndarray:
+        """
+        Get the region of interest from the image at the given URL.
+
+        Args:
+            image_url (str): The URL of the image.
+            elapsed_time_millis (int, optional): The elapsed time in milliseconds.
+
+        Returns:
+            np.ndarray: The region of interest.
+
+        Raises:
+            requests.exceptions.HTTPError: If the request to the Skimmer fails.
+        """
+        # Get the image from the Skimmer
+        response = crop(
+            image_url, self.x, self.y, self.xf, self.yf, ms=elapsed_time_millis
+        )
+
+        # Decode the image
+        image = cv2.imdecode(
+            np.frombuffer(response.content, np.uint8), cv2.IMREAD_COLOR
+        )
+        return image
 
     @property
     def valid_box(self):
@@ -173,14 +211,16 @@ class BoundingBoxAssociation:
             and self.yf <= max_y
         )
 
-    def push_changes(self, verifier: str):
+    def push_changes(self):
         if self._deleted:
             return
 
         do_modify_box = False
 
+        username = SETTINGS.username.value
+
         if self._dirty_concept:
-            update_observation_concept(self.observation_uuid, self._concept, verifier)
+            update_observation_concept(self.observation_uuid, self._concept, username)
             self._dirty_concept = False
             do_modify_box = True
 
@@ -191,7 +231,7 @@ class BoundingBoxAssociation:
 
         if self._dirty_box:
             self.meta["generator"] = "gridview"  # Only changes when box moved/resized
-            self.meta["observer"] = verifier
+            self.meta["observer"] = username
             self._dirty_box = False
             do_modify_box = True
 
@@ -200,4 +240,4 @@ class BoundingBoxAssociation:
             self._dirty_verifier = False
 
         if do_modify_box:
-            update_bounding_box_data(self.association_uuid, self.json)
+            update_bounding_box_data(self.association_uuid, self.to_dict())

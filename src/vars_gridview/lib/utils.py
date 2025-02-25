@@ -6,8 +6,15 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
-import shlex
+from typing import List, Optional, Tuple
+
+import cv2
+import numpy as np
+from cachetools import cached, LRUCache
+import requests
+
+
+image_cache = LRUCache(maxsize=128)
 
 
 def get_timestamp(
@@ -61,7 +68,9 @@ def open_file_browser(path: Path) -> subprocess.Popen:
     Returns:
         The Popen object of the opened process.
     """
-    path_str = shlex.quote(str(path))
+    if not path.exists():
+        raise FileNotFoundError(f"Path does not exist: {path}")
+    path_str = str(path)
     if sys.platform == "win32":
         process = subprocess.Popen(f"explorer /select,{path_str}")
     elif sys.platform == "darwin":
@@ -70,12 +79,12 @@ def open_file_browser(path: Path) -> subprocess.Popen:
         )
     else:
         process = subprocess.Popen(
-            ["xdg-open", path.parent if path.is_file() else path_str]
+            ["xdg-open", str(path.parent) if path.is_file() else path_str]
         )
     return process
 
 
-def parse_tsv(data: str) -> tuple[list[str], list[list[str]]]:
+def parse_tsv(data: str) -> Tuple[List[str], List[List[str]]]:
     """
     Parse a TSV string into a header and rows.
 
@@ -83,9 +92,34 @@ def parse_tsv(data: str) -> tuple[list[str], list[list[str]]]:
         data (str): TSV data.
 
     Returns:
-        tuple[list[str], list[list[str]]]: Header and rows.
+        Tuple[List[str], List[List[str]]]: Header and rows.
     """
     lines = data.split("\n")
     header = lines[0].split("\t")
     rows = [line.split("\t") for line in lines[1:] if line]
     return header, rows
+
+
+@cached(image_cache)
+def fetch_image(url: str, elapsed_time_millis: Optional[int] = None) -> np.ndarray:
+    """
+    Fetch an image from the given URL.
+
+    Args:
+        url (str): The URL to fetch the image from.
+        elapsed_time_millis (int, optional): The elapsed time in milliseconds.
+
+    Returns:
+        np.ndarray: The image as a NumPy array.
+    """
+    image_bytes = None
+    if elapsed_time_millis is None:
+        response = requests.get(url)
+        response.raise_for_status()
+        image_bytes = response.content
+    else:
+        from vars_gridview.lib.m3 import BEHOLDER_CLIENT
+
+        image_bytes = BEHOLDER_CLIENT.capture_raw(url, elapsed_time_millis)
+
+    return cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
