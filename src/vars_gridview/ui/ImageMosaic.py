@@ -110,6 +110,14 @@ class Row(BaseModel):
         return cls(**row_dict)
 
 
+class Cancelled(Exception):
+    """
+    Exception raised when the user cancels an operation.
+    """
+
+    pass
+
+
 class ImageMosaic(QtCore.QObject):
     """
     Manager of the image mosaic widget
@@ -179,20 +187,24 @@ class ImageMosaic(QtCore.QObject):
             except Exception as e:
                 LOGGER.error(f"Error parsing row {row}: {e}")
 
-        # Populate metadata from the rows
-        self._map_metadata(rows)
+        try:
+            # Populate metadata from the rows
+            self._map_metadata(rows)
 
-        # Extract associations into groups
-        self._extract_associations(rows)
+            # Extract associations into groups
+            self._extract_associations(rows)
 
-        # Fetch video sequence data for the given groups
-        self._fetch_video_sequence_data()
+            # Fetch video sequence data for the given groups
+            self._fetch_video_sequence_data()
 
-        # Derive and map MP4 image metadata
-        self._map_mp4_data(rows)
+            # Derive and map MP4 image metadata
+            self._map_mp4_data(rows)
 
-        # Create the ROI widgets
-        self._create_rois()
+            # Create the ROI widgets
+            self._create_rois()
+        except Cancelled:
+            LOGGER.info("Image mosaic loading cancelled by user")
+            return
 
     def _map_metadata(self, rows: List[Row]) -> None:
         """
@@ -332,6 +344,11 @@ class ImageMosaic(QtCore.QObject):
 
             # Wait for all video sequence lookups to complete
             for vs_future in as_completed(vs_futures):
+                if progress.wasCanceled():
+                    for future in vs_futures:
+                        future.cancel()
+                    executor.shutdown(wait=False)
+                    raise Cancelled
                 try:
                     video_sequence_data = vs_future.result()
                 except Exception as e:
@@ -393,10 +410,6 @@ class ImageMosaic(QtCore.QObject):
             rw_futures = []
             for group_key, associations in self.association_groups.items():
                 imaged_moment_uuid, image_reference_uuid = group_key
-
-                if dlg.wasCanceled():
-                    LOGGER.info("ROI loading cancelled by user")
-                    break
 
                 # Scale factors. Needed if the image is not the same size as the annotation's source image
                 scale_x = 1.0
@@ -522,6 +535,11 @@ class ImageMosaic(QtCore.QObject):
                     rw_futures.append(rw_future)
 
             for rw_future in as_completed(rw_futures):
+                if dlg.wasCanceled():
+                    for future in rw_futures:
+                        future.cancel()
+                    executor.shutdown(wait=False)
+                    raise Cancelled
                 try:
                     rw = rw_future.result()
                     self._rect_widgets.append(rw)
@@ -720,7 +738,7 @@ class ImageMosaic(QtCore.QObject):
             )
 
             try:
-                rect.association.push_changes(SETTINGS.username.value)
+                rect.association.push_changes()
             except Exception as e:
                 LOGGER.error(
                     f"Error pushing changes for localization {rect.association.association_uuid}: {e}"
@@ -755,7 +773,7 @@ class ImageMosaic(QtCore.QObject):
             rect.association.unverify()
 
             try:
-                rect.association.push_changes(SETTINGS.username.value)
+                rect.association.push_changes()
             except Exception as e:
                 LOGGER.error(
                     f"Error pushing changes for localization {rect.association.association_uuid}: {e}"

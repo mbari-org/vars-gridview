@@ -857,7 +857,7 @@ class MainWindow(TemplateBaseClass):
         selected_rect = self.last_selected_rect
 
         # Get the annotation imaged moment UUID
-        imaged_moment_uuid = selected_rect.imaged_moment_uuid
+        imaged_moment_uuid = UUID(selected_rect.imaged_moment_uuid)
 
         # Get the annotation MP4 video data
         mp4_video_data = self.image_mosaic.moment_mp4_data.get(imaged_moment_uuid, None)
