@@ -38,7 +38,7 @@ from vars_gridview.lib.m3.operations import (
 )
 from vars_gridview.lib.m3.query import QueryConstraint, QueryRequest, ConstraintSpec
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
-from vars_gridview.lib.utils import open_file_browser, parse_tsv
+from vars_gridview.lib.utils import color_for_concept, open_file_browser, parse_tsv
 from vars_gridview.ui.RectWidget import RectWidget
 from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
 from vars_gridview.ui.JSONTree import JSONTree
@@ -898,12 +898,6 @@ class MainWindow(TemplateBaseClass):
         annotation_milliseconds = max(annotation_timedelta.total_seconds() * 1000, 0)
         video_reference_uuid = UUID(mp4_video_reference["uuid"])
 
-        def color_for_concept(concept: str):
-            hash = sum(map(ord, concept)) << 5
-            color = QtGui.QColor()
-            color.setHsl(round((hash % 360) / 360 * 255), 255, 217, 255)
-            return color
-
         mp4_width = mp4_video_reference.get("width", None)
         mp4_height = mp4_video_reference.get("height", None)
 
@@ -922,8 +916,8 @@ class MainWindow(TemplateBaseClass):
             )
             return
 
-        rescale_x = mp4_width / selected_rect.image.shape[1]
-        rescale_y = mp4_height / selected_rect.image.shape[0]
+        rescale_x = mp4_width / selected_rect.image_width
+        rescale_y = mp4_height / selected_rect.image_height
 
         # Show warning if rescale dimensions are different
         if abs(rescale_x / rescale_y - 1) > 0.01:  # 1% tolerance
@@ -936,7 +930,7 @@ class MainWindow(TemplateBaseClass):
         # Collect localizations for all rects that are on the same video
         localizations = []
         for rect in self.image_mosaic._rect_widgets:
-            imaged_moment_uuid_other = rect.imaged_moment_uuid
+            imaged_moment_uuid_other = UUID(rect.imaged_moment_uuid)
             mp4_video_data_other = self.image_mosaic.moment_mp4_data.get(
                 imaged_moment_uuid_other, None
             )

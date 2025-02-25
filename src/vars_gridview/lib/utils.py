@@ -10,8 +10,10 @@ from typing import List, Optional, Tuple
 
 import cv2
 import numpy as np
-from cachetools import cached, LRUCache
 import requests
+from PyQt6.QtGui import QColor
+from cachetools import cached, LRUCache
+from functools import cache
 
 
 image_cache = LRUCache(maxsize=128)
@@ -123,3 +125,20 @@ def fetch_image(url: str, elapsed_time_millis: Optional[int] = None) -> np.ndarr
         image_bytes = BEHOLDER_CLIENT.capture_raw(url, elapsed_time_millis)
 
     return cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
+
+
+@cache
+def color_for_concept(concept: str) -> QColor:
+    """
+    Get a color for the given concept.
+
+    Args:
+        concept (str): The concept.
+
+    Returns:
+        QColor: The color.
+    """
+    hash = sum(map(ord, concept)) << 5
+    color = QColor()
+    color.setHsl(round((hash % 360) / 360 * 255), 255, 217, 255)
+    return color
