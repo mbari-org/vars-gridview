@@ -1,6 +1,123 @@
 # CHANGELOG
 
 
+## v0.19.0 (2025-02-25)
+
+### Features
+
+- Integrate Skimmer
+  ([`63920ca`](https://github.com/mbari-org/vars-gridview/commit/63920ca2b7ae36e56633a9a74453c2cc24ec773e))
+
+Squashed commit of the following:
+
+commit 9d6f4dc6e51b5bfb5c02b20ba0a74214709265e1 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Mon Feb 24 16:08:38 2025 -0800
+
+fix open video, relabel, load cancel
+
+commit 0e0f68963ac1312f79f810d19fff67eb8e94e37b Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Mon Feb 24 16:07:22 2025 -0800
+
+reduce zoom single step value from 20 to 10
+
+commit 77d48a17e4a1c1e6b326c65f5a21047fce729431 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Mon Feb 24 12:15:46 2025 -0800
+
+improve typing in operations module, add typing to needs_auth decorator
+
+commit cf287ab9738dbf1f51eed68ceee43dcdd5db2d43 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Mon Feb 24 10:55:44 2025 -0800
+
+add query_download method and update Row parsing in ImageMosaic
+
+commit be50a61a9a7673532a819aa0826f4690e03c83bb Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Thu Feb 20 16:58:17 2025 -0800
+
+refactor image cropping logic to use SkimmerClient and add pytest as a development dependency
+
+commit 1396a12a6507b21a9dd5af8a1eff767eb56adf3d Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Thu Feb 20 16:47:07 2025 -0800
+
+fix re-querying logic, remove failed login dialog
+
+commit aa65e7f0ba9dbf2d146e2c859d2c9d81630bb7e9 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Thu Feb 20 16:02:59 2025 -0800
+
+several changes
+
+- Remove image caching mechanism - Improve typing all around - "localization" -> "association" -
+  Make `username` a setting value - Make `gui_zoom` a setting value - Add typing to
+  association_meta_sort decorator factory - Avoid re-creating image mosaic to preserve metadata -
+  Refactors abound
+
+commit 212002eb2f0fee15c67939029df518086bd3fa0c Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Thu Feb 20 09:38:23 2025 -0800
+
+fix use of wrong image referenece UUID
+
+commit 1541cafdc32d4d53509c7a7916a79b718f3a63d3 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Tue Feb 18 21:19:21 2025 -0800
+
+add error handling for failed RectWidget init
+
+commit 90a34403a6fb515f81db9a61be3a554c3166b614 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Tue Feb 18 13:41:09 2025 -0800
+
+begin UI refactor
+
+commit 7970e5a709554c9e62add616768ee0a5dd150aff Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Tue Feb 18 13:57:29 2025 -0800
+
+rework image mosaic fetching to use concurrent ThreadPoolExecutor
+
+commit 3bc66d2b8268348b45e473c6b641c69de4996a3c Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Tue Feb 18 13:56:43 2025 -0800
+
+page queries
+
+commit 30a5f32b60a12197a98f50564cf33dec4ece7c75 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Tue Feb 18 13:55:20 2025 -0800
+
+rework fetch_image call for video frames
+
+commit 8afe4f898a060e8ea6942c4a21ecf654c976dcb3 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Tue Feb 18 13:54:23 2025 -0800
+
+modify get_roi method to include optional elapsed time parameter for Skimmer API requests
+
+commit 287c5a098634ec87cdb066875f64a4f7d6088fd0 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Tue Feb 18 13:53:40 2025 -0800
+
+add paginated query function for M3 API with TSV parsing
+
+commit bc26c4c4ba3a887dab0b1ca08ce7a34a5966cf6b Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Fri Feb 14 09:35:05 2025 -0800
+
+restore image scaling logic
+
+commit 22f93a88934161948952d55d2d775df792a2c422 Author: Kevin Barnard <kbarnard@mbari.org>
+
+Date: Thu Feb 13 14:46:54 2025 -0800
+
+add initial skimmer integration
+
+
 ## v0.18.0 (2025-02-25)
 
 ### Features
