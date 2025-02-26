@@ -513,7 +513,7 @@ class ImageMosaic(QtCore.QObject):
                 # Create the widgets
                 for association in associations:
                     observer = self.observation_observer.get(
-                        association.observation_uuid, None
+                        UUID(association.observation_uuid), None
                     )
                     other_locs = list(associations)
                     other_locs.remove(association)
