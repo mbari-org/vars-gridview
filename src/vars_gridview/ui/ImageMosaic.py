@@ -399,6 +399,7 @@ class ImageMosaic(QtCore.QObject):
         # Create the ROIs
         self.n_images = 0
         self.n_localizations = 0
+        failed_rects = []  # List to keep track of failed rect widgets
         with (
             pg.ProgressDialog(
                 "Creating ROIs...",
@@ -507,7 +508,7 @@ class ImageMosaic(QtCore.QObject):
                         )
                         continue
                     valid_associations.append(association)
-                associations = valid_associations
+                associations: List[BoundingBoxAssociation] = valid_associations
 
                 # Create the widgets
                 for association in associations:
@@ -532,6 +533,7 @@ class ImageMosaic(QtCore.QObject):
                         scale_y=scale_y,
                         elapsed_time_millis=elapsed_time_millis,
                     )
+                    rw_future.association_uuid = association.association_uuid
                     rw_futures.append(rw_future)
 
             for rw_future in as_completed(rw_futures):
@@ -545,8 +547,20 @@ class ImageMosaic(QtCore.QObject):
                     self._rect_widgets.append(rw)
                 except Exception as e:
                     LOGGER.error(f"Error creating rect widget: {e}")
+                    failed_rects.append(
+                        rw_future.association_uuid
+                    )  # Add the bounding box association UUID to the list of failed rects
                 self.n_localizations += 1
                 dlg += 1
+
+        # Show a dialog summarizing any rect widgets that could not be loaded
+        if failed_rects:
+            error_message = "\n".join(failed_rects)
+            QtWidgets.QMessageBox.warning(
+                self._graphics_view,
+                "Failed to Create ROIs",
+                f"The following bounding box associations could not be loaded:\n{error_message}",
+            )
 
     def _similarity_sort_slot(self, clicked_rect: RectWidget, same_class_only: bool):
         def key(rect_widget: RectWidget) -> float:

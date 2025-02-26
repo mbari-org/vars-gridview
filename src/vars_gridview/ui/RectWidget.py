@@ -8,6 +8,7 @@ from typing import List, Optional
 import cv2
 import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
+from requests import HTTPError
 from scipy.spatial.distance import cosine
 
 from vars_gridview.lib.association import BoundingBoxAssociation
@@ -94,7 +95,14 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """
         Get the image data for this rect widget.
         """
-        image = fetch_image(self.source_url, self.elapsed_time_millis)
+        try:
+            image = fetch_image(self.source_url, self.elapsed_time_millis)
+        except HTTPError as e:
+            QtWidgets.QMessageBox.critical(
+                None,
+                "Could not load image",
+                f"Failed to load image from {self.source_url}: {e}",
+            )
 
         if self._scale_x != 1.0 or self._scale_y != 1.0:
             image = cv2.resize(

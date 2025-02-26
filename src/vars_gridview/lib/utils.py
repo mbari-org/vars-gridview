@@ -15,6 +15,8 @@ from PyQt6.QtGui import QColor
 from cachetools import cached, LRUCache
 from functools import cache
 
+from vars_gridview.lib.log import LOGGER
+
 
 image_cache = LRUCache(maxsize=128)
 
@@ -113,16 +115,29 @@ def fetch_image(url: str, elapsed_time_millis: Optional[int] = None) -> np.ndarr
 
     Returns:
         np.ndarray: The image as a NumPy array.
+
+    Raises:
+        requests.HTTPError: If the request fails.
     """
     image_bytes = None
-    if elapsed_time_millis is None:
-        response = requests.get(url)
-        response.raise_for_status()
-        image_bytes = response.content
-    else:
-        from vars_gridview.lib.m3 import BEHOLDER_CLIENT
+    try:
+        if elapsed_time_millis is None:
+            response = requests.get(url)
+            response.raise_for_status()
+            image_bytes = response.content
+        else:
+            from vars_gridview.lib.m3 import BEHOLDER_CLIENT
 
-        image_bytes = BEHOLDER_CLIENT.capture_raw(url, elapsed_time_millis)
+            image_bytes = BEHOLDER_CLIENT.capture_raw(url, elapsed_time_millis)
+    except requests.HTTPError as e:
+        ms_str = (
+            f" at {elapsed_time_millis} ms" if elapsed_time_millis is not None else ""
+        )
+        LOGGER.error(f"Failed to fetch image from {url}{ms_str}: {e}")
+        LOGGER.debug(
+            f"Error response with status {e.response.status_code}:\nHeaders:\n{'\n'.join(['- ' + hk + ': ' + hv for hk, hv in e.response.headers.items()])}\n{e.response.content}"
+        )
+        raise e
 
     return cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
 
