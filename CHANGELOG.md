@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.19.2 (2025-02-26)
+
+### Bug Fixes
+
+- Ensure UUID conversion for observation UUID in ImageMosaic, fix bug with "None" observation
+  observer
+  ([`ac819ec`](https://github.com/mbari-org/vars-gridview/commit/ac819ec8f7c04e4713fecfc6d5d246b0a570074e))
+
+- Improve error handling for image fetching and ROI creation
+  ([`6a5e42b`](https://github.com/mbari-org/vars-gridview/commit/6a5e42be0d7d91705b83c49608776e92efb780b1))
+
+
 ## v0.19.1 (2025-02-25)
 
 ### Bug Fixes
