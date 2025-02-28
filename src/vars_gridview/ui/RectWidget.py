@@ -52,6 +52,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.observer = observer
         self.localization_index = association_index
         self._zoom = SETTINGS.gui_zoom.value
+        self._scale_x = scale_x
+        self._scale_y = scale_y
 
         self.labelheight = 30
         self.bordersize = 6
@@ -71,9 +73,6 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.pic = None
         self._embedding = None
         self.update_roi_pic()
-
-        self._scale_x = scale_x
-        self._scale_y = scale_y
 
         self._clicked_slot = clicked_slot
         self._similarity_sort_slot = similarity_sort_slot
@@ -202,14 +201,31 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             )
 
         self._embedding = self._embedding_model.embed(
-            self.association.get_roi(
-                self.source_url,
-                self.elapsed_time_millis,
-            )[::-1],
+            self.get_roi()[::-1],
         )
 
+    def get_roi(self) -> np.ndarray:
+        """
+        Get the region of interest for this rect widget.
+        """
+        # Get the image from the Skimmer
+        response = operations.crop(
+            self.source_url,
+            round(self.association.x / self._scale_x),
+            round(self.association.y / self._scale_y),
+            round(self.association.xf / self._scale_x),
+            round(self.association.yf / self._scale_y),
+            ms=self.elapsed_time_millis,
+        )
+
+        # Decode the image
+        image = cv2.imdecode(
+            np.frombuffer(response.content, np.uint8), cv2.IMREAD_COLOR
+        )
+        return image
+
     def update_roi_pic(self):
-        self.roi = self.association.get_roi(self.source_url, self.elapsed_time_millis)
+        self.roi = self.get_roi()
         self.pic = self.getpic(self.roi)
         if self._embedding_model is not None:
             self.update_embedding()

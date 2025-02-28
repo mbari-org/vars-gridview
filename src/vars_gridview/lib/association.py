@@ -5,12 +5,8 @@ VARS bounding box association.
 import json
 from typing import TYPE_CHECKING, Optional
 
-import cv2
-import numpy as np
-
 from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.lib.m3.operations import (
-    crop,
     update_bounding_box_data,
     update_bounding_box_part,
     update_observation_concept,
@@ -171,33 +167,6 @@ class BoundingBoxAssociation:
         if self.verified:
             del self.meta["verifier"]
             self._dirty_verifier = True
-
-    def get_roi(
-        self, image_url: str, elapsed_time_millis: Optional[int] = None
-    ) -> np.ndarray:
-        """
-        Get the region of interest from the image at the given URL.
-
-        Args:
-            image_url (str): The URL of the image.
-            elapsed_time_millis (int, optional): The elapsed time in milliseconds.
-
-        Returns:
-            np.ndarray: The region of interest.
-
-        Raises:
-            requests.exceptions.HTTPError: If the request to the Skimmer fails.
-        """
-        # Get the image from the Skimmer
-        response = crop(
-            image_url, self.x, self.y, self.xf, self.yf, ms=elapsed_time_millis
-        )
-
-        # Decode the image
-        image = cv2.imdecode(
-            np.frombuffer(response.content, np.uint8), cv2.IMREAD_COLOR
-        )
-        return image
 
     @property
     def valid_box(self):
