@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.19.3 (2025-02-28)
+
+### Bug Fixes
+
+- Apply image scaling to Skimmer request
+  ([`84f7f44`](https://github.com/mbari-org/vars-gridview/commit/84f7f441ee13df4c260dc2c33c55fa5882ab4b2e))
+
+
 ## v0.19.2 (2025-02-26)
 
 ### Bug Fixes
