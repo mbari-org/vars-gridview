@@ -142,6 +142,8 @@ class MainWindow(TemplateBaseClass):
         self.ui.zoomSpinBox.valueChanged.connect(self.update_zoom)
         self.ui.hideLabeled.stateChanged.connect(self.update_layout)
         self.ui.hideUnlabeled.stateChanged.connect(self.update_layout)
+        self.ui.hideTraining.stateChanged.connect(self.update_layout)
+        self.ui.hideNontraining.stateChanged.connect(self.update_layout)
         self.ui.styleComboBox.currentTextChanged.connect(self._style_gui)
         self.ui.openVideo.clicked.connect(self.open_video)
         self.ui.sortButton.clicked.connect(self._sort_widgets)
@@ -491,6 +493,8 @@ class MainWindow(TemplateBaseClass):
         # Set the display flags
         self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
+        self.image_mosaic.hide_training = self.ui.hideTraining.isChecked()
+        self.image_mosaic.hide_nontraining = self.ui.hideNontraining.isChecked()
 
         # Populate the image mosaic
         self.image_mosaic.populate(query_headers, query_rows)
@@ -813,6 +817,8 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.hide_to_review = False
         self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
+        self.image_mosaic.hide_training = self.ui.hideTraining.isChecked()
+        self.image_mosaic.hide_nontraining = self.ui.hideNontraining.isChecked()
 
         self.image_mosaic.render_mosaic()
 

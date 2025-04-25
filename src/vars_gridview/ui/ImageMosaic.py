@@ -146,6 +146,8 @@ class ImageMosaic(QtCore.QObject):
         # Display flags
         self.hide_labeled = False
         self.hide_unlabeled = False
+        self.hide_training = False
+        self.hide_nontraining = False
 
         # Metadata caches
         self.image_reference_urls = {}
@@ -705,13 +707,18 @@ class ImageMosaic(QtCore.QObject):
         # Clear the graphics
         self._clear_graphics_layout()
 
-        # Get the subset of rect widgets to render
-        rect_widgets_to_render = [
-            rw
-            for rw in self._rect_widgets
-            if (not rw.is_verified and not self.hide_unlabeled)
-            or (rw.is_verified and not self.hide_labeled)
-        ]
+        # Get the subset of rect widgets to render based on display flags
+        rect_widgets_to_render = []
+        for rw in self._rect_widgets:
+            if self.hide_labeled and rw.association.verified:
+                continue
+            if self.hide_unlabeled and not rw.association.verified:
+                continue
+            if self.hide_training and rw.association.is_training:
+                continue
+            if self.hide_nontraining and not rw.association.is_training:
+                continue
+            rect_widgets_to_render.append(rw)
 
         # Hide all rect widgets that we aren't rendering
         rect_widgets_to_hide = [

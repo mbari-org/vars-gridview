@@ -223,38 +223,80 @@
             <item>
               <layout class="QHBoxLayout" name="horizontalLayout">
                 <item>
-                  <widget class="QCheckBox" name="hideLabeled">
-                    <property name="font">
-                      <font>
-                        <pointsize>10</pointsize>
-                        <weight>75</weight>
-                        <bold>true</bold>
-                      </font>
-                    </property>
-                    <property name="text">
-                      <string>Hide Verified</string>
-                    </property>
-                    <property name="checked">
-                      <bool>false</bool>
-                    </property>
-                  </widget>
+                  <layout class="QVBoxLayout" name="labeledCheckboxesLayout">
+                    <item>
+                      <widget class="QCheckBox" name="hideLabeled">
+                        <property name="font">
+                          <font>
+                            <pointsize>10</pointsize>
+                            <weight>75</weight>
+                            <bold>true</bold>
+                          </font>
+                        </property>
+                        <property name="text">
+                          <string>Hide Verified</string>
+                        </property>
+                        <property name="checked">
+                          <bool>false</bool>
+                        </property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QCheckBox" name="hideUnlabeled">
+                        <property name="font">
+                          <font>
+                            <pointsize>10</pointsize>
+                            <weight>75</weight>
+                            <bold>true</bold>
+                          </font>
+                        </property>
+                        <property name="text">
+                          <string>Hide Unverified</string>
+                        </property>
+                        <property name="checked">
+                          <bool>false</bool>
+                        </property>
+                      </widget>
+                    </item>
+                  </layout>
                 </item>
                 <item>
-                  <widget class="QCheckBox" name="hideUnlabeled">
-                    <property name="font">
-                      <font>
-                        <pointsize>10</pointsize>
-                        <weight>75</weight>
-                        <bold>true</bold>
-                      </font>
-                    </property>
-                    <property name="text">
-                      <string>Hide Unverified</string>
-                    </property>
-                    <property name="checked">
-                      <bool>false</bool>
-                    </property>
-                  </widget>
+                  <layout class="QVBoxLayout" name="trainingCheckboxesLayout">
+                    <item>
+                      <widget class="QCheckBox" name="hideTraining">
+                        <property name="font">
+                          <font>
+                            <pointsize>10</pointsize>
+                            <weight>75</weight>
+                            <bold>true</bold>
+                          </font>
+                        </property>
+                        <property name="text">
+                          <string>Hide Training</string>
+                        </property>
+                        <property name="checked">
+                          <bool>false</bool>
+                        </property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QCheckBox" name="hideNontraining">
+                        <property name="font">
+                          <font>
+                            <pointsize>10</pointsize>
+                            <weight>75</weight>
+                            <bold>true</bold>
+                          </font>
+                        </property>
+                        <property name="text">
+                          <string>Hide Non-training</string>
+                        </property>
+                        <property name="checked">
+                          <bool>false</bool>
+                        </property>
+                      </widget>
+                    </item>
+                  </layout>
                 </item>
                 <item>
                   <widget class="QPushButton" name="sortButton">
