@@ -19,6 +19,7 @@ class JSONTree(QTreeWidget):
         if json_data is not None:
             self._parse_json(json_data)
         self.resizeColumnToContents(0)
+        self.expandAll()
 
     def _parse_json(self, json_el, parent=None):
         if parent is None:  # Root node

@@ -133,6 +133,12 @@ class MainWindow(TemplateBaseClass):
         self.ui.labelSelectedButton.clicked.connect(self.label_selected)
         self.ui.verifySelectedButton.clicked.connect(self.verify_selected)
         self.ui.unverifySelectedButton.clicked.connect(self.unverify_selected)
+        self.ui.markTrainingSelectedButton.clicked.connect(
+            self.mark_training_selected
+        )  # TODO: implement
+        self.ui.unmarkTrainingSelectedButton.clicked.connect(
+            self.unmark_training_selected
+        )  # TODO: implement
         self.ui.zoomSpinBox.valueChanged.connect(self.update_zoom)
         self.ui.hideLabeled.stateChanged.connect(self.update_layout)
         self.ui.hideUnlabeled.stateChanged.connect(self.update_layout)
@@ -581,13 +587,29 @@ class MainWindow(TemplateBaseClass):
         self.ui.unverifySelectedButton.setIcon(
             style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogNoButton)
         )
+        self.ui.markTrainingSelectedButton.setIcon(
+            style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogYesButton)
+        )
+        self.ui.unmarkTrainingSelectedButton.setIcon(
+            style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogNoButton)
+        )
         self.ui.discardButton.setIcon(
             style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_TrashIcon)
         )
 
         self.ui.labelSelectedButton.setStyleSheet("background-color: #085d8e;")
-        self.ui.verifySelectedButton.setStyleSheet("background-color: #088e0d;")
-        self.ui.unverifySelectedButton.setStyleSheet("background-color: #8e4708;")
+        self.ui.verifySelectedButton.setStyleSheet(
+            "background-color: #088e0d;"
+        )  # green
+        self.ui.unverifySelectedButton.setStyleSheet(
+            "background-color: #8e4708;"
+        )  # orange
+        self.ui.markTrainingSelectedButton.setStyleSheet(
+            "background-color: #088e8e;"
+        )  # cyan variant
+        self.ui.unmarkTrainingSelectedButton.setStyleSheet(
+            "background-color: #8e8e08;"
+        )  # yellow variant
         self.ui.discardButton.setStyleSheet("background-color: #8f0808;")
 
     def label_selected(self):
@@ -702,6 +724,48 @@ class MainWindow(TemplateBaseClass):
 
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
             self.image_mosaic.unverify_selected()
+
+            self.image_mosaic.render_mosaic()
+
+    @QtCore.pyqtSlot()
+    def mark_training_selected(self) -> None:
+        """
+        Mark the selected localizations for training.
+        """
+        to_mark = self.image_mosaic.get_selected()
+        if len(to_mark) > 1:
+            opt = QtWidgets.QMessageBox.question(
+                self,
+                "Confirm Mark Training",
+                "Mark {} localizations for training?".format(len(to_mark)),
+                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
+            )
+        else:
+            opt = QtWidgets.QMessageBox.StandardButton.Yes
+
+        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
+            self.image_mosaic.mark_training_selected()
+
+            self.image_mosaic.render_mosaic()
+
+    @QtCore.pyqtSlot()
+    def unmark_training_selected(self) -> None:
+        """
+        Unmark the selected localizations for training.
+        """
+        to_unmark = self.image_mosaic.get_selected()
+        if len(to_unmark) > 1:
+            opt = QtWidgets.QMessageBox.question(
+                self,
+                "Confirm Unmark Training",
+                "Unmark {} localizations for training?".format(len(to_unmark)),
+                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
+            )
+        else:
+            opt = QtWidgets.QMessageBox.StandardButton.Yes
+
+        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
+            self.image_mosaic.unmark_training_selected()
 
             self.image_mosaic.render_mosaic()
 

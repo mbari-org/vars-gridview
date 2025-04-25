@@ -397,38 +397,80 @@
               </widget>
             </item>
             <item>
-              <widget class="QPushButton" name="verifySelectedButton">
-                <property name="font">
-                  <font>
-                    <pointsize>10</pointsize>
-                    <weight>75</weight>
-                    <bold>true</bold>
-                  </font>
-                </property>
-                <property name="toolTip">
-                  <string>Verify selected localizations</string>
-                </property>
-                <property name="text">
-                  <string>VERIFY</string>
-                </property>
-              </widget>
+              <layout class="QVBoxLayout" name="verificationButtonsLayout">
+                <item>
+                  <widget class="QPushButton" name="verifySelectedButton">
+                    <property name="font">
+                      <font>
+                        <pointsize>10</pointsize>
+                        <weight>75</weight>
+                        <bold>true</bold>
+                      </font>
+                    </property>
+                    <property name="toolTip">
+                      <string>Verify selected localizations</string>
+                    </property>
+                    <property name="text">
+                      <string>VERIFY</string>
+                    </property>
+                  </widget>
+                </item>
+                <item>
+                  <widget class="QPushButton" name="unverifySelectedButton">
+                    <property name="font">
+                      <font>
+                        <pointsize>10</pointsize>
+                        <weight>75</weight>
+                        <bold>true</bold>
+                      </font>
+                    </property>
+                    <property name="toolTip">
+                      <string>Unverify selected localizations</string>
+                    </property>
+                    <property name="text">
+                      <string>UNVERIFY</string>
+                    </property>
+                  </widget>
+                </item>
+              </layout>
             </item>
             <item>
-              <widget class="QPushButton" name="unverifySelectedButton">
-                <property name="font">
-                  <font>
-                    <pointsize>10</pointsize>
-                    <weight>75</weight>
-                    <bold>true</bold>
-                  </font>
-                </property>
-                <property name="toolTip">
-                  <string>Unverify selected localizations</string>
-                </property>
-                <property name="text">
-                  <string>UNVERIFY</string>
-                </property>
-              </widget>
+              <layout class="QVBoxLayout" name="markTrainingButtonsLayout">
+                <item>
+                  <widget class="QPushButton" name="markTrainingSelectedButton">
+                    <property name="font">
+                      <font>
+                        <pointsize>10</pointsize>
+                        <weight>75</weight>
+                        <bold>true</bold>
+                      </font>
+                    </property>
+                    <property name="toolTip">
+                      <string>Mark selected localizations for training</string>
+                    </property>
+                    <property name="text">
+                      <string>MARK TRAINING</string>
+                    </property>
+                  </widget>
+                </item>
+                <item>
+                  <widget class="QPushButton" name="unmarkTrainingSelectedButton">
+                    <property name="font">
+                      <font>
+                        <pointsize>10</pointsize>
+                        <weight>75</weight>
+                        <bold>true</bold>
+                      </font>
+                    </property>
+                    <property name="toolTip">
+                      <string>Unmark selected localizations for training</string>
+                    </property>
+                    <property name="text">
+                      <string>UNMARK TRAINING</string>
+                    </property>
+                  </widget>
+                </item>
+              </layout>
             </item>
             <item>
               <widget class="QPushButton" name="discardButton">

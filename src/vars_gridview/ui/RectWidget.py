@@ -248,7 +248,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     @property
     def is_verified(self) -> bool:
-        return self.associations[self.localization_index].verified
+        return self.association.verified
+
+    @property
+    def is_training(self) -> bool:
+        return self.association.is_training
 
     @property
     def association(self) -> BoundingBoxAssociation:

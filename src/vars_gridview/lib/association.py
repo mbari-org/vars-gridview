@@ -318,6 +318,33 @@ class BoundingBoxAssociation:
             del self.meta["verifier"]
             self._dirty_verifier = True
 
+    def mark_for_training(self) -> None:
+        """
+        Mark the bounding box for training.
+        """
+        self.meta["tags"] = self.meta.get("tags", [])
+        if "training" not in self.meta["tags"]:
+            self.meta["tags"].append("training")
+            self._dirty_box = True
+
+    def unmark_for_training(self) -> None:
+        """
+        Unmark the bounding box for training.
+        """
+        if "tags" in self.meta and "training" in self.meta["tags"]:
+            self.meta["tags"].remove("training")
+            self._dirty_box = True
+
+    @property
+    def is_training(self) -> bool:
+        """
+        Check if the bounding box is marked for training.
+
+        Returns:
+            bool: True if the bounding box is marked for training, False otherwise.
+        """
+        return "tags" in self.meta and "training" in self.meta["tags"]
+
     @property
     def is_box_valid(self) -> bool:
         """

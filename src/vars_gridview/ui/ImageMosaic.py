@@ -805,6 +805,64 @@ class ImageMosaic(QtCore.QObject):
             # Propagate visual changes
             rect.update()
 
+    def mark_training_selected(self) -> None:
+        """
+        Mark the selected rect widgets for training.
+        """
+        for rect in self.get_selected():
+            # Mark the localization for training and immediately push to VARS
+            rect.association.mark_for_training()
+
+            try:
+                rect.association.push_changes()
+            except Exception as e:
+                LOGGER.error(
+                    f"Error pushing changes for localization {rect.association.association_uuid}: {e}"
+                )
+                QtWidgets.QMessageBox.critical(
+                    self._graphics_view,
+                    "Error",
+                    f"An error occurred while pushing changes for localization {rect.association.association_uuid}.",
+                )
+
+            # Update the widget's text label and deselect it
+            rect.text_label = rect.association.text_label
+            rect.is_selected = False
+
+            # Propagate visual changes
+            rect.update()
+
+        self.render_mosaic()
+
+    def unmark_training_selected(self) -> None:
+        """
+        Unmark the selected rect widgets for training.
+        """
+        for rect in self.get_selected():
+            # Unmark the localization for training and immediately push to VARS
+            rect.association.unmark_for_training()
+
+            try:
+                rect.association.push_changes()
+            except Exception as e:
+                LOGGER.error(
+                    f"Error pushing changes for localization {rect.association.association_uuid}: {e}"
+                )
+                QtWidgets.QMessageBox.critical(
+                    self._graphics_view,
+                    "Error",
+                    f"An error occurred while pushing changes for localization {rect.association.association_uuid}.",
+                )
+
+            # Update the widget's text label and deselect it
+            rect.text_label = rect.association.text_label
+            rect.is_selected = False
+
+            # Propagate visual changes
+            rect.update()
+
+        self.render_mosaic()
+
     def get_selected(self) -> List[RectWidget]:
         """
         Get a list of the selected rect widgets
