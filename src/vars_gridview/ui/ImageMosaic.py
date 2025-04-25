@@ -502,7 +502,7 @@ class ImageMosaic(QtCore.QObject):
                 # Filter out invalid boxes
                 valid_associations = []
                 for association in associations:
-                    if not (association.valid_box):
+                    if not (association.is_box_valid):
                         LOGGER.debug(
                             f"Skipping association {association.association_uuid} due to invalid box"
                         )
