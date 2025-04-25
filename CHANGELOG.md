@@ -1,6 +1,32 @@
 # CHANGELOG
 
 
+## v0.20.0 (2025-04-25)
+
+### Code Style
+
+- `valid_box` -> `is_box_valid` ref
+  ([`1daf0fd`](https://github.com/mbari-org/vars-gridview/commit/1daf0fdbdb58ade4a40344daae1dd4b01e20872c))
+
+- Add type hints/docstrings for BoundingBoxAssociation methods and properties
+  ([`67e5915`](https://github.com/mbari-org/vars-gridview/commit/67e5915583a65d08d9496b31c2c0c6869acacd39))
+
+### Features
+
+- Add checkmark for rects marked for training
+  ([`62abca1`](https://github.com/mbari-org/vars-gridview/commit/62abca1061477bbb69e0c378e8bb61d41fc2176f))
+
+#95
+
+- Add options to hide training and non-training rects in the UI
+  ([`04b19b0`](https://github.com/mbari-org/vars-gridview/commit/04b19b07c2474faef53c83ce2e6af5692ccaeede))
+
+#97
+
+- Add training mark/unmark buttons and new bbox JSON prop `tags`
+  ([`5b29563`](https://github.com/mbari-org/vars-gridview/commit/5b29563977980f329d01e94a21ae9c0ff2fb5b4c))
+
+
 ## v0.19.3 (2025-02-28)
 
 ### Bug Fixes
