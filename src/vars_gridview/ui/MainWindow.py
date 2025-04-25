@@ -813,8 +813,6 @@ class MainWindow(TemplateBaseClass):
         if not self.loaded:
             return
 
-        self.image_mosaic.hide_discarded = False
-        self.image_mosaic.hide_to_review = False
         self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
         self.image_mosaic.hide_training = self.ui.hideTraining.isChecked()
