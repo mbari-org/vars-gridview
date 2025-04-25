@@ -12,7 +12,7 @@ from requests import HTTPError
 from scipy.spatial.distance import cosine
 
 from vars_gridview.lib.association import BoundingBoxAssociation
-from vars_gridview.lib.constants import SETTINGS
+from vars_gridview.lib.constants import ICONS_DIR, SETTINGS
 from vars_gridview.lib.embedding import Embedding
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
@@ -413,6 +413,18 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         )
         return self.scale_rect(rect)
 
+    @property
+    def checkmark_rect(self) -> QtCore.QRect:
+        label_rect = self.label_rect
+        padding = 2
+        rect = QtCore.QRect(
+            label_rect.x() + padding,
+            label_rect.y() + padding,
+            label_rect.height() - padding * 2,
+            label_rect.height() - padding * 2,
+        )
+        return rect
+
     def boundingRect(self):
         return QtCore.QRectF(
             self._zoom * self.outline_x,
@@ -508,6 +520,17 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             self.pic,
             self.pic.rect(),
         )
+
+        # Draw green check mark if marked for training
+        if self.is_training:
+            check_mark = QtGui.QPixmap(str(ICONS_DIR / "checkmark.png"))
+            check_rect = self.checkmark_rect
+            check_mark = check_mark.scaled(
+                check_rect.width(),
+                check_rect.height(),
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+            )
+            painter.drawPixmap(check_rect, check_mark)
 
         # Set font
         font = QtGui.QFont(
