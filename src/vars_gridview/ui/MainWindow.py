@@ -108,6 +108,9 @@ class MainWindow(TemplateBaseClass):
         # Embedding model
         self._embedding_model: Optional[Embedding] = None
 
+        # Last query request
+        self._last_query_request: Optional[QueryRequest] = None
+
         # Image mosaic (holds the thumbnails as a grid of RectWidgets)
         self.image_mosaic = ImageMosaic(
             self.ui.roiGraphicsView,
@@ -312,11 +315,25 @@ class MainWindow(TemplateBaseClass):
         query_action.triggered.connect(self._do_query)
         query_menu.addAction(query_action)
 
+        next_page_action = QtGui.QAction("&Next Page", self)
+        next_page_icon = QtGui.QIcon(str(ICONS_DIR / "right-long-solid.svg"))
+        next_page_action.setIcon(next_page_icon)
+        next_page_action.triggered.connect(self.next_page)
+        query_menu.addAction(next_page_action)
+
+        previous_page_action = QtGui.QAction("&Previous Page", self)
+        previous_page_icon = QtGui.QIcon(str(ICONS_DIR / "left-long-solid.svg"))
+        previous_page_action.setIcon(previous_page_icon)
+        previous_page_action.triggered.connect(self.previous_page)
+        query_menu.addAction(previous_page_action)
+
         # Create a menu with icons on the left-side of the main window
         toolbar = QtWidgets.QToolBar()
         toolbar.setObjectName("toolbar")
         toolbar.addAction(settings_action)
         toolbar.addAction(query_action)
+        toolbar.addAction(next_page_action)
+        toolbar.addAction(previous_page_action)
         toolbar.addAction(open_log_dir_action)
         toolbar.setIconSize(QtCore.QSize(16, 16))
         self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
@@ -426,8 +443,8 @@ class MainWindow(TemplateBaseClass):
         Perform a query based on the filter string.
         """
         # Show a query dialog
-        constraint_dict = self.run_query()
-        if constraint_dict is None:  # User cancelled, do nothing
+        query_spec = self.run_query()
+        if query_spec is None:  # User cancelled, do nothing
             return
         else:  # Unload
             if self.last_selected_rect is not None:
@@ -439,6 +456,7 @@ class MainWindow(TemplateBaseClass):
             self.ui.imageInfoTree.clear()
 
         # Run the query
+        constraint_dict, limit, offset = query_spec
         constraint_spec = ConstraintSpec.from_dict(constraint_dict)
         query_request = QueryRequest(
             select=[
@@ -479,13 +497,105 @@ class MainWindow(TemplateBaseClass):
                 QueryConstraint("link_name", equals="bounding box"),
             ],
         )
+        query_request.limit = limit
+        query_request.offset = offset
         query_request.where.extend(constraint_spec.to_constraints())
+        self._last_query_request = query_request
         try:
             query_data_raw = query_download(query_request)
             query_headers, query_rows = parse_tsv(query_data_raw)
         except Exception as e:
             LOGGER.error(f"Query failed: {e}")
             LOGGER.debug(f"Failed query request: {query_request}")
+            LOGGER.debug(f"Query {traceback.format_exc()}")
+            QtWidgets.QMessageBox.critical(self, "Query Failed", f"Query failed: {e}")
+            return
+
+        # Set the display flags
+        self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
+        self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
+        self.image_mosaic.hide_training = self.ui.hideTraining.isChecked()
+        self.image_mosaic.hide_nontraining = self.ui.hideNontraining.isChecked()
+
+        # Populate the image mosaic
+        self.image_mosaic.populate(query_headers, query_rows)
+
+        # Reset sort dialog and default sort method
+        self.sort_dialog.clear()
+        self._sort_method = RecordedTimestampSort
+
+        self.image_mosaic.sort_rect_widgets(self._sort_method)
+        self.image_mosaic.render_mosaic()
+
+        # Show some stats about the images and annotations
+        self.statusBar().showMessage(
+            "Loaded "
+            + str(self.image_mosaic.n_images)
+            + " images and "
+            + str(self.image_mosaic.n_localizations)
+            + " localizations."
+        )
+
+        # Create the box handler
+        try:
+            kb_concepts = get_kb_concepts()
+        except Exception as e:
+            LOGGER.error(f"Could not get KB concepts: {e}")
+            return
+        self.box_handler = BoxHandler(
+            self.ui.roiDetailGraphicsView,
+            self.image_mosaic,
+            all_labels=kb_concepts,
+        )
+
+    def next_page(self) -> None:
+        self._page(True)
+
+    def previous_page(self) -> None:
+        self._page(False)
+
+    def _page(self, right: bool) -> None:
+        """
+        Go to the next or previous page of the query results.
+        """
+        if not self.loaded:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Not Loaded",
+                "No results are loaded, so paging cannot be performed.",
+            )
+            return
+
+        if self._last_query_request is None:
+            return
+
+        # Get the current offset
+        offset = self._last_query_request.offset
+        limit = self._last_query_request.limit
+
+        # Update the offset
+        if right:
+            offset += limit
+        else:
+            offset -= limit
+
+        # Run the query again with the new offset
+        self._last_query_request.offset = offset
+
+        if self.last_selected_rect is not None:
+            self.image_mosaic.deselect(self.last_selected_rect)
+        self.last_selected_rect = None
+        self.box_handler = None
+        self.clear_selected()
+        self.ui.boundingBoxInfoTree.clear()
+        self.ui.imageInfoTree.clear()
+
+        try:
+            query_data_raw = query_download(self._last_query_request)
+            query_headers, query_rows = parse_tsv(query_data_raw)
+        except Exception as e:
+            LOGGER.error(f"Query failed: {e}")
+            LOGGER.debug(f"Failed query request: {self._last_query_request}")
             LOGGER.debug(f"Query {traceback.format_exc()}")
             QtWidgets.QMessageBox.critical(self, "Query Failed", f"Query failed: {e}")
             return
@@ -1093,7 +1203,13 @@ class MainWindow(TemplateBaseClass):
             self.box_handler.save_all()
         QtWidgets.QMainWindow.closeEvent(self, event)
 
-    def run_query(self) -> Optional[dict]:
+    def run_query(self) -> Optional[Tuple[dict, int, int]]:
+        """
+        Show the query dialog and return the constraints dictionary, limit, and offset.
+
+        Returns:
+            Optional[Tuple[dict, int, int]]: A tuple containing the constraints dictionary, limit, and offset. None if the dialog was cancelled.
+        """
         dialog = QueryDialog(parent=self)
         ok = dialog.exec()
-        return dialog.constraints_dict() if ok else None
+        return (dialog.constraints_dict(), dialog.limit, dialog.offset) if ok else None

@@ -16,6 +16,8 @@ from PyQt6.QtWidgets import (
     QStyle,
     QVBoxLayout,
     QWidget,
+    QSpinBox,
+    QFormLayout,
 )
 
 from vars_gridview.lib.m3.operations import (
@@ -709,12 +711,25 @@ class QueryDialog(QDialog):
             QAbstractItemView.SelectionMode.ExtendedSelection
         )
 
+        # Create limit/offset bar
+        self.limit_offset_bar = QWidget()
+        self.limit_offset_bar.setLayout(QFormLayout())
+        self.limit_edit = QSpinBox()
+        self.limit_edit.setRange(0, 100000)
+        self.limit_edit.setValue(10000)
+        self.offset_edit = QSpinBox()
+        self.offset_edit.setRange(0, 1000000000)
+        self.offset_edit.setValue(0)
+        self.limit_offset_bar.layout().addRow("Limit", self.limit_edit)
+        self.limit_offset_bar.layout().addRow("Offset", self.offset_edit)
+
         # Create dialog button box (just Ok button)
         self.dialog_buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
 
         # Arrange
         self.layout().addWidget(self.button_bar)
         self.layout().addWidget(self.result_list_view)
+        self.layout().addWidget(self.limit_offset_bar)
         self.layout().addWidget(self.dialog_buttons)
         self.button_bar.layout().addWidget(self.add_constraint_button)
         self.button_bar.layout().addWidget(self.remove_constraint_button)
@@ -752,6 +767,14 @@ class QueryDialog(QDialog):
     @pyqtSlot()
     def clear(self):
         self.result_list_model.clear()
+
+    @property
+    def limit(self) -> int:
+        return self.limit_edit.value()
+
+    @property
+    def offset(self) -> int:
+        return self.offset_edit.value()
 
     def constraints_dict(self):
         d = {}
