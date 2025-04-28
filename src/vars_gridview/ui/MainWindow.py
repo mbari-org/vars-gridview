@@ -450,6 +450,10 @@ class MainWindow(TemplateBaseClass):
             if self.last_selected_rect is not None:
                 self.image_mosaic.deselect(self.last_selected_rect)
             self.last_selected_rect = None
+
+            if self.image_mosaic:
+                self.image_mosaic.clear_view()
+
             self.box_handler = None
             self.clear_selected()
             self.ui.boundingBoxInfoTree.clear()
@@ -573,11 +577,21 @@ class MainWindow(TemplateBaseClass):
         offset = self._last_query_request.offset
         limit = self._last_query_request.limit
 
+        # If offset is 0 and we are going back, do nothing
+        if offset == 0 and not right:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "No Previous Page",
+                "Already at the first page.",
+            )
+            return
+
         # Update the offset
         if right:
             offset += limit
         else:
             offset -= limit
+        offset = max(0, offset)
 
         # Run the query again with the new offset
         self._last_query_request.offset = offset
@@ -585,6 +599,11 @@ class MainWindow(TemplateBaseClass):
         if self.last_selected_rect is not None:
             self.image_mosaic.deselect(self.last_selected_rect)
         self.last_selected_rect = None
+
+        # Property clear the graphics view first
+        if self.image_mosaic:
+            self.image_mosaic.clear_view()
+
         self.box_handler = None
         self.clear_selected()
         self.ui.boundingBoxInfoTree.clear()

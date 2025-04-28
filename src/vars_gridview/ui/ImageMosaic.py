@@ -685,6 +685,21 @@ class ImageMosaic(QtCore.QObject):
         while self._graphics_widget.layout().count() > 0:
             self._graphics_widget.layout().removeAt(0)
 
+    def clear_view(self) -> None:
+        """
+        Clear the graphics view without deleting the underlying RectWidgets.
+        Hides all rect widgets and clears the layout.
+        """
+        # Hide all rect widgets
+        for rect_widget in self._rect_widgets:
+            rect_widget.hide()
+
+        # Clear the graphics layout (removes widgets from layout but doesn't delete them)
+        self._clear_graphics_layout()
+
+        # Update the scene rect to be minimal
+        self._graphics_scene.setSceneRect(QtCore.QRectF())
+
     def render_mosaic(self):
         """
         Load images + annotations and populate the mosaic
@@ -978,6 +993,7 @@ class ImageMosaic(QtCore.QObject):
                 pd += 1
 
         # Re-render to ensure the deleted widgets are removed from the view
+        self.clear_view()
         self.render_mosaic()
 
     def deselect(self, rect_widget: RectWidget):
