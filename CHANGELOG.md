@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v0.21.0 (2025-04-28)
+
+### Bug Fixes
+
+- Remove unused display flags
+  ([`284d1d1`](https://github.com/mbari-org/vars-gridview/commit/284d1d1515b57d4949083fde0eb7677953a3bb18))
+
+- Resolve RectWidget graphics unloading on re-query and pagination
+  ([`575e69e`](https://github.com/mbari-org/vars-gridview/commit/575e69ecbefbb65050d8e08f41e3d2e3a73967a3))
+
+### Features
+
+- Add basic pagination
+  ([`f1b105f`](https://github.com/mbari-org/vars-gridview/commit/f1b105fffd51b0572fbcec56b52ec5e7cce1588d))
+
+- Add uuids, observation group to ancillary data pane; rework association data structure
+  representation
+  ([`61a926b`](https://github.com/mbari-org/vars-gridview/commit/61a926bb861e48ca66e9776b67a9e5672abda7b2))
+
+see #98
+
+
 ## v0.20.0 (2025-04-25)
 
 ### Code Style
