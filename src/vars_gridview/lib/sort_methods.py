@@ -253,11 +253,11 @@ class FrequencyDomainSort(SortMethod):
 SortMethodT = TypeVar("SortMethodT", bound=SortMethod)
 
 
-def association_meta_sort(
+def association_data_sort(
     key: str, default: Any
 ) -> Callable[[SortMethodT], SortMethodT]:
     """
-    Decorator factory for creating a sort method that sorts by an association meta key.
+    Decorator factory for creating a sort method that sorts by an association data key.
 
     Args:
         key: The meta key to sort by.
@@ -265,23 +265,23 @@ def association_meta_sort(
     """
 
     def decorator(cls: SortMethodT) -> SortMethodT:
-        class LocalizationMetaSort(SortMethod):
+        class BoundingBoxAssociationDataSort(SortMethod):
             NAME = cls.NAME
 
             @staticmethod
             def key(rect: RectWidget) -> Any:
-                return rect.association.meta.get(key, default)
+                return rect.association.data.get(key, default)
 
-        return LocalizationMetaSort
+        return BoundingBoxAssociationDataSort
 
     return decorator
 
 
-@association_meta_sort("verifier", "")
+@association_data_sort("verifier", "")
 class VerifierSort(SortMethod):
     NAME = "Verifier"
 
 
-@association_meta_sort("confidence", 0.0)
+@association_data_sort("confidence", 0.0)
 class ConfidenceSort(SortMethod):
     NAME = "Confidence"

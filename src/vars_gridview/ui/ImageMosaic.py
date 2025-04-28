@@ -4,7 +4,8 @@ Image mosaic widget manager.
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, List, Optional
+from json import loads
+from typing import TYPE_CHECKING, Dict, List, Optional
 from uuid import UUID
 
 import pyqtgraph as pg
@@ -16,6 +17,7 @@ from vars_gridview.lib.association import BoundingBoxAssociation
 from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
+from vars_gridview.lib.observation import Observation
 from vars_gridview.lib.sort_methods import SortMethod
 from vars_gridview.lib.utils import get_timestamp
 from vars_gridview.ui.RectWidget import RectWidget
@@ -57,6 +59,7 @@ class Row(BaseModel):
     # Observation
     observer: str | None
     concept: str | None
+    observation_group: str | None
 
     # Association
     link_name: str | None
@@ -151,16 +154,14 @@ class ImageMosaic(QtCore.QObject):
 
         # Metadata caches
         self.image_reference_urls = {}
-        self.association_groups = {}
+        self.association_groups: Dict[UUID, List[BoundingBoxAssociation]] = {}
+        self.observations: Dict[UUID, Observation] = {}
         self.moment_video_data = {}
         self.moment_mp4_data = {}
         self.moment_timestamps = {}
-        self.observation_observer = {}
         self.video_reference_uuid_to_mp4_video_reference = {}
         self.video_sequences_by_name = {}
         self.moment_ancillary_data = {}
-
-        self.association_groups = {}
 
         self.n_images = 0
         self.n_localizations = 0
@@ -220,8 +221,16 @@ class ImageMosaic(QtCore.QObject):
             if row.image_reference_uuid not in self.image_reference_urls:
                 self.image_reference_urls[row.image_reference_uuid] = row.image_url
 
-            # Map observation_uuid -> observer
-            self.observation_observer[row.observation_uuid] = row.observer
+            # Map observation_uuid -> observation
+            if row.observation_uuid not in self.observations:
+                observation = Observation(
+                    uuid=row.observation_uuid,
+                    concept=row.concept,
+                    observer=row.observer,
+                    group=row.observation_group,
+                    imaged_moment_uuid=row.imaged_moment_uuid,
+                )
+                self.observations[row.observation_uuid] = observation
 
             # Map imaged_moment_uuid -> ancillary data
             # Note: this assumes a single imaged moment UUID will not have multiple ancillary data entries. This is a safe assumption for now but is not strictly necessary
@@ -253,7 +262,7 @@ class ImageMosaic(QtCore.QObject):
                     "video_start_timestamp": row.video_start_timestamp,
                     "video_uri": row.video_uri,
                     "video_container": row.video_container,
-                    "video_reference_uuid": str(row.video_reference_uuid).lower(),
+                    "video_reference_uuid": row.video_reference_uuid,
                     "video_sequence_name": row.video_sequence_name,
                     "video_width": row.video_width,
                     "video_height": row.video_height,
@@ -293,25 +302,39 @@ class ImageMosaic(QtCore.QObject):
                 )
                 continue
 
-            # Parse the bounding box association from the association link_value
-            association = BoundingBoxAssociation.from_json(row.link_value)
-            association.set_concept(row.concept, row.to_concept)
-            association.imaged_moment_uuid = str(
-                row.imaged_moment_uuid
-            ).lower()  # The imaged moment of the annotation. Does not necessarily correspond to the imaged moment of the bounding box association's image.
-            association.observation_uuid = str(row.observation_uuid).lower()
-            association.association_uuid = str(row.association_uuid).lower()
+            # Parse the bounding box association
+            observation = self.observations.get(row.observation_uuid)
+            try:
+                box_data = loads(row.link_value)
+            except Exception as e:
+                LOGGER.error(
+                    f"Error parsing JSON for bounding box association {row.association_uuid}: {e}"
+                )
+                continue
+            try:
+                association = BoundingBoxAssociation(
+                    row.association_uuid,
+                    box_data,
+                    observation,
+                    row.to_concept,
+                )
+            except (KeyError, ValueError) as e:
+                LOGGER.error(
+                    f"Invalid bounding box for association {row.association_uuid}: {e}"
+                )
+                continue
+            except Exception as e:
+                LOGGER.error(
+                    f"Unexpected error while creating bounding box association {row.association_uuid}: {e}",
+                    exc_info=True,
+                )
+                continue
 
             # Each group corresponds to an image to be downloaded.
             # The key is the imaged moment UUID + image reference UUID.
             # This is done to support when a bounding box association is tied to an image reference that is not under its annotation's imaged moment.
             # Under this model (so as not to break anything) localizations for the same image reference but different imaged moments will be grouped SEPARATELY. This is not ideal but is the best we can do for now.
-            group_key = (
-                row.imaged_moment_uuid,
-                UUID(association.image_reference_uuid)
-                if association.image_reference_uuid
-                else None,
-            )
+            group_key = (row.imaged_moment_uuid, association.image_reference_uuid)
 
             if group_key not in self.association_groups:
                 self.association_groups[group_key] = []
@@ -501,22 +524,8 @@ class ImageMosaic(QtCore.QObject):
                 )
                 video_data = self.moment_video_data.get(imaged_moment_uuid, None) or {}
 
-                # Filter out invalid boxes
-                valid_associations = []
-                for association in associations:
-                    if not (association.is_box_valid):
-                        LOGGER.debug(
-                            f"Skipping association {association.association_uuid} due to invalid box"
-                        )
-                        continue
-                    valid_associations.append(association)
-                associations: List[BoundingBoxAssociation] = valid_associations
-
                 # Create the widgets
                 for association in associations:
-                    observer = self.observation_observer.get(
-                        UUID(association.observation_uuid), None
-                    )
                     other_locs = list(associations)
                     other_locs.remove(association)
                     rw_future = executor.submit(
@@ -525,7 +534,6 @@ class ImageMosaic(QtCore.QObject):
                         source_url,
                         ancillary_data,
                         video_data,
-                        observer,
                         len(other_locs),
                         self._rect_clicked_slot,
                         self._similarity_sort_slot,
@@ -535,7 +543,7 @@ class ImageMosaic(QtCore.QObject):
                         scale_y=scale_y,
                         elapsed_time_millis=elapsed_time_millis,
                     )
-                    rw_future.association_uuid = association.association_uuid
+                    rw_future.association_uuid = association.uuid
                     rw_futures.append(rw_future)
 
             for rw_future in as_completed(rw_futures):
@@ -557,7 +565,7 @@ class ImageMosaic(QtCore.QObject):
 
         # Show a dialog summarizing any rect widgets that could not be loaded
         if failed_rects:
-            error_message = "\n".join(failed_rects)
+            error_message = "\n".join(list(map(str, failed_rects)))
             QtWidgets.QMessageBox.warning(
                 self._graphics_view,
                 "Failed to Create ROIs",
@@ -777,12 +785,12 @@ class ImageMosaic(QtCore.QObject):
                 rect.association.push_changes()
             except Exception as e:
                 LOGGER.error(
-                    f"Error pushing changes for localization {rect.association.association_uuid}: {e}"
+                    f"Error pushing changes for localization {rect.association.uuid}: {e}"
                 )
                 QtWidgets.QMessageBox.critical(
                     self._graphics_view,
                     "Error",
-                    f"An error occurred while pushing changes for localization {rect.association.association_uuid}.",
+                    f"An error occurred while pushing changes for localization {rect.association.uuid}.",
                 )
 
             # Update the widget's text label and deselect it
@@ -812,12 +820,12 @@ class ImageMosaic(QtCore.QObject):
                 rect.association.push_changes()
             except Exception as e:
                 LOGGER.error(
-                    f"Error pushing changes for localization {rect.association.association_uuid}: {e}"
+                    f"Error pushing changes for localization {rect.association.uuid}: {e}"
                 )
                 QtWidgets.QMessageBox.critical(
                     self._graphics_view,
                     "Error",
-                    f"An error occurred while pushing changes for localization {rect.association.association_uuid}.",
+                    f"An error occurred while pushing changes for localization {rect.association.uuid}.",
                 )
 
             # Update the widget's text label and deselect it
@@ -839,12 +847,12 @@ class ImageMosaic(QtCore.QObject):
                 rect.association.push_changes()
             except Exception as e:
                 LOGGER.error(
-                    f"Error pushing changes for localization {rect.association.association_uuid}: {e}"
+                    f"Error pushing changes for localization {rect.association.uuid}: {e}"
                 )
                 QtWidgets.QMessageBox.critical(
                     self._graphics_view,
                     "Error",
-                    f"An error occurred while pushing changes for localization {rect.association.association_uuid}.",
+                    f"An error occurred while pushing changes for localization {rect.association.uuid}.",
                 )
 
             # Update the widget's text label and deselect it
@@ -868,12 +876,12 @@ class ImageMosaic(QtCore.QObject):
                 rect.association.push_changes()
             except Exception as e:
                 LOGGER.error(
-                    f"Error pushing changes for localization {rect.association.association_uuid}: {e}"
+                    f"Error pushing changes for localization {rect.association.uuid}: {e}"
                 )
                 QtWidgets.QMessageBox.critical(
                     self._graphics_view,
                     "Error",
-                    f"An error occurred while pushing changes for localization {rect.association.association_uuid}.",
+                    f"An error occurred while pushing changes for localization {rect.association.uuid}.",
                 )
 
             # Update the widget's text label and deselect it
@@ -907,10 +915,10 @@ class ImageMosaic(QtCore.QObject):
         selected = self.get_selected()
 
         bounding_box_association_uuids_to_delete = [
-            rw.association.association_uuid for rw in selected
+            rw.association.uuid for rw in selected
         ]
 
-        observation_uuids = [rw.association.observation_uuid for rw in selected]
+        observation_uuids = [rw.association.observation.uuid for rw in selected]
 
         # Get the UUIDs of the bounding box associations tied to the observations
         bounding_box_association_uuids_by_observation_uuid = dict()
@@ -932,7 +940,7 @@ class ImageMosaic(QtCore.QObject):
                     )  # Get the observation data from VARS
                     for association in observation.get("associations"):
                         if association.get("link_name") == "bounding box":
-                            association_uuid = association.get("uuid")
+                            association_uuid = UUID(association.get("uuid"))
 
                             # Add the association UUID to the list for this observation UUID
                             bounding_box_association_uuids_by_observation_uuid[
@@ -984,7 +992,7 @@ class ImageMosaic(QtCore.QObject):
             for rw in selected:
                 delete_observation = (
                     delete_observations
-                    and rw.association.observation_uuid
+                    and rw.association.observation.uuid
                     in dangling_observations_uuids_to_delete
                 )  # Only delete the observation if it's in the list of dangling observations
                 rw.delete(observation=delete_observation)

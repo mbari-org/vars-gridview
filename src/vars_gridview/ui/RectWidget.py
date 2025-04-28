@@ -4,6 +4,7 @@ RectWidget class for displaying a single localization in the grid view.
 
 from datetime import datetime
 from typing import List, Optional
+from uuid import UUID
 
 import cv2
 import numpy as np
@@ -31,7 +32,6 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         source_url: str,
         ancillary_data: dict,
         video_data: dict,
-        observer: str,
         association_index: int,
         clicked_slot: callable,
         similarity_sort_slot: callable,
@@ -49,7 +49,6 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.elapsed_time_millis = elapsed_time_millis
         self.ancillary_data = ancillary_data
         self.video_data = video_data
-        self.observer = observer
         self.localization_index = association_index
         self._zoom = SETTINGS.gui_zoom.value
         self._scale_x = scale_x
@@ -143,44 +142,46 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             raise ValueError("This rect widget has already been deleted")
 
         if observation:
+            observation_uuid = self.association.observation.uuid
             try:
-                operations.delete_observation(self.observation_uuid)
+                operations.delete_observation(observation_uuid)
                 self.deleted = True
             except Exception as e:
                 LOGGER.error(
-                    f"Error deleting observation {self.observation_uuid} from rect widget: {e}"
+                    f"Error deleting observation {observation_uuid} from rect widget: {e}"
                 )
         else:
+            association_uuid = self.association.uuid
             try:
-                operations.delete_association(self.association_uuid)
+                operations.delete_association(association_uuid)
                 self.deleted = True
             except Exception as e:
                 LOGGER.error(
-                    f"Error deleting association {self.association_uuid} from rect widget: {e}"
+                    f"Error deleting association {association_uuid} from rect widget: {e}"
                 )
 
         return self.deleted
 
     @property
-    def imaged_moment_uuid(self) -> str:
+    def imaged_moment_uuid(self) -> UUID:
         """
         Get the UUID of the imaged moment associated with this rect widget.
         """
-        return self.association.imaged_moment_uuid
+        return self.association.observation.imaged_moment_uuid
 
     @property
-    def observation_uuid(self) -> str:
+    def observation_uuid(self) -> UUID:
         """
         Get the UUID of the observation associated with this rect widget.
         """
-        return self.association.observation_uuid
+        return self.association.observation.uuid
 
     @property
-    def association_uuid(self) -> str:
+    def association_uuid(self) -> UUID:
         """
         Get the UUID of the association associated with this rect widget.
         """
-        return self.association.association_uuid
+        return self.association.uuid
 
     @property
     def embedding(self):

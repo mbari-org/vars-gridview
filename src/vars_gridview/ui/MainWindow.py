@@ -496,6 +496,7 @@ class MainWindow(TemplateBaseClass):
                 "salinity",
                 "temperature_celsius",
                 "light_transmission",
+                "observation_group",
             ],
             where=[
                 QueryConstraint("link_name", equals="bounding box"),
@@ -1040,14 +1041,24 @@ class MainWindow(TemplateBaseClass):
             self.box_handler.add_annotation(rect.localization_index, rect)
 
         # Add localization data to the panel
-        self.ui.boundingBoxInfoTree.set_data(rect.association.to_dict())
+        self.ui.boundingBoxInfoTree.set_data(rect.association.data)
 
         # Add ancillary data to the image info list
         ancillary_data = rect.ancillary_data.copy()
         ancillary_data["derived_timestamp"] = rect.annotation_datetime().strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-        ancillary_data["observation_observer"] = rect.observer
+        ancillary_data["observation_observer"] = rect.association.observation.observer
+        ancillary_data["observation_group"] = rect.association.observation.group
+        ancillary_data["imaged_moment_uuid"] = rect.imaged_moment_uuid
+        ancillary_data["observation_uuid"] = rect.observation_uuid
+        ancillary_data["association_uuid"] = rect.association_uuid
+
+        if rect.association.image_reference_uuid:
+            ancillary_data["image_reference_uuid"] = (
+                rect.association.image_reference_uuid
+            )
+
         self.ui.imageInfoTree.set_data(ancillary_data)
 
     @QtCore.pyqtSlot()
@@ -1062,7 +1073,7 @@ class MainWindow(TemplateBaseClass):
         selected_rect = self.last_selected_rect
 
         # Get the annotation imaged moment UUID
-        imaged_moment_uuid = UUID(selected_rect.imaged_moment_uuid)
+        imaged_moment_uuid = selected_rect.imaged_moment_uuid
 
         # Get the annotation MP4 video data
         mp4_video_data = self.image_mosaic.moment_mp4_data.get(imaged_moment_uuid, None)
@@ -1127,7 +1138,7 @@ class MainWindow(TemplateBaseClass):
         # Collect localizations for all rects that are on the same video
         localizations = []
         for rect in self.image_mosaic._rect_widgets:
-            imaged_moment_uuid_other = UUID(rect.imaged_moment_uuid)
+            imaged_moment_uuid_other = rect.imaged_moment_uuid
             mp4_video_data_other = self.image_mosaic.moment_mp4_data.get(
                 imaged_moment_uuid_other, None
             )

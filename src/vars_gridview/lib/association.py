@@ -2,8 +2,8 @@
 VARS bounding box association.
 """
 
-import json
 from typing import TYPE_CHECKING, Optional, Tuple
+from uuid import UUID
 
 from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.lib.m3.operations import (
@@ -11,6 +11,7 @@ from vars_gridview.lib.m3.operations import (
     update_bounding_box_part,
     update_observation_concept,
 )
+from vars_gridview.lib.observation import Observation
 
 if TYPE_CHECKING:
     from vars_gridview.ui.RectWidget import RectWidget
@@ -23,34 +24,29 @@ class BoundingBoxAssociation:
 
     def __init__(
         self,
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-        image_reference_uuid: Optional[str] = None,
-        **meta,
+        uuid: UUID,
+        data: dict,
+        observation: Observation,
+        to_concept: str,
     ):
         """
         Initialize the bounding box association.
 
         Args:
-            x (int): The x-coordinate of the top-left corner.
-            y (int): The y-coordinate of the top-left corner.
-            width (int): The width of the bounding box.
-            height (int): The height of the bounding box.
-            image_reference_uuid (Optional[str]): Image reference UUID of the framegrab that the bounding box association is linked to. Defaults to None (in the case of video-made bounding boxes).
+            uuid (UUID): The UUID of the bounding box association.
+            data (dict): The bounding box data.
+            observation (Observation): The observation associated with the bounding box.
+            to_concept (str): The to_concept field of the bounding box association.
+
+        Raises:
+            KeyError: If required keys are missing in the data.
+            ValueError: If values are not integers or if width/height are not positive.
         """
-        self._x = x
-        self._y = y
-        self._width = width
-        self._height = height
-        self.image_reference_uuid = image_reference_uuid
-        self.observation_uuid = None
-        self.association_uuid = None
-        self.imaged_moment_uuid = None
-        self.meta = meta
-        self._concept = None
-        self._part = None
+        self._uuid = uuid
+        BoundingBoxAssociation.validate_data(data)
+        self._data = data
+        self._observation = observation
+        self._to_concept = to_concept
 
         # Dirty flags, controls what gets updated in VARS when pushed
         self._dirty_concept = False
@@ -64,66 +60,64 @@ class BoundingBoxAssociation:
         # Back-reference
         self.rect_widget: Optional["RectWidget"] = None
 
-    @classmethod
-    def from_json(cls, data: str) -> "BoundingBoxAssociation":
+    @staticmethod
+    def validate_data(data: dict) -> None:
         """
-        Parse a JSON string into a bounding box association object.
+        Validate the bounding box data.
 
         Args:
-            data (str): JSON string to parse.
+            data (dict): The bounding box data to validate.
 
-        Returns:
-            BoundingBoxAssociation: Parsed bounding box association object.
+        Raises:
+            KeyError: If required keys are missing.
+            ValueError: If values are not integers or if width/height are not positive.
         """
-        if isinstance(data, str):
-            data = json.loads(data)
+        required_keys = {"x", "y", "width", "height"}
+        keys = set(data.keys())
+        missing_keys = required_keys - keys
+        if missing_keys:
+            raise KeyError(
+                f"Bounding box data is missing required key(s): {', '.join(missing_keys)}"
+            )
+        if not all(isinstance(data[key], int) for key in required_keys):
+            raise ValueError(
+                "Bounding box data must contain integer values for x, y, width, and height."
+            )
+        if data["width"] <= 0 or data["height"] <= 0:
+            raise ValueError("Bounding box width and height must be positive integers.")
+        if data["x"] < 0 or data["y"] < 0:
+            raise ValueError(
+                "Bounding box x and y coordinates must be non-negative integers."
+            )
 
-        return cls.from_dict(data)
-
-    @classmethod
-    def from_dict(cls, data: dict) -> "BoundingBoxAssociation":
+    def update_data(self, **data: dict) -> None:
         """
-        Parse a dictionary into a bounding box association object.
+        Update the bounding box data.
 
         Args:
-            data (dict): Dictionary to parse.
+            data (dict): Dictionary of data to update.
+        """
+        self._data.update(data)
+
+    @property
+    def data(self) -> dict:
+        """
+        Get the bounding box data.
 
         Returns:
-            BoundingBoxAssociation: Parsed bounding box association object.
+            dict: The bounding box data.
         """
-        return cls(**data)
+        return self._data.copy()
 
-    def to_dict(self) -> dict:
+    @property
+    def uuid(self) -> UUID:
         """
-        Convert the bounding box association to a dictionary.
-        This is what populates the VARS bounding box association `link_value` field.
+        Get the UUID of the bounding box association.
 
         Returns:
-            dict: The bounding box association as a dictionary.
+            UUID: The UUID of the bounding box association.
         """
-        d = {
-            "x": self._x,
-            "y": self._y,
-            "width": self._width,
-            "height": self._height,
-        }
-
-        # Only add the image reference UUID if it is not None
-        if self.image_reference_uuid is not None:
-            d["image_reference_uuid"] = self.image_reference_uuid
-
-        d.update(self.meta)
-
-        return d
-
-    def to_json(self) -> str:
-        """
-        Convert the bounding box association to a JSON string.
-
-        Returns:
-            str: The bounding box association as a JSON string.
-        """
-        return json.dumps(self.to_dict())
+        return self._uuid
 
     @property
     def x(self) -> int:
@@ -133,7 +127,7 @@ class BoundingBoxAssociation:
         Returns:
             int: The x-coordinate of the top-left corner.
         """
-        return self._x
+        return self._data.get("x")
 
     @property
     def y(self) -> int:
@@ -143,7 +137,7 @@ class BoundingBoxAssociation:
         Returns:
             int: The y-coordinate of the top-left corner.
         """
-        return self._y
+        return self._data.get("y")
 
     @property
     def width(self) -> int:
@@ -153,7 +147,7 @@ class BoundingBoxAssociation:
         Returns:
             int: The width of the bounding box.
         """
-        return self._width
+        return self._data.get("width")
 
     @property
     def height(self) -> int:
@@ -163,20 +157,50 @@ class BoundingBoxAssociation:
         Returns:
             int: The height of the bounding box.
         """
-        return self._height
+        return self._data.get("height")
 
     @property
-    def concept(self) -> Optional[str]:
+    def verifier(self) -> Optional[str]:
+        """
+        Get the verifier of the bounding box.
+
+        Returns:
+            Optional[str]: The verifier of the bounding box.
+        """
+        return self._data.get("verifier", None)
+
+    @property
+    def image_reference_uuid(self) -> Optional[UUID]:
+        """
+        Get the image reference UUID that this association is made on, if present.
+
+        Returns:
+            Optional[UUID]: The image reference UUID, or None if not present.
+        """
+        return self._data.get("image_reference_uuid", None)
+
+    @property
+    def observation(self) -> Observation:
+        """
+        Get the observation associated with the bounding box.
+
+        Returns:
+            Observation: The observation associated with the bounding box.
+        """
+        return self._observation
+
+    @property
+    def concept(self) -> str:
         """
         Get the concept of the bounding box. This comes from the parent observation `concept` field.
 
         Returns:
-            Optional[str]: The concept of the bounding box.
+            str: The concept of the bounding box.
         """
-        return self._concept
+        return self._observation.concept
 
     @property
-    def part(self) -> Optional[str]:
+    def part(self) -> str:
         """
         Get the part of the bounding box. This comes from the association `to_concept` field.
 
@@ -185,7 +209,7 @@ class BoundingBoxAssociation:
         Returns:
             Optional[str]: The part of the bounding box.
         """
-        return self._part
+        return self._to_concept
 
     @property
     def text_label(self) -> str:
@@ -195,10 +219,10 @@ class BoundingBoxAssociation:
         Returns:
             str: The text label for the bounding box.
         """
-        if self._part == "self":
-            return self._concept
+        if self.part == "self":
+            return self.concept
 
-        return "{} {}".format(self._concept, self._part)
+        return f"{self.concept} {self.part}"
 
     @property
     def xf(self) -> int:
@@ -208,7 +232,7 @@ class BoundingBoxAssociation:
         Returns:
             int: The x-coordinate of the bottom-right corner.
         """
-        return self._x + self._width
+        return self.x + self.width
 
     @property
     def yf(self) -> int:
@@ -218,7 +242,7 @@ class BoundingBoxAssociation:
         Returns:
             int: The y-coordinate of the bottom-right corner.
         """
-        return self._y + self._height
+        return self.y + self.height
 
     @property
     def box(self) -> Tuple[int, int, int, int]:
@@ -228,7 +252,7 @@ class BoundingBoxAssociation:
         Returns:
             Tuple[int, int, int, int]: The bounding box coordinates: (x, y, xf, yf).
         """
-        return self._x, self._y, self.xf, self.yf
+        return self.x, self.y, self.xf, self.yf
 
     @property
     def verified(self) -> bool:
@@ -238,7 +262,7 @@ class BoundingBoxAssociation:
         Returns:
             bool: True if the bounding box has been verified, False otherwise.
         """
-        return "verifier" in self.meta
+        return self.verifier is not None
 
     @property
     def deleted(self) -> bool:
@@ -260,24 +284,6 @@ class BoundingBoxAssociation:
         """
         self._deleted = value
 
-    def set_box(self, x: int, y: int, width: int, height: int) -> None:
-        """
-        Set the bounding box.
-
-        Args:
-            x (int): x-coordinate of the top-left corner.
-            y (int): y-coordinate of the top-left corner.
-            width (int): width of the bounding box.
-            height (int): height of the bounding box.
-        """
-        if self.x != x or self.y != y or self.width != width or self.height != height:
-            self._dirty_box = True
-
-        self._x = int(x)
-        self._y = int(y)
-        self._width = int(width)
-        self._height = int(height)
-
     def set_concept(self, concept: Optional[str], part: Optional[str]) -> None:
         """
         Set the concept and part. If either is None, it will not be updated.
@@ -286,14 +292,15 @@ class BoundingBoxAssociation:
             concept (Optional[str]): The concept to set. If None, it will not be updated.
             part (Optional[str]): The part to set. If None, it will not be updated.
         """
-        if self._concept is not None and concept != self._concept:
+        # Update the parent observation concept
+        if concept is not None and concept != self.concept:
+            self._observation.concept = concept
             self._dirty_concept = True
 
-        if self._part is not None and part != self._part:
+        # Update the bounding box to_concept
+        if part is not None and part != self.part:
+            self._to_concept = part
             self._dirty_part = True
-
-        self._concept = concept
-        self._part = part
 
     def set_verified_concept(
         self, concept: Optional[str], part: Optional[str], verifier: str
@@ -306,33 +313,37 @@ class BoundingBoxAssociation:
             part (Optional[str]): The part to set. If None, it will not be updated.
             verifier (str): The verifier to set.
         """
+        # Update the concept & part
         self.set_concept(concept, part)
-        self.meta["verifier"] = verifier
-        self._dirty_verifier = True
+
+        # Update the verifier
+        if self._data.get("verifier", None) != verifier:
+            self._data["verifier"] = verifier
+            self._dirty_verifier = True
 
     def unverify(self) -> None:
         """
         Unverify the bounding box.
         """
         if self.verified:
-            del self.meta["verifier"]
+            del self._data["verifier"]
             self._dirty_verifier = True
 
     def mark_for_training(self) -> None:
         """
         Mark the bounding box for training.
         """
-        self.meta["tags"] = self.meta.get("tags", [])
-        if "training" not in self.meta["tags"]:
-            self.meta["tags"].append("training")
+        self._data["tags"] = self._data.get("tags", [])
+        if "training" not in self._data["tags"]:
+            self._data["tags"].append("training")
             self._dirty_box = True
 
     def unmark_for_training(self) -> None:
         """
         Unmark the bounding box for training.
         """
-        if "tags" in self.meta and "training" in self.meta["tags"]:
-            self.meta["tags"].remove("training")
+        if "tags" in self._data and "training" in self._data["tags"]:
+            self._data["tags"].remove("training")
             self._dirty_box = True
 
     @property
@@ -343,37 +354,7 @@ class BoundingBoxAssociation:
         Returns:
             bool: True if the bounding box is marked for training, False otherwise.
         """
-        return "tags" in self.meta and "training" in self.meta["tags"]
-
-    @property
-    def is_box_valid(self) -> bool:
-        """
-        Check if the bounding box is valid.
-
-        Returns:
-            bool: True if the bounding box is valid, False otherwise.
-        """
-        return self.xf > self.x and self.yf > self.y
-
-    def is_in_bounds(self, min_x: int, min_y: int, max_x: int, max_y: int) -> bool:
-        """
-        Check if the bounding box is within the given bounds.
-
-        Args:
-            min_x (int): Minimum x-coordinate.
-            min_y (int): Minimum y-coordinate.
-            max_x (int): Maximum x-coordinate.
-            max_y (int): Maximum y-coordinate.
-
-        Returns:
-            bool: True if the bounding box is within the given bounds, False otherwise.
-        """
-        return (
-            self.x >= min_x
-            and self.y >= min_y
-            and self.xf <= max_x
-            and self.yf <= max_y
-        )
+        return "tags" in self._data and "training" in self._data["tags"]
 
     def push_changes(self) -> None:
         """
@@ -389,20 +370,20 @@ class BoundingBoxAssociation:
 
         # Updae the observation concept
         if self._dirty_concept:
-            update_observation_concept(self.observation_uuid, self._concept, username)
+            update_observation_concept(self._observation.uuid, self.concept, username)
             self._dirty_concept = False
             do_modify_box = True
 
         # Update the bounding box association part
         if self._dirty_part:
-            update_bounding_box_part(self.association_uuid, self._part)
+            update_bounding_box_part(self._uuid, self.part)
             self._dirty_part = False
             do_modify_box = True
 
         # Update the bounding box metadata if the box is dirty
         if self._dirty_box:
-            self.meta["generator"] = "gridview"  # Only changes when box moved/resized
-            self.meta["observer"] = username
+            self._data["generator"] = "gridview"  # Only changes when box moved/resized
+            self._data["observer"] = username
             self._dirty_box = False
             do_modify_box = True
 
@@ -413,4 +394,4 @@ class BoundingBoxAssociation:
 
         # Update the bounding box if needed
         if do_modify_box:
-            update_bounding_box_data(self.association_uuid, self.to_dict())
+            update_bounding_box_data(self._uuid, self.data)

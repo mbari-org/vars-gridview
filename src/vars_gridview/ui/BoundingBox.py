@@ -204,7 +204,7 @@ class BoundingBox(pg.RectROI):
         """
         x, y, w, h = self.get_box()
         y = self.rect_widget.image_height - y
-        self.association.set_box(x, y, w, h)
+        self.association.update_data(x=x, y=y, width=w, height=h)
         self.association.rect_widget.update_roi_pic()
 
     def update_label(self) -> None:
@@ -238,7 +238,7 @@ class BoundingBox(pg.RectROI):
         if w < 0:
             x = x + w
 
-        return [x, y, np.abs(w), np.abs(h)]
+        return [round(x), round(y), round(np.abs(w)), round(np.abs(h))]
 
     @QtCore.pyqtSlot()
     def draw_name(self) -> None:
