@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.21.1 (2025-04-30)
+
+### Bug Fixes
+
+- Handle validation errors when creating observations and log warnings for invalid associations
+  ([`d4d4846`](https://github.com/mbari-org/vars-gridview/commit/d4d484696273c0eead9b71690c46382bc349802d))
+
+
 ## v0.21.0 (2025-04-28)
 
 ### Bug Fixes
