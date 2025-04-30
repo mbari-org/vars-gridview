@@ -11,7 +11,7 @@ from uuid import UUID
 import pyqtgraph as pg
 from iso8601 import parse_date
 from PyQt6 import QtCore, QtWidgets
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from vars_gridview.lib.association import BoundingBoxAssociation
 from vars_gridview.lib.constants import SETTINGS
@@ -223,13 +223,19 @@ class ImageMosaic(QtCore.QObject):
 
             # Map observation_uuid -> observation
             if row.observation_uuid not in self.observations:
-                observation = Observation(
-                    uuid=row.observation_uuid,
-                    concept=row.concept,
-                    observer=row.observer,
-                    group=row.observation_group,
-                    imaged_moment_uuid=row.imaged_moment_uuid,
-                )
+                try:
+                    observation = Observation(
+                        uuid=row.observation_uuid,
+                        concept=row.concept,
+                        observer=row.observer,
+                        group=row.observation_group,
+                        imaged_moment_uuid=row.imaged_moment_uuid,
+                    )
+                except ValidationError as e:
+                    LOGGER.error(
+                        f"Error creating observation {row.observation_uuid} due to missing/invalid field: {e}"
+                    )
+                    continue
                 self.observations[row.observation_uuid] = observation
 
             # Map imaged_moment_uuid -> ancillary data
@@ -303,7 +309,12 @@ class ImageMosaic(QtCore.QObject):
                 continue
 
             # Parse the bounding box association
-            observation = self.observations.get(row.observation_uuid)
+            observation = self.observations.get(row.observation_uuid, None)
+            if observation is None:
+                LOGGER.warning(
+                    f"Association {row.association_uuid} has invalid observation {row.observation_uuid}, skipping"
+                )
+                continue
             try:
                 box_data = loads(row.link_value)
             except Exception as e:
