@@ -52,7 +52,6 @@ class BoundingBoxAssociation:
         self._dirty_concept = False
         self._dirty_part = False
         self._dirty_box = False
-        self._dirty_verifier = False
 
         # Deleted flag
         self._deleted = False
@@ -319,7 +318,7 @@ class BoundingBoxAssociation:
         # Update the verifier
         if self._data.get("verifier", None) != verifier:
             self._data["verifier"] = verifier
-            self._dirty_verifier = True
+            self._dirty_box = True
 
     def unverify(self) -> None:
         """
@@ -327,7 +326,7 @@ class BoundingBoxAssociation:
         """
         if self.verified:
             del self._data["verifier"]
-            self._dirty_verifier = True
+            self._dirty_box = True
 
     def mark_for_training(self) -> None:
         """
@@ -382,15 +381,10 @@ class BoundingBoxAssociation:
 
         # Update the bounding box metadata if the box is dirty
         if self._dirty_box:
-            self._data["generator"] = "gridview"  # Only changes when box moved/resized
-            self._data["observer"] = username
+            # self._data["generator"] = "gridview"  # Only changes when box moved/resized
+            # self._data["observer"] = username
             self._dirty_box = False
             do_modify_box = True
-
-        # Update the verifier if the verifier is dirty
-        if self._dirty_verifier:
-            do_modify_box = True
-            self._dirty_verifier = False
 
         # Update the bounding box if needed
         if do_modify_box:
