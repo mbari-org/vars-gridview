@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.21.2 (2025-05-06)
+
+### Bug Fixes
+
+- Restore expected bbox observer/generator metadata updates
+  ([`85eb14f`](https://github.com/mbari-org/vars-gridview/commit/85eb14fc164272879825a777b633d571166ed37b))
+
+- keep `observer` as original - don't update `generator`
+
+
 ## v0.21.1 (2025-04-30)
 
 ### Bug Fixes
