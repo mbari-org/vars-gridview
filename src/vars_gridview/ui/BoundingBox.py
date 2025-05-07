@@ -176,11 +176,21 @@ class BoundingBox(pg.RectROI):
         w, h = self.size()
         h = -h  # Fix negative height
 
+        image_width = self.rect_widget.image_width
+        image_height = self.rect_widget.image_height
+        if image_width is None or image_height is None:
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Could not get image size",
+                "Could not load the image for the annotation, so bounding box validity cannot be assessed.",
+            )
+            return
+
         min_x = 0
-        max_x = self.rect_widget.image_width - w
+        max_x = image_width - w
 
         min_y = h
-        max_y = self.rect_widget.image_height
+        max_y = image_height
 
         if x < min_x or y < min_y or x > max_x or y > max_y:
             self.setPos(min(max_x, max(min_x, x)), min(max_y, max(min_y, y)))

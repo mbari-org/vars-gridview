@@ -1017,11 +1017,12 @@ class MainWindow(TemplateBaseClass):
         )
 
         # Check if new rect image is different than last rect image
-        needs_autorange = (
-            not image_view_minimized
-            and self.last_selected_rect is not None
-            and rect.get_image() is not self.last_selected_rect.get_image()
+        rect_image = rect.get_image()
+        last_rect_image = (
+            self.last_selected_rect.get_image() if self.last_selected_rect else None
         )
+        same_image = rect_image is last_rect_image
+        needs_autorange = not (same_image or image_view_minimized)
 
         # Update the last selection
         rect.is_last_selected = True
@@ -1124,8 +1125,18 @@ class MainWindow(TemplateBaseClass):
             )
             return
 
-        rescale_x = mp4_width / selected_rect.image_width
-        rescale_y = mp4_height / selected_rect.image_height
+        image_width = selected_rect.image_width
+        image_height = selected_rect.image_height
+        if image_width is None or image_height is None:
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Could not get image size",
+                "Could not load the image for the annotation, so rescaling cannot be assessed.",
+            )
+            return
+
+        rescale_x = mp4_width / image_width
+        rescale_y = mp4_height / image_height
 
         # Show warning if rescale dimensions are different
         if abs(rescale_x / rescale_y - 1) > 0.01:  # 1% tolerance

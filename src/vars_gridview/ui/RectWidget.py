@@ -89,7 +89,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.clicked.connect(self._clicked_slot)
         self.similaritySort.connect(self._similarity_sort_slot)
 
-    def get_image(self) -> np.ndarray:
+    def get_image(self) -> Optional[np.ndarray]:
         """
         Get the image data for this rect widget.
         """
@@ -101,6 +101,10 @@ class RectWidget(QtWidgets.QGraphicsWidget):
                 "Could not load image",
                 f"Failed to load image from {self.source_url}: {e}",
             )
+            return None
+        except Exception as e:
+            LOGGER.error(f"Unexpected error while fetching image: {e}")
+            return None
 
         if self._scale_x != 1.0 or self._scale_y != 1.0:
             image = cv2.resize(
@@ -260,12 +264,18 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         return self.associations[self.localization_index]
 
     @property
-    def image_width(self):
-        return self.get_image().shape[1]
+    def image_width(self) -> Optional[int]:
+        image = self.get_image()
+        if image is None:
+            return None
+        return image.shape[1]
 
     @property
-    def image_height(self):
-        return self.get_image().shape[0]
+    def image_height(self) -> Optional[int]:
+        image = self.get_image()
+        if image is None:
+            return None
+        return image.shape[0]
 
     def annotation_datetime(self) -> Optional[datetime]:
         video_start_datetime = self.video_data["video_start_timestamp"]
@@ -294,8 +304,18 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.boundingRect()
         self.updateGeometry()
 
-    def get_full_image(self):
-        return np.rot90(self.get_image(), 3, (0, 1))
+    def get_full_image(self) -> Optional[np.ndarray]:
+        """
+        Get the full image that this ROI comes from.
+
+        Returns:
+            Optional[np.ndarray]: The full image, or None if an error occurs.
+        """
+        try:
+            return np.rot90(self.get_image(), 3, (0, 1))
+        except Exception as e:
+            LOGGER.error(f"Error getting full image: {e}")
+            return None
 
     @property
     def outline_x(self):

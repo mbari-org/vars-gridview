@@ -96,7 +96,14 @@ class BoundingBoxAssociation:
         Args:
             data (dict): Dictionary of data to update.
         """
+        unchanged = True
+        for key, value in data.items():
+            if key in self._data and self._data[key] != value:
+                unchanged = False
+                break
         self._data.update(data)
+        if not unchanged:
+            self._dirty_box = True
 
     @property
     def data(self) -> dict:

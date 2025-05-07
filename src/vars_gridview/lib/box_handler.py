@@ -82,6 +82,9 @@ class BoxHandler:
             else:
                 label = association.text_label
                 height = rect_widget.image_height
+                if height is None:
+                    LOGGER.error("No height for the image, not adding to the view")
+                    return
 
                 # Create the bounding box
                 bb = BoundingBox(
