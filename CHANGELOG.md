@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.21.3 (2025-05-07)
+
+### Bug Fixes
+
+- Require beholder-client >= 0.3.1 for proper timeout, improve error handling for failed image
+  fetch, fix box data not being pushed
+  ([`7d5bba3`](https://github.com/mbari-org/vars-gridview/commit/7d5bba3e62966345cc0a8c0fd825f2f91ee40f46))
+
+
 ## v0.21.2 (2025-05-06)
 
 ### Bug Fixes
