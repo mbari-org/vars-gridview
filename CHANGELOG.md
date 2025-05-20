@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.21.4 (2025-05-20)
+
+### Bug Fixes
+
+- Scroll back to last position on delete
+  ([`75fd7a1`](https://github.com/mbari-org/vars-gridview/commit/75fd7a1dc7e217a9decffd46358293ed393839ab))
+
+#100
+
+
 ## v0.21.3 (2025-05-07)
 
 ### Bug Fixes
