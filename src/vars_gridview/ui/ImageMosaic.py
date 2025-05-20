@@ -1011,9 +1011,14 @@ class ImageMosaic(QtCore.QObject):
                 self._rect_widgets.remove(rw)
                 pd += 1
 
+        scroll_bar = self._graphics_view.verticalScrollBar()
+        scroll_position = scroll_bar.value()
+
         # Re-render to ensure the deleted widgets are removed from the view
         self.clear_view()
         self.render_mosaic()
+
+        QtCore.QTimer.singleShot(50, lambda: scroll_bar.setValue(scroll_position))
 
     def deselect(self, rect_widget: RectWidget):
         """
