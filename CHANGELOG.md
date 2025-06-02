@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.22.0 (2025-06-02)
+
+### Bug Fixes
+
+- Handle timezone for annotation datetime and avoid NoneType error in ancillary data
+  ([`0dd094c`](https://github.com/mbari-org/vars-gridview/commit/0dd094ce473c91736bf14ea819bc50aa36e73844))
+
+### Features
+
+- Support bulk concept input, unify bulk input dialog for multiple item types
+  ([`1f18ddd`](https://github.com/mbari-org/vars-gridview/commit/1f18dddf48a31239732e1eb7df0c97637db96240))
+
+ref #103
+
+
 ## v0.21.5 (2025-06-02)
 
 ### Bug Fixes
