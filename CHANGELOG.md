@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.21.5 (2025-06-02)
+
+### Bug Fixes
+
+- Add explicit ordering by index_recorded_timestamp in query
+  ([`7319727`](https://github.com/mbari-org/vars-gridview/commit/73197273f9828c33e32f181ddef42ecf96d9b917))
+
+
 ## v0.21.4 (2025-05-20)
 
 ### Bug Fixes
