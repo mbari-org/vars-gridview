@@ -51,7 +51,81 @@ class Filter:
         raise NotImplementedError()
 
 
-class BulkUUIDInputDialog(QDialog):
+class BulkInputDialog(QDialog):
+    """
+    Base dialog that allows the user to input multiple items at once.
+
+    The items should be delimited by commas, spaces, or newlines.
+    The parsed items should be rendered in a QListWidget.
+    """
+
+    def __init__(
+        self, parent: QWidget | None = ..., placeholder_text: str = ""
+    ) -> None:
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+
+        # Input field for items
+        self._input = QLineEdit()
+        self._input.setPlaceholderText(placeholder_text)
+        layout.addWidget(self._input)
+
+        # Buttons to add and delete items
+        button_layout = QHBoxLayout()
+        self._add_button = QPushButton("Add")
+        self._delete_button = QPushButton("Delete Selected")
+        button_layout.addWidget(self._add_button)
+        button_layout.addWidget(self._delete_button)
+        layout.addLayout(button_layout)
+
+        # List widget to display items
+        self._list = QListWidget()
+        self._list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        layout.addWidget(self._list)
+
+        # Dialog buttons
+        self.dialog_buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        layout.addWidget(self.dialog_buttons)
+
+        # Connect signals to slots
+        self._add_button.clicked.connect(self.add_items)
+        self._delete_button.clicked.connect(self.delete_selected_items)
+        self.dialog_buttons.accepted.connect(self.accept)
+        self.dialog_buttons.rejected.connect(self.reject)
+
+    def add_items(self):
+        input_text = self._input.text()
+        items = [item.strip() for item in input_text.replace(",", " ").split()]
+        for item in items:
+            if item and not self._list.findItems(item, Qt.MatchFlag.MatchExactly):
+                self._list.addItem(item)
+        self._input.clear()
+
+    def delete_selected_items(self):
+        selected_items = self._list.selectedItems()
+        for item in selected_items:
+            self._list.takeItem(self._list.row(item))
+
+    @classmethod
+    def get_items(
+        cls,
+        title: str = "Enter items",
+        parent: QWidget | None = ...,
+        placeholder_text: str = "",
+    ) -> Tuple[List[str], bool]:
+        dialog = cls(parent, placeholder_text)
+        dialog.setWindowTitle(title)
+        dialog.resize(450, 300)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            return [
+                dialog._list.item(i).text() for i in range(dialog._list.count())
+            ], True
+        return [], False
+
+
+class BulkUUIDInputDialog(BulkInputDialog):
     """
     Dialog that allows the user to input multiple UUIDs at once.
 
@@ -61,55 +135,12 @@ class BulkUUIDInputDialog(QDialog):
     """
 
     def __init__(self, parent: QWidget | None = ...) -> None:
-        super().__init__(parent)
-        layout = QVBoxLayout(self)
-
-        # Input field for UUIDs
-        self._uuid_input = QLineEdit()
-        self._uuid_input.setPlaceholderText(
-            "Enter UUIDs separated by commas, spaces, or newlines"
+        super().__init__(
+            parent,
+            placeholder_text="Enter UUIDs separated by commas, spaces, or newlines",
         )
-        layout.addWidget(self._uuid_input)
-
-        # Buttons to add and delete UUIDs
-        button_layout = QHBoxLayout()
-        self._add_button = QPushButton("Add UUIDs")
-        self._delete_button = QPushButton("Delete Selected")
-        button_layout.addWidget(self._add_button)
-        button_layout.addWidget(self._delete_button)
-        layout.addLayout(button_layout)
-
-        # List widget to display UUIDs
-        self._uuid_list = QListWidget()
-        self._uuid_list.setSelectionMode(
-            QAbstractItemView.SelectionMode.ExtendedSelection
-        )
-        layout.addWidget(self._uuid_list)
-
-        # Dialog buttons
-        self.dialog_buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        layout.addWidget(self.dialog_buttons)
-
-        # Connect signals to slots
-        self._add_button.clicked.connect(self.add_uuids)
-        self._delete_button.clicked.connect(self.delete_selected_uuids)
-        self.dialog_buttons.accepted.connect(self.accept)
-        self.dialog_buttons.rejected.connect(self.reject)
-
-    def add_uuids(self):
-        input_text = self._uuid_input.text()
-        uuids = [uuid.strip().lower() for uuid in input_text.replace(",", " ").split()]
-        for uuid in uuids:
-            if uuid and not self._uuid_list.findItems(uuid, Qt.MatchFlag.MatchExactly):
-                self._uuid_list.addItem(uuid)
-        self._uuid_input.clear()
-
-    def delete_selected_uuids(self):
-        selected_items = self._uuid_list.selectedItems()
-        for item in selected_items:
-            self._uuid_list.takeItem(self._uuid_list.row(item))
+        # Rename button
+        self._add_button.setText("Add UUIDs")
 
     @classmethod
     def get_uuids(
@@ -119,42 +150,97 @@ class BulkUUIDInputDialog(QDialog):
         dialog.setWindowTitle(title)
         dialog.resize(450, 300)
         if dialog.exec() == QDialog.DialogCode.Accepted:
+            items = [dialog._list.item(i).text() for i in range(dialog._list.count())]
+
+            # Validate all the UUIDs
+            for item in items:
+                try:
+                    UUID(item)
+                except ValueError:
+                    QMessageBox.warning(
+                        parent, "Invalid UUID", f"The UUID '{item}' is invalid."
+                    )
+                    return [], False
+
+            return items, True
+        return [], False
+
+
+class BulkConceptInputDialog(BulkInputDialog):
+    """
+    Dialog that allows the user to input multiple concepts at once.
+    """
+
+    def __init__(self, parent: QWidget | None = ...) -> None:
+        super().__init__(
+            parent,
+            placeholder_text="Enter concepts separated by commas, spaces, or newlines",
+        )
+        # Rename button
+        self._add_button.setText("Add Concepts")
+
+        # Add a button to select from existing concepts
+        self._select_button = QPushButton("Select from List")
+        self.layout().itemAt(1).layout().addWidget(self._select_button)
+        self._select_button.clicked.connect(self._select_concept)
+
+        # Cache concepts list
+        self._concepts = get_kb_concepts()
+
+    def _select_concept(self):
+        concept, ok = QInputDialog.getItem(
+            self, "Select Concept", "Concept", self._concepts, 0, True
+        )
+        if ok and concept:
+            if not self._list.findItems(concept, Qt.MatchFlag.MatchExactly):
+                self._list.addItem(concept)
+
+    @classmethod
+    def get_concepts(
+        cls, title: str = "Enter Concepts", parent: QWidget | None = ...
+    ) -> Tuple[List[str], bool]:
+        dialog = cls(parent)
+        dialog.setWindowTitle(title)
+        dialog.resize(450, 300)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
             return [
-                dialog._uuid_list.item(i).text()
-                for i in range(dialog._uuid_list.count())
+                dialog._list.item(i).text() for i in range(dialog._list.count())
             ], True
         return [], False
 
 
 class ConceptFilter(Filter):
     class Result(Filter.Result):
-        def __init__(self, concept: str):
-            self.concept = concept
+        def __init__(self, concepts: List[str]):
+            self.concepts = concepts
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("concept", self.concept)
+            for concept in self.concepts:
+                yield Constraint("concept", concept)
 
         def __str__(self) -> str:
-            return "Concept: {}".format(self.concept)
+            if len(self.concepts) == 1:
+                return f"Concept: {self.concepts[0]}"
+            return f"Concepts ({len(self.concepts)} items)"
 
     def __call__(self) -> Optional[Result]:
-        concept, ok = QInputDialog.getItem(
-            self.parent, "Concept", "Concept", get_kb_concepts(), 0, True
+        concepts, ok = BulkConceptInputDialog.get_concepts(
+            "Select Concepts", self.parent
         )
-        if ok:
-            return ConceptFilter.Result(concept)
+        if ok and concepts:
+            return ConceptFilter.Result(concepts)
 
 
 class ConceptDescFilter(Filter):
-    class Result(ConceptFilter.Result):
+    class Result(Filter.Result):
         def __init__(self, concept: str):
-            super().__init__(concept)
+            self.concept = concept
             self.descendants = get_kb_descendants(concept)
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield from super().constraints
+            yield Constraint("concept", self.concept)
             for descendant in self.descendants:
                 yield Constraint("concept", descendant)
 
