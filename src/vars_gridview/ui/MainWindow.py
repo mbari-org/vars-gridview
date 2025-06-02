@@ -501,6 +501,9 @@ class MainWindow(TemplateBaseClass):
             where=[
                 QueryConstraint("link_name", equals="bounding box"),
             ],
+            order_by=[
+                "index_recorded_timestamp",
+            ],
         )
         query_request.limit = limit
         query_request.offset = offset
