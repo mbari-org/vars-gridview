@@ -1049,9 +1049,11 @@ class MainWindow(TemplateBaseClass):
 
         # Add ancillary data to the image info list
         ancillary_data = rect.ancillary_data.copy()
-        ancillary_data["derived_timestamp"] = rect.annotation_datetime().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        annotation_datetime = rect.annotation_datetime()
+        if annotation_datetime is not None:
+            ancillary_data["derived_timestamp"] = annotation_datetime.strftime(
+                "%Y-%m-%d %H:%M:%S"
+            )
         ancillary_data["observation_observer"] = rect.association.observation.observer
         ancillary_data["observation_group"] = rect.association.observation.group
         ancillary_data["imaged_moment_uuid"] = rect.imaged_moment_uuid

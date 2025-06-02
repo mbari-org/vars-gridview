@@ -4,7 +4,7 @@ Grid sort methods.
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any, List, Tuple, TypeVar
 
 import cv2
@@ -68,7 +68,7 @@ class RecordedTimestampSort(SortMethod):
 
     @staticmethod
     def key(rect: RectWidget) -> datetime:
-        return rect.annotation_datetime() or datetime.min
+        return rect.annotation_datetime() or datetime.min.replace(tzinfo=UTC)
 
 
 class AssociationUUIDSort(SortMethod):
