@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.22.1 (2025-06-03)
+
+### Bug Fixes
+
+- Tweak BulkConceptInputDialog with autocomplete and drag-and-drop support, restore single-concept
+  constraint
+  ([`6f4bdd2`](https://github.com/mbari-org/vars-gridview/commit/6f4bdd2e6b94f582e765255552fa2ae44fb7e8b1))
+
+
 ## v0.22.0 (2025-06-02)
 
 ### Bug Fixes
