@@ -1,7 +1,7 @@
 from typing import Any, Iterable, List, Optional, Tuple
 from uuid import UUID
 
-from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, pyqtSlot
+from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, pyqtSlot, QTimer
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -18,7 +18,9 @@ from PyQt6.QtWidgets import (
     QWidget,
     QSpinBox,
     QFormLayout,
+    QCompleter,
 )
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
 from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
@@ -174,18 +176,76 @@ class BulkConceptInputDialog(BulkInputDialog):
     def __init__(self, parent: QWidget | None = ...) -> None:
         super().__init__(
             parent,
-            placeholder_text="Enter concepts separated by commas, spaces, or newlines",
+            placeholder_text="Enter concept",
         )
+        # Cache concepts list
+        self._concepts = get_kb_concepts()
+
+        # Configure the input field with autocomplete
+        self._completer = QCompleter(self._concepts)
+        self._completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        self._input.setCompleter(self._completer)
+
+        # Configure auto-completion behavior to add concepts when selected
+        self._completer.activated.connect(self._add_current_concept)
+
         # Rename button
-        self._add_button.setText("Add Concepts")
+        self._add_button.setText("Add Concept")
+        self._add_button.clicked.disconnect()  # Disconnect the parent's implementation
+        self._add_button.clicked.connect(self._add_current_concept)
 
         # Add a button to select from existing concepts
         self._select_button = QPushButton("Select from List")
         self.layout().itemAt(1).layout().addWidget(self._select_button)
         self._select_button.clicked.connect(self._select_concept)
 
-        # Cache concepts list
-        self._concepts = get_kb_concepts()
+        # Enable drag and drop
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasText():
+            event.acceptProposedAction()
+
+    def dropEvent(self, event: QDropEvent):
+        mime_data = event.mimeData()
+        if mime_data.hasText():
+            text = mime_data.text()
+            if "\n" in text:
+                # Split by newlines if the text contains multiple lines
+                concepts = [item.strip() for item in text.splitlines() if item.strip()]
+            else:
+                # Split by commas
+                concepts = [item.strip() for item in text.split(",") if item.strip()]
+            invalid_concepts = []
+            for concept in concepts:
+                # Guard against invalid concepts
+                if concept not in self._concepts:
+                    invalid_concepts.append(concept)
+                    continue
+
+                # Add the concept if it does not already exist in the list
+                if concept and not self._list.findItems(
+                    concept, Qt.MatchFlag.MatchExactly
+                ):
+                    self._list.addItem(concept)
+
+            # Show a warning for any invalid concepts
+            if invalid_concepts:
+                QMessageBox.warning(
+                    self,
+                    "Invalid Concepts",
+                    "The following concepts were not recognized and were not added:\n"
+                    + ", ".join(invalid_concepts),
+                )
+
+            event.acceptProposedAction()
+
+    def _add_current_concept(self):
+        concept = self._input.text().strip()
+        if concept and not self._list.findItems(concept, Qt.MatchFlag.MatchExactly):
+            self._list.addItem(concept)
+            # Use a zero-timer to clear after the current event is processed
+            QTimer.singleShot(0, self._input.clear)
 
     def _select_concept(self):
         concept, ok = QInputDialog.getItem(
@@ -194,6 +254,11 @@ class BulkConceptInputDialog(BulkInputDialog):
         if ok and concept:
             if not self._list.findItems(concept, Qt.MatchFlag.MatchExactly):
                 self._list.addItem(concept)
+
+    def add_items(self):
+        # This is intentionally empty to prevent splitting by spaces
+        # Concepts are added through _add_current_concept method
+        pass
 
     @classmethod
     def get_concepts(
@@ -211,6 +276,26 @@ class BulkConceptInputDialog(BulkInputDialog):
 
 class ConceptFilter(Filter):
     class Result(Filter.Result):
+        def __init__(self, concept: str):
+            self.concept = concept
+
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            yield Constraint("concept", self.concept)
+
+        def __str__(self) -> str:
+            return f"Concept: {self.concept}"
+
+    def __call__(self) -> Optional[Result]:
+        concept, ok = QInputDialog.getItem(
+            self.parent, "Concept", "Concept", get_kb_concepts(), 0, True
+        )
+        if ok:
+            return ConceptFilter.Result(concept)
+
+
+class BulkConceptFilter(Filter):
+    class Result(Filter.Result):
         def __init__(self, concepts: List[str]):
             self.concepts = concepts
 
@@ -222,14 +307,14 @@ class ConceptFilter(Filter):
         def __str__(self) -> str:
             if len(self.concepts) == 1:
                 return f"Concept: {self.concepts[0]}"
-            return f"Concepts ({len(self.concepts)} items)"
+            return f"Concepts: {', '.join(self.concepts)}"
 
     def __call__(self) -> Optional[Result]:
         concepts, ok = BulkConceptInputDialog.get_concepts(
             "Select Concepts", self.parent
         )
         if ok and concepts:
-            return ConceptFilter.Result(concepts)
+            return BulkConceptFilter.Result(concepts)
 
 
 class ConceptDescFilter(Filter):
@@ -755,6 +840,7 @@ class QueryDialog(QDialog):
         # Create filters
         self.filters = [
             ConceptFilter(self, "Concept"),
+            BulkConceptFilter(self, "Concepts"),
             ConceptDescFilter(self, "Concept (+ descendants)"),
             # DiveNumberFilter(self, "Dive number"),
             VideoSequenceNameFilter(self, "Video sequence name"),
