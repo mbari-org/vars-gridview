@@ -487,6 +487,32 @@ def query_download(query_request: QueryRequest) -> str:
     return response.text
 
 
+def query_count(query_request: QueryRequest) -> int:
+    """
+    Query the M3 API for a count of matching rows.
+
+    Args:
+        query_request (QueryRequest): The query request.
+
+    Returns:
+        int: The count of matching rows.
+
+    Raises:
+        requests.exceptions.HTTPError: If the query fails.
+    """
+    LOGGER.debug("Querying Annosaurus for count")
+    response = m3.ANNOSAURUS_CLIENT.query_count(query_request)
+
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        LOGGER.debug(f"Error during query count: {e}")
+        raise e
+
+    count_response = response.json()
+    return count_response["count"]
+
+
 def crop(
     url: str, left: int, top: int, right: int, bottom: int, ms: Optional[int] = None
 ) -> requests.Response:

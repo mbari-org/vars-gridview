@@ -21,6 +21,7 @@ from vars_gridview.lib.observation import Observation
 from vars_gridview.lib.sort_methods import SortMethod
 from vars_gridview.lib.utils import get_timestamp
 from vars_gridview.ui.RectWidget import RectWidget
+from vars_gridview.ui.StatusInfoWidget import StatusInfoWidget
 
 if TYPE_CHECKING:
     from vars_gridview.lib.embedding import Embedding
@@ -139,6 +140,11 @@ class ImageMosaic(QtCore.QObject):
         self._graphics_scene = QtWidgets.QGraphicsScene()
         self._graphics_widget = QtWidgets.QGraphicsWidget()
         self._init_graphics()
+
+        self._status_info_widget = StatusInfoWidget(
+            {}, parent=self._graphics_view.parent()
+        )
+        self._graphics_view.parent().layout().addWidget(self._status_info_widget)
 
         self._rect_clicked_slot = rect_clicked_slot
         self._embedding_model = embedding_model
@@ -775,6 +781,14 @@ class ImageMosaic(QtCore.QObject):
         self._graphics_scene.setSceneRect(self._graphics_widget.boundingRect())
 
         self._n_columns = columns
+
+        # Update the stats
+        self._status_info_widget.update(
+            {
+                "ROIs": f"{len(rect_widgets_to_render)} / {self.n_localizations}",
+                "Images": str(self.n_images),
+            }
+        )
 
     def label_selected(self, concept: Optional[str], part: Optional[str]):
         """

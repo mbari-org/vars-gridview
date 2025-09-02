@@ -27,22 +27,28 @@
             <property name="orientation">
               <enum>Qt::Horizontal</enum>
             </property>
-            <widget class="QGraphicsView" name="roiGraphicsView">
-              <property name="sizePolicy">
-                <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-                  <horstretch>0</horstretch>
-                  <verstretch>0</verstretch>
-                </sizepolicy>
-              </property>
-              <property name="minimumSize">
-                <size>
-                  <width>320</width>
-                  <height>0</height>
-                </size>
-              </property>
-              <property name="styleSheet">
-                <string notr="true"/>
-              </property>
+            <widget class="QWidget">
+              <layout class="QVBoxLayout" name="verticalLayout_3">
+                <item>
+                  <widget class="QGraphicsView" name="roiGraphicsView">
+                    <property name="sizePolicy">
+                      <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
+                        <horstretch>0</horstretch>
+                        <verstretch>0</verstretch>
+                      </sizepolicy>
+                    </property>
+                    <property name="minimumSize">
+                      <size>
+                        <width>320</width>
+                        <height>0</height>
+                      </size>
+                    </property>
+                    <property name="styleSheet">
+                      <string notr="true"/>
+                    </property>
+                  </widget>
+                </item>
+              </layout>
             </widget>
             <widget class="QSplitter" name="splitter1">
               <property name="orientation">
@@ -535,7 +541,6 @@
         </item>
       </layout>
     </widget>
-    <widget class="QStatusBar" name="statusBar"/>
     <widget class="QMenuBar" name="menuBar">
       <property name="geometry">
         <rect>

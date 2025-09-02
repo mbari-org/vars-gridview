@@ -34,6 +34,7 @@ from vars_gridview.lib.m3.operations import (
     get_kb_concepts,
     get_kb_name,
     get_kb_parts,
+    query_count,
     query_download,
 )
 from vars_gridview.lib.m3.query import QueryConstraint, QueryRequest, ConstraintSpec
@@ -108,8 +109,9 @@ class MainWindow(TemplateBaseClass):
         # Embedding model
         self._embedding_model: Optional[Embedding] = None
 
-        # Last query request
+        # Last query request and total row count
         self._last_query_request: Optional[QueryRequest] = None
+        self._last_query_total_rows: Optional[int] = None
 
         # Image mosaic (holds the thumbnails as a grid of RectWidgets)
         self.image_mosaic = ImageMosaic(
@@ -136,12 +138,10 @@ class MainWindow(TemplateBaseClass):
         self.ui.labelSelectedButton.clicked.connect(self.label_selected)
         self.ui.verifySelectedButton.clicked.connect(self.verify_selected)
         self.ui.unverifySelectedButton.clicked.connect(self.unverify_selected)
-        self.ui.markTrainingSelectedButton.clicked.connect(
-            self.mark_training_selected
-        )  # TODO: implement
+        self.ui.markTrainingSelectedButton.clicked.connect(self.mark_training_selected)
         self.ui.unmarkTrainingSelectedButton.clicked.connect(
             self.unmark_training_selected
-        )  # TODO: implement
+        )
         self.ui.zoomSpinBox.valueChanged.connect(self.update_zoom)
         self.ui.hideLabeled.stateChanged.connect(self.update_layout)
         self.ui.hideUnlabeled.stateChanged.connect(self.update_layout)
@@ -510,8 +510,15 @@ class MainWindow(TemplateBaseClass):
         query_request.where.extend(constraint_spec.to_constraints())
         self._last_query_request = query_request
         try:
+            self._last_query_total_rows = query_count(query_request)
             query_data_raw = query_download(query_request)
             query_headers, query_rows = parse_tsv(query_data_raw)
+            page_rows = len(query_rows)
+            self.image_mosaic._status_info_widget.update(
+                {
+                    "Rows": f"{1+offset}-{offset+page_rows} of {self._last_query_total_rows}"
+                }
+            )
         except Exception as e:
             LOGGER.error(f"Query failed: {e}")
             LOGGER.debug(f"Failed query request: {query_request}")
@@ -534,15 +541,6 @@ class MainWindow(TemplateBaseClass):
 
         self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
-
-        # Show some stats about the images and annotations
-        self.statusBar().showMessage(
-            "Loaded "
-            + str(self.image_mosaic.n_images)
-            + " images and "
-            + str(self.image_mosaic.n_localizations)
-            + " localizations."
-        )
 
         # Create the box handler
         try:
@@ -616,6 +614,12 @@ class MainWindow(TemplateBaseClass):
         try:
             query_data_raw = query_download(self._last_query_request)
             query_headers, query_rows = parse_tsv(query_data_raw)
+            page_rows = len(query_rows)
+            self.image_mosaic._status_info_widget.update(
+                {
+                    "Rows": f"{1+offset}-{offset+page_rows} of {self._last_query_total_rows}"
+                }
+            )
         except Exception as e:
             LOGGER.error(f"Query failed: {e}")
             LOGGER.debug(f"Failed query request: {self._last_query_request}")
@@ -638,15 +642,6 @@ class MainWindow(TemplateBaseClass):
 
         self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
-
-        # Show some stats about the images and annotations
-        self.statusBar().showMessage(
-            "Loaded "
-            + str(self.image_mosaic.n_images)
-            + " images and "
-            + str(self.image_mosaic.n_localizations)
-            + " localizations."
-        )
 
         # Create the box handler
         try:

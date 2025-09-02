@@ -163,6 +163,9 @@ class AnnosaurusClient(M3Client):
     def query_download(self, query_request: QueryRequest) -> requests.Response:
         return self.post("/query/download", json=query_request.to_dict())
 
+    def query_count(self, query_request: QueryRequest) -> requests.Response:
+        return self.post("/query/count", json=query_request.to_dict())
+
 
 class VampireSquidClient(M3Client):
     """
