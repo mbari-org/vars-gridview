@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.23.0 (2025-09-02)
+
+### Features
+
+- Add status info bar widget and ROI/row counts
+  ([`1779c24`](https://github.com/mbari-org/vars-gridview/commit/1779c24027c0fbcc4667a3e9264fa2beaf344219))
+
+
 ## v0.22.1 (2025-06-03)
 
 ### Bug Fixes
