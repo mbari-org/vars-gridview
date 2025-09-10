@@ -513,10 +513,11 @@ class MainWindow(TemplateBaseClass):
             self._last_query_total_rows = query_count(query_request)
             query_data_raw = query_download(query_request)
             query_headers, query_rows = parse_tsv(query_data_raw)
-            page_rows = len(query_rows)
+            page_number = 1 + offset // limit
+            total_pages = self._last_query_total_rows // limit + (1 if self._last_query_total_rows % limit > 0 else 0)
             self.image_mosaic._status_info_widget.update(
                 {
-                    "Rows": f"{1+offset}-{offset+page_rows} of {self._last_query_total_rows}"
+                    "Page": f"{page_number} of {total_pages}"
                 }
             )
         except Exception as e:
@@ -587,6 +588,15 @@ class MainWindow(TemplateBaseClass):
                 "Already at the first page.",
             )
             return
+        
+        # If offset is at or beyond the last page and we are going forward, do nothing
+        if offset >= self._last_query_total_rows - limit and right:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "No Next Page",
+                "Already at the last page.",
+            )
+            return
 
         # Update the offset
         if right:
@@ -614,10 +624,11 @@ class MainWindow(TemplateBaseClass):
         try:
             query_data_raw = query_download(self._last_query_request)
             query_headers, query_rows = parse_tsv(query_data_raw)
-            page_rows = len(query_rows)
+            page_number = 1 + offset // limit
+            total_pages = self._last_query_total_rows // limit + (1 if self._last_query_total_rows % limit > 0 else 0)
             self.image_mosaic._status_info_widget.update(
                 {
-                    "Rows": f"{1+offset}-{offset+page_rows} of {self._last_query_total_rows}"
+                    "Page": f"{page_number} of {total_pages}"
                 }
             )
         except Exception as e:
