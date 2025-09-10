@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.23.1 (2025-09-10)
+
+### Bug Fixes
+
+- Use page instead of row count in status bar, prevent next page on last page
+  ([`a75cb5d`](https://github.com/mbari-org/vars-gridview/commit/a75cb5d0c95726efb68f978884e0efd89129fc2b))
+
+
 ## v0.23.0 (2025-09-02)
 
 ### Features
