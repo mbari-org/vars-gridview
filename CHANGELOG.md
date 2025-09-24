@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.24.0 (2025-09-24)
+
+### Features
+
+- Add camera_id, temporarily remove generator/verifier/verified filters
+  ([`67c8b4e`](https://github.com/mbari-org/vars-gridview/commit/67c8b4ed4c4dc1e4656824e54aea5fbc288ded48))
+
+The generator/verifier/verified filters rely on MSSQL where clauses that are no longer possible
+  through the Annosaurus query download endpoint.
+
+implements #109
+
+### Refactoring
+
+- Move generation of query to separate function
+  ([`bc23f08`](https://github.com/mbari-org/vars-gridview/commit/bc23f0880b758c345767e90feb141902a310defb))
+
+- Overhaul query constraint specification system, clean up QueryDialog
+  ([`7c3317e`](https://github.com/mbari-org/vars-gridview/commit/7c3317ea2ebde502d8c302fc61e1539e674734cb))
+
+
 ## v0.23.1 (2025-09-10)
 
 ### Bug Fixes
