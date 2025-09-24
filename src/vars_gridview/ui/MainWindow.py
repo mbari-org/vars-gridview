@@ -5,7 +5,7 @@ import sys
 import traceback
 import webbrowser
 from time import sleep
-from typing import TYPE_CHECKING, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 from uuid import UUID, uuid4
 
 import cv2
@@ -37,7 +37,7 @@ from vars_gridview.lib.m3.operations import (
     query_count,
     query_download,
 )
-from vars_gridview.lib.m3.query import QueryConstraint, QueryRequest, ConstraintSpec
+from vars_gridview.lib.m3.query import QueryConstraint, QueryRequest, merge_constraints
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
 from vars_gridview.lib.utils import color_for_concept, open_file_browser, parse_tsv
 from vars_gridview.ui.RectWidget import RectWidget
@@ -439,7 +439,7 @@ class MainWindow(TemplateBaseClass):
         self.image_mosaic.render_mosaic()
 
     def _generate_query_request(
-        self, constraint_dict: dict, limit: int, offset: int
+        self, constraints: List[QueryConstraint], limit: int, offset: int
     ) -> QueryRequest:
         """
         Generate a QueryRequest from a constraint dict, limit, and offset.
@@ -452,7 +452,11 @@ class MainWindow(TemplateBaseClass):
         Returns:
             QueryRequest: The generated QueryRequest object.
         """
-        constraint_spec = ConstraintSpec.from_dict(constraint_dict)
+        print("--- Original Constraints ---")
+        print("\n".join(str(c.to_dict()) for c in constraints))
+        merged_constraints = merge_constraints(constraints)
+        print("--- Merged Constraints ---")
+        print("\n".join(str(c.to_dict()) for c in merged_constraints))
 
         query_request = QueryRequest(
             select=[
@@ -500,7 +504,7 @@ class MainWindow(TemplateBaseClass):
 
         query_request.limit = limit
         query_request.offset = offset
-        query_request.where.extend(constraint_spec.to_constraints())
+        query_request.where.extend(merged_constraints)
 
         return query_request
 
@@ -509,7 +513,8 @@ class MainWindow(TemplateBaseClass):
         Perform a query based on the filter string.
         """
         # Show a query dialog
-        query_spec = self.run_query()
+        query_spec = self.get_query_params()
+
         if query_spec is None:  # User cancelled, do nothing
             return
         else:  # Unload
@@ -526,8 +531,8 @@ class MainWindow(TemplateBaseClass):
             self.ui.imageInfoTree.clear()
 
         # Generate the query request
-        constraint_dict, limit, offset = query_spec
-        query_request = self._generate_query_request(constraint_dict, limit, offset)
+        constraints, limit, offset = query_spec
+        query_request = self._generate_query_request(constraints, limit, offset)
 
         # Run the query
         self._last_query_request = query_request
@@ -1277,13 +1282,13 @@ class MainWindow(TemplateBaseClass):
             self.box_handler.save_all()
         QtWidgets.QMainWindow.closeEvent(self, event)
 
-    def run_query(self) -> Optional[Tuple[dict, int, int]]:
+    def get_query_params(self) -> Optional[Tuple[List[QueryConstraint], int, int]]:
         """
         Show the query dialog and return the constraints dictionary, limit, and offset.
 
         Returns:
-            Optional[Tuple[dict, int, int]]: A tuple containing the constraints dictionary, limit, and offset. None if the dialog was cancelled.
+            Optional[Tuple[List[QueryConstraint], int, int]]: A tuple containing the constraints list, limit, and offset. None if the dialog was cancelled.
         """
         dialog = QueryDialog(parent=self)
         ok = dialog.exec()
-        return (dialog.constraints_dict(), dialog.limit, dialog.offset) if ok else None
+        return (dialog.constraints, dialog.limit, dialog.offset) if ok else None

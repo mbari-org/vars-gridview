@@ -2,6 +2,8 @@
 M3 querying utilities.
 """
 
+from typing import List
+
 from pydantic.dataclasses import dataclass
 
 
@@ -77,42 +79,49 @@ class QueryRequest:
         return d
 
 
-class ORList:
-    @staticmethod
-    def typestr(value):
-        if isinstance(value, str):
-            return f"'{value}'"
-        elif isinstance(value, int):
-            return f"{value}"
-        else:
-            raise ValueError("Unsupported type: {}".format(type(value)))
+def merge_constraints(constraints: List[QueryConstraint]) -> List[QueryConstraint]:
+    """
+    Merge constraints on the same column into a single constraint.
 
-    def __init__(self, key: str, values=None):
-        self._key = key
-        self._values = values or []
+    Behavior implemented:
 
-    def __iadd__(self, value):
-        self._values.append(value)
-        return self
+    - Constraints are grouped by `column`.
+    - Multiple `equals` and `in_` values are combined into a single `equals` (if one) or
+      `in_` (if many) using the union while preserving first-seen order.
+    - Other constraint types are preserved as-is.
 
-    def to_constraint(self) -> QueryConstraint:
-        constraint = QueryConstraint(
-            column=self._key,
-        )
-        if len(self._values) == 1:
-            constraint.equals = self._values[0]
-        else:
-            constraint.in_ = self._values
-        return constraint
+    Args:
+        constraints (List[QueryConstraint]): List of constraints to merge.
 
+    Returns:
+        List[QueryConstraint]: Merged list of constraints.
+    """
+    # group constraints by column
+    grouped: dict[str, list[QueryConstraint]] = {}
+    for c in constraints:
+        grouped.setdefault(c.column, []).append(c)
 
-class ConstraintSpec:
-    def __init__(self, lists: list[ORList] = None):
-        self._lists = lists or []
+    merged: list[QueryConstraint] = []
 
-    def to_constraints(self) -> list[QueryConstraint]:
-        return [list_.to_constraint() for list_ in self._lists]
+    for column, group in grouped.items():
+        # Collect possible values from equals and in_ constraints
+        possible_values = set()
+        for c in group:
+            if c.equals is not None:
+                possible_values.add(c.equals)
+            elif c.in_ is not None:
+                possible_values.update(c.in_)
+            else:
+                # Maintain other constraints as-is
+                merged.append(c)
 
-    @classmethod
-    def from_dict(cls, d):
-        return cls(lists=[ORList(key, values) for key, values in d.items()])
+        # Merge possible values into a single equals or in_ constraint
+        if possible_values:
+            if len(possible_values) == 1:
+                merged.append(
+                    QueryConstraint(column=column, equals=possible_values.pop())
+                )
+            else:
+                merged.append(QueryConstraint(column=column, in_=list(possible_values)))
+
+    return merged
