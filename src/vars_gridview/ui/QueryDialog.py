@@ -274,26 +274,132 @@ class BulkConceptInputDialog(BulkInputDialog):
         return [], False
 
 
-class ConceptFilter(Filter):
+class SimpleTextFilter(Filter):
     class Result(Filter.Result):
-        def __init__(self, concept: str):
-            self.concept = concept
+        def __init__(self, label: str, value: str, key: str):
+            self.label = label
+            self.value = value
+            self.key = key
 
         @property
         def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("concept", self.concept)
+            yield Constraint(self.key, self.value)
 
         def __str__(self) -> str:
-            return f"Concept: {self.concept}"
+            return f"{self.label}: {self.value}"
+
+    def __init__(self, parent, name: str, key: str, prompt: Optional[str] = None):
+        super().__init__(parent, name)
+        self.key = key
+        self.prompt = prompt or name
 
     def __call__(self) -> Optional[Result]:
-        concept, ok = QInputDialog.getItem(
-            self.parent, "Concept", "Concept", get_kb_concepts(), 0, True
+        text, ok = QInputDialog.getText(
+            self.parent, self.name, self.prompt, QLineEdit.EchoMode.Normal, ""
         )
         if ok:
-            return ConceptFilter.Result(concept)
+            return SimpleTextFilter.Result(self.name, text, self.key)
 
 
+class ItemSelectFilter(Filter):
+    class Result(Filter.Result):
+        def __init__(self, label: str, value: str, key: str):
+            self.label = label
+            self.value = value
+            self.key = key
+
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            yield Constraint(self.key, self.value)
+
+        def __str__(self) -> str:
+            return f"{self.label}: {self.value}"
+
+    def __init__(
+        self, parent, name: str, items_getter, key: str, editable: bool = False
+    ):
+        super().__init__(parent, name)
+        self.items_getter = items_getter
+        self.key = key
+        self.editable = editable
+
+    def __call__(self) -> Optional[Result]:
+        items = self.items_getter()
+        value, ok = QInputDialog.getItem(
+            self.parent, self.name, self.name, items, 0, self.editable
+        )
+        if ok:
+            return ItemSelectFilter.Result(self.name, value, self.key)
+
+
+class UUIDListFilter(Filter):
+    class Result(Filter.Result):
+        def __init__(self, label: str, uuids: List[str], key: str):
+            self.label = label
+            self.uuids = uuids
+            self.key = key
+
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            for u in self.uuids:
+                yield Constraint(self.key, u)
+
+        def __str__(self) -> str:
+            if len(self.uuids) == 1:
+                return f"{self.label}: {self.uuids[0]}"
+            return f"{self.label}s ({len(self.uuids)} items)"
+
+    def __init__(self, parent, name: str, key: str, title: Optional[str] = None):
+        super().__init__(parent, name)
+        self.key = key
+        self.title = title or name + "s"
+
+    def __call__(self) -> Optional[Result]:
+        uuids, ok = BulkUUIDInputDialog.get_uuids(self.title, self.parent)
+        if ok:
+            if not uuids:
+                return None
+            # Validate
+            for u in uuids:
+                try:
+                    UUID(u)
+                except ValueError:
+                    QMessageBox.warning(
+                        self.parent, "Invalid UUID", f"The UUID '{u}' is invalid."
+                    )
+                    return None
+            return UUIDListFilter.Result(self.name, uuids, self.key)
+
+
+class BooleanSQLFilter(Filter):
+    class Result(Filter.Result):
+        def __init__(self, label: str, value: bool, expr: str):
+            self.label = label
+            self.value = value
+            self.expr = expr
+
+        @property
+        def constraints(self) -> Iterable[Constraint]:
+            yield Constraint(self.expr, int(self.value))
+
+        def __str__(self) -> str:
+            return f"{self.label}: {'Yes' if self.value else 'No'}"
+
+    def __init__(self, parent, name: str, expr: str):
+        super().__init__(parent, name)
+        self.expr = expr
+
+    def __call__(self) -> Optional[Result]:
+        choice, ok = QInputDialog.getItem(
+            self.parent, self.name, self.name, ["Yes", "No"], 0, False
+        )
+        if ok:
+            return BooleanSQLFilter.Result(
+                self.name, True if choice == "Yes" else False, self.expr
+            )
+
+
+# Small adapters for concepts since they have special dialogs/behaviour
 class BulkConceptFilter(Filter):
     class Result(Filter.Result):
         def __init__(self, concepts: List[str]):
@@ -340,450 +446,6 @@ class ConceptDescFilter(Filter):
         )
         if ok:
             return ConceptDescFilter.Result(concept)
-
-
-class DiveNumberFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, dive_number: str):
-            self.dive_number = dive_number
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("dive_number", self.dive_number)
-
-        def __str__(self) -> str:
-            return "Dive number: {}".format(self.dive_number)
-
-    def __call__(self) -> Optional[Result]:
-        dive_number, ok = QInputDialog.getText(
-            self.parent, "Dive number", "Dive number", QLineEdit.EchoMode.Normal, ""
-        )
-        if ok:
-            return DiveNumberFilter.Result(dive_number)
-
-
-class VideoSequenceNameFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, video_sequence_name: str):
-            self.video_sequence_name = video_sequence_name
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("video_sequence_name", self.video_sequence_name)
-
-        def __str__(self) -> str:
-            return "Video sequence name: {}".format(self.video_sequence_name)
-
-    def __call__(self) -> Optional[Result]:
-        video_sequence_name, ok = QInputDialog.getItem(
-            self.parent,
-            "Video sequence name",
-            "Video sequence name",
-            get_video_sequence_names(),
-            0,
-            True,
-        )
-        if ok:
-            return VideoSequenceNameFilter.Result(video_sequence_name)
-
-
-class ChiefScientistFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, chief_scientist: str):
-            self.chief_scientist = chief_scientist
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("chief_scientist", self.chief_scientist)
-
-        def __str__(self) -> str:
-            return "Chief scientist: {}".format(self.chief_scientist)
-
-    def __call__(self) -> Optional[Result]:
-        chief_scientist, ok = QInputDialog.getText(
-            self.parent,
-            "Chief scientist",
-            "Chief scientist",
-            QLineEdit.EchoMode.Normal,
-            "",
-        )
-        if ok:
-            return ChiefScientistFilter.Result(chief_scientist)
-
-
-class PlatformFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, platform: str):
-            self.platform = platform
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("camera_platform", self.platform)
-
-        def __str__(self) -> str:
-            return "Platform: {}".format(self.platform)
-
-    def __call__(self) -> Optional[Result]:
-        platform, ok = QInputDialog.getText(
-            self.parent, "Platform", "Platform", QLineEdit.EchoMode.Normal, ""
-        )
-        if ok:
-            return PlatformFilter.Result(platform)
-
-
-class ObserverFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, observer: str):
-            self.observer = observer
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("observer", self.observer)
-
-        def __str__(self) -> str:
-            return "Observer: {}".format(self.observer)
-
-    def __call__(self) -> Optional[Result]:
-        usernames = sorted([user["username"] for user in get_users()])
-        observer, ok = QInputDialog.getItem(
-            self.parent, "Observer", "Observer", usernames, 0, True
-        )
-        if ok:
-            return ObserverFilter.Result(observer)
-
-
-class ImagedMomentUUIDFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, imaged_moment_uuids: List[str]):
-            self.imaged_moment_uuids = imaged_moment_uuids
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            for uuid in self.imaged_moment_uuids:
-                yield Constraint("imaged_moment_uuid", uuid)
-
-        def __str__(self) -> str:
-            if len(self.imaged_moment_uuids) == 1:
-                return "Imaged moment UUID: {}".format(self.imaged_moment_uuids[0])
-            return "Imaged moment UUIDs ({} items)".format(
-                len(self.imaged_moment_uuids)
-            )
-
-    def __call__(self) -> Optional[Result]:
-        imaged_moment_uuids, ok = BulkUUIDInputDialog.get_uuids(
-            "Imaged moment UUIDs", self.parent
-        )
-        if ok:
-            # If no UUIDs were entered, return None
-            if not imaged_moment_uuids:
-                return None
-
-            # Validate all the UUIDs
-            for imaged_moment_uuid in imaged_moment_uuids:
-                try:
-                    UUID(imaged_moment_uuid)
-                except ValueError:
-                    QMessageBox.warning(
-                        self.parent,
-                        "Invalid UUID",
-                        "The UUID '{}' is invalid.".format(imaged_moment_uuid),
-                    )
-                    return None
-
-            # Return the result
-            return ImagedMomentUUIDFilter.Result(imaged_moment_uuids)
-
-
-class ObservationUUIDFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, observation_uuids: List[str]):
-            self.observation_uuids = observation_uuids
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            for uuid in self.observation_uuids:
-                yield Constraint("observation_uuid", uuid)
-
-        def __str__(self) -> str:
-            if len(self.observation_uuids) == 1:
-                return "Observation UUID: {}".format(self.observation_uuids[0])
-            return "Observation UUIDs ({} items)".format(len(self.observation_uuids))
-
-    def __call__(self) -> Optional[Result]:
-        observation_uuids, ok = BulkUUIDInputDialog.get_uuids(
-            "Observation UUIDs", self.parent
-        )
-        if ok:
-            # If no UUIDs were entered, return None
-            if not observation_uuids:
-                return None
-
-            # Validate all the UUIDs
-            for observation_uuid in observation_uuids:
-                try:
-                    UUID(observation_uuid)
-                except ValueError:
-                    QMessageBox.warning(
-                        self.parent,
-                        "Invalid UUID",
-                        "The UUID '{}' is invalid.".format(observation_uuid),
-                    )
-                    return None
-
-            # Return the result
-            return ObservationUUIDFilter.Result(observation_uuids)
-
-
-class AssociationUUIDFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, association_uuids: List[str]):
-            self.association_uuids = association_uuids
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            for uuid in self.association_uuids:
-                yield Constraint("association_uuid", uuid)
-
-        def __str__(self) -> str:
-            if len(self.association_uuids) == 1:
-                return "Association UUID: {}".format(self.association_uuids[0])
-            return "Association UUIDs ({} items)".format(len(self.association_uuids))
-
-    def __call__(self) -> Optional[Result]:
-        association_uuids, ok = BulkUUIDInputDialog.get_uuids(
-            "Association UUIDs", self.parent
-        )
-        if ok:
-            # If no UUIDs were entered, return None
-            if not association_uuids:
-                return None
-
-            # Validate all the UUIDs
-            for association_uuid in association_uuids:
-                try:
-                    UUID(association_uuid)
-                except ValueError:
-                    QMessageBox.warning(
-                        self.parent,
-                        "Invalid UUID",
-                        "The UUID '{}' is invalid.".format(association_uuid),
-                    )
-                    return None
-
-            # Return the result
-            return AssociationUUIDFilter.Result(association_uuids)
-
-
-class ImageReferenceUUIDFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, image_reference_uuids: List[str]):
-            self.image_reference_uuids = image_reference_uuids
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            for uuid in self.image_reference_uuids:
-                yield Constraint("image_reference_uuid", uuid)
-
-        def __str__(self) -> str:
-            if len(self.image_reference_uuids) == 1:
-                return "Image reference UUID: {}".format(self.image_reference_uuids[0])
-            return "Image reference UUIDs ({} items)".format(
-                len(self.image_reference_uuids)
-            )
-
-    def __call__(self) -> Optional[Result]:
-        image_reference_uuids, ok = BulkUUIDInputDialog.get_uuids(
-            "Image reference UUIDs", self.parent
-        )
-        if ok:
-            # If no UUIDs were entered, return None
-            if not image_reference_uuids:
-                return None
-
-            # Validate all the UUIDs
-            for image_reference_uuid in image_reference_uuids:
-                try:
-                    UUID(image_reference_uuid)
-                except ValueError:
-                    QMessageBox.warning(
-                        self.parent,
-                        "Invalid UUID",
-                        "The UUID '{}' is invalid.".format(image_reference_uuid),
-                    )
-                    return None
-
-            # Return the result
-            return ImageReferenceUUIDFilter.Result(image_reference_uuids)
-
-
-class VideoReferenceUUIDFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, video_reference_uuids: List[str]):
-            self.video_reference_uuids = video_reference_uuids
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            for uuid in self.video_reference_uuids:
-                yield Constraint("video_reference_uuid", uuid)
-
-        def __str__(self) -> str:
-            if len(self.video_reference_uuids) == 1:
-                return "Video reference UUID: {}".format(self.video_reference_uuids[0])
-            return "Video reference UUIDs ({} items)".format(
-                len(self.video_reference_uuids)
-            )
-
-    def __call__(self) -> Optional[Result]:
-        video_reference_uuids, ok = BulkUUIDInputDialog.get_uuids(
-            "Video reference UUIDs", self.parent
-        )
-        if ok:
-            # If no UUIDs were entered, return None
-            if not video_reference_uuids:
-                return None
-
-            # Validate all the UUIDs
-            for video_reference_uuid in video_reference_uuids:
-                try:
-                    UUID(video_reference_uuid)
-                except ValueError:
-                    QMessageBox.warning(
-                        self.parent,
-                        "Invalid UUID",
-                        "The UUID '{}' is invalid.".format(video_reference_uuid),
-                    )
-                    return None
-
-            # Return the result
-            return VideoReferenceUUIDFilter.Result(video_reference_uuids)
-
-
-class ActivityFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, activity: str):
-            self.activity = activity
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("activity", self.activity)
-
-        def __str__(self) -> str:
-            return "Activity: {}".format(self.activity)
-
-    def __call__(self) -> Optional[Result]:
-        activity, ok = QInputDialog.getText(
-            self.parent,
-            "Activity",
-            "Activity",
-            QLineEdit.EchoMode.Normal,
-            "",
-        )
-        if ok:
-            return ActivityFilter.Result(activity)
-
-
-class ObservationGroupFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, observation_group: str):
-            self.observation_group = observation_group
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint("observation_group", self.observation_group)
-
-        def __str__(self) -> str:
-            return "Observation group: {}".format(self.observation_group)
-
-    def __call__(self) -> Optional[Result]:
-        observation_group, ok = QInputDialog.getText(
-            self.parent,
-            "Observation group",
-            "Observation group",
-            QLineEdit.EchoMode.Normal,
-            "",
-        )
-        if ok:
-            return ObservationGroupFilter.Result(observation_group)
-
-
-class GeneratorFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, generator: str):
-            self.generator = generator
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint(
-                "JSON_VALUE(assoc.link_value, '$.generator')", self.generator
-            )
-
-        def __str__(self) -> str:
-            return "Generator: {}".format(self.generator)
-
-    def __call__(self) -> Optional[Result]:
-        generator, ok = QInputDialog.getText(
-            self.parent,
-            "Generator",
-            "Generator",
-            QLineEdit.EchoMode.Normal,
-            "",
-        )
-        if ok:
-            return GeneratorFilter.Result(generator)
-
-
-class VerifierFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, verifier: str):
-            self.verifier = verifier
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint(
-                "JSON_VALUE(assoc.link_value, '$.verifier')", self.verifier
-            )
-
-        def __str__(self) -> str:
-            return "Verifier: {}".format(self.verifier)
-
-    def __call__(self) -> Optional[Result]:
-        verifier, ok = QInputDialog.getText(
-            self.parent,
-            "Verifier",
-            "Verifier",
-            QLineEdit.EchoMode.Normal,
-            "",
-        )
-        if ok:
-            return VerifierFilter.Result(verifier)
-
-
-class VerifiedBooleanFilter(Filter):
-    class Result(Filter.Result):
-        def __init__(self, verified: bool):
-            self.verified = verified
-
-        @property
-        def constraints(self) -> Iterable[Constraint]:
-            yield Constraint(
-                "CASE WHEN JSON_VALUE(assoc.link_value, '$.verifier') IS NOT NULL THEN 1 ELSE 0 END",
-                int(self.verified),
-            )
-
-        def __str__(self) -> str:
-            return "Verified: {}".format("Yes" if self.verified else "No")
-
-    def __call__(self) -> Optional[Result]:
-        verified, ok = QInputDialog.getItem(
-            self.parent,
-            "Verified",
-            "Verified",
-            ["Yes", "No"],
-            0,
-            False,
-        )
-        if ok:
-            return VerifiedBooleanFilter.Result(True if verified == "Yes" else False)
 
 
 class ResultListModel(QAbstractListModel):
@@ -837,26 +499,60 @@ class QueryDialog(QDialog):
         self.setWindowTitle("Query")
         self.setLayout(QVBoxLayout())
 
-        # Create filters
+        # Create filters (using generic filter classes to reduce duplication)
         self.filters = [
-            ConceptFilter(self, "Concept"),
+            ItemSelectFilter(
+                self, "Concept", get_kb_concepts, "concept", editable=True
+            ),
             BulkConceptFilter(self, "Concepts"),
             ConceptDescFilter(self, "Concept (+ descendants)"),
             # DiveNumberFilter(self, "Dive number"),
-            VideoSequenceNameFilter(self, "Video sequence name"),
-            ChiefScientistFilter(self, "Chief scientist"),
-            PlatformFilter(self, "Platform"),
-            ObserverFilter(self, "Observer"),
-            ImagedMomentUUIDFilter(self, "Imaged moment UUID"),
-            ObservationUUIDFilter(self, "Observation UUID"),
-            AssociationUUIDFilter(self, "Association UUID"),
-            ImageReferenceUUIDFilter(self, "Image reference UUID"),
-            VideoReferenceUUIDFilter(self, "Video reference UUID"),
-            ActivityFilter(self, "Activity"),
-            ObservationGroupFilter(self, "Observation group"),
-            GeneratorFilter(self, "Generator"),
-            VerifierFilter(self, "Verifier"),
-            VerifiedBooleanFilter(self, "Verified"),
+            ItemSelectFilter(
+                self,
+                "Video sequence name",
+                get_video_sequence_names,
+                "video_sequence_name",
+                editable=True,
+            ),
+            SimpleTextFilter(self, "Chief scientist", "chief_scientist"),
+            SimpleTextFilter(self, "Platform", "camera_platform"),
+            SimpleTextFilter(self, "Camera ID", "camera_id"),
+            ItemSelectFilter(
+                self,
+                "Observer",
+                lambda: sorted([u["username"] for u in get_users()]),
+                "observer",
+                editable=True,
+            ),
+            UUIDListFilter(
+                self,
+                "Imaged moment UUID",
+                "imaged_moment_uuid",
+                title="Imaged moment UUIDs",
+            ),
+            UUIDListFilter(
+                self, "Observation UUID", "observation_uuid", title="Observation UUIDs"
+            ),
+            UUIDListFilter(
+                self, "Association UUID", "association_uuid", title="Association UUIDs"
+            ),
+            UUIDListFilter(
+                self,
+                "Image reference UUID",
+                "image_reference_uuid",
+                title="Image reference UUIDs",
+            ),
+            UUIDListFilter(
+                self,
+                "Video reference UUID",
+                "video_reference_uuid",
+                title="Video reference UUIDs",
+            ),
+            SimpleTextFilter(self, "Activity", "activity"),
+            SimpleTextFilter(self, "Observation group", "observation_group"),
+            # SimpleTextFilter(self, "Generator", "JSON_VALUE(assoc.link_value, '$.generator')"),
+            # SimpleTextFilter(self, "Verifier", "JSON_VALUE(assoc.link_value, '$.verifier')"),
+            # BooleanSQLFilter(self, "Verified", "CASE WHEN JSON_VALUE(assoc.link_value, '$.verifier') IS NOT NULL THEN 1 ELSE 0 END"),
         ]
 
         # Create button bar (add, remove, clear constraints)
