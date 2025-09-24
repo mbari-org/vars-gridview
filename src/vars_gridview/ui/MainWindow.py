@@ -438,30 +438,22 @@ class MainWindow(TemplateBaseClass):
 
         self.image_mosaic.render_mosaic()
 
-    def _do_query(self):
+    def _generate_query_request(
+        self, constraint_dict: dict, limit: int, offset: int
+    ) -> QueryRequest:
         """
-        Perform a query based on the filter string.
+        Generate a QueryRequest from a constraint dict, limit, and offset.
+
+        Args:
+            constraint_dict (dict): A dictionary of constraints.
+            limit (int): The maximum number of results to return.
+            offset (int): The number of results to skip.
+
+        Returns:
+            QueryRequest: The generated QueryRequest object.
         """
-        # Show a query dialog
-        query_spec = self.run_query()
-        if query_spec is None:  # User cancelled, do nothing
-            return
-        else:  # Unload
-            if self.last_selected_rect is not None:
-                self.image_mosaic.deselect(self.last_selected_rect)
-            self.last_selected_rect = None
-
-            if self.image_mosaic:
-                self.image_mosaic.clear_view()
-
-            self.box_handler = None
-            self.clear_selected()
-            self.ui.boundingBoxInfoTree.clear()
-            self.ui.imageInfoTree.clear()
-
-        # Run the query
-        constraint_dict, limit, offset = query_spec
         constraint_spec = ConstraintSpec.from_dict(constraint_dict)
+
         query_request = QueryRequest(
             select=[
                 "video_reference_uuid",
@@ -505,20 +497,50 @@ class MainWindow(TemplateBaseClass):
                 "index_recorded_timestamp",
             ],
         )
+
         query_request.limit = limit
         query_request.offset = offset
         query_request.where.extend(constraint_spec.to_constraints())
+
+        return query_request
+
+    def _do_query(self):
+        """
+        Perform a query based on the filter string.
+        """
+        # Show a query dialog
+        query_spec = self.run_query()
+        if query_spec is None:  # User cancelled, do nothing
+            return
+        else:  # Unload
+            if self.last_selected_rect is not None:
+                self.image_mosaic.deselect(self.last_selected_rect)
+            self.last_selected_rect = None
+
+            if self.image_mosaic:
+                self.image_mosaic.clear_view()
+
+            self.box_handler = None
+            self.clear_selected()
+            self.ui.boundingBoxInfoTree.clear()
+            self.ui.imageInfoTree.clear()
+
+        # Generate the query request
+        constraint_dict, limit, offset = query_spec
+        query_request = self._generate_query_request(constraint_dict, limit, offset)
+
+        # Run the query
         self._last_query_request = query_request
         try:
             self._last_query_total_rows = query_count(query_request)
             query_data_raw = query_download(query_request)
             query_headers, query_rows = parse_tsv(query_data_raw)
             page_number = 1 + offset // limit
-            total_pages = self._last_query_total_rows // limit + (1 if self._last_query_total_rows % limit > 0 else 0)
+            total_pages = self._last_query_total_rows // limit + (
+                1 if self._last_query_total_rows % limit > 0 else 0
+            )
             self.image_mosaic._status_info_widget.update(
-                {
-                    "Page": f"{page_number} of {total_pages}"
-                }
+                {"Page": f"{page_number} of {total_pages}"}
             )
         except Exception as e:
             LOGGER.error(f"Query failed: {e}")
@@ -588,7 +610,7 @@ class MainWindow(TemplateBaseClass):
                 "Already at the first page.",
             )
             return
-        
+
         # If offset is at or beyond the last page and we are going forward, do nothing
         if offset >= self._last_query_total_rows - limit and right:
             QtWidgets.QMessageBox.warning(
@@ -625,11 +647,11 @@ class MainWindow(TemplateBaseClass):
             query_data_raw = query_download(self._last_query_request)
             query_headers, query_rows = parse_tsv(query_data_raw)
             page_number = 1 + offset // limit
-            total_pages = self._last_query_total_rows // limit + (1 if self._last_query_total_rows % limit > 0 else 0)
+            total_pages = self._last_query_total_rows // limit + (
+                1 if self._last_query_total_rows % limit > 0 else 0
+            )
             self.image_mosaic._status_info_widget.update(
-                {
-                    "Page": f"{page_number} of {total_pages}"
-                }
+                {"Page": f"{page_number} of {total_pages}"}
             )
         except Exception as e:
             LOGGER.error(f"Query failed: {e}")
