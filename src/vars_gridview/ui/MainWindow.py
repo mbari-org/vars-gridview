@@ -869,7 +869,7 @@ class MainWindow(TemplateBaseClass):
             opt = QtWidgets.QMessageBox.StandardButton.Yes
 
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.verify_selected()
+            self.image_mosaic.verify_selected(True)
 
             self.image_mosaic.render_mosaic()
 
@@ -889,9 +889,7 @@ class MainWindow(TemplateBaseClass):
             opt = QtWidgets.QMessageBox.StandardButton.Yes
 
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.unverify_selected()
-
-            self.image_mosaic.render_mosaic()
+            self.image_mosaic.verify_selected(False)
 
     @QtCore.pyqtSlot()
     def mark_training_selected(self) -> None:
@@ -910,9 +908,7 @@ class MainWindow(TemplateBaseClass):
             opt = QtWidgets.QMessageBox.StandardButton.Yes
 
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.mark_training_selected()
-
-            self.image_mosaic.render_mosaic()
+            self.image_mosaic.mark_training_selected(True)
 
     @QtCore.pyqtSlot()
     def unmark_training_selected(self) -> None:
@@ -931,9 +927,7 @@ class MainWindow(TemplateBaseClass):
             opt = QtWidgets.QMessageBox.StandardButton.Yes
 
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.unmark_training_selected()
-
-            self.image_mosaic.render_mosaic()
+            self.image_mosaic.mark_training_selected(False)
 
     @QtCore.pyqtSlot()
     def delete(self):

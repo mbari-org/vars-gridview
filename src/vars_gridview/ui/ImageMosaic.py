@@ -20,6 +20,7 @@ from vars_gridview.lib.m3 import operations
 from vars_gridview.lib.observation import Observation
 from vars_gridview.lib.sort_methods import SortMethod
 from vars_gridview.lib.utils import get_timestamp
+from vars_gridview.ui.ConceptSelectionDialog import ConceptSelectionDialog
 from vars_gridview.ui.RectWidget import RectWidget
 from vars_gridview.ui.StatusInfoWidget import StatusInfoWidget
 
@@ -555,6 +556,9 @@ class ImageMosaic(QtCore.QObject):
                         len(other_locs),
                         self._rect_clicked_slot,
                         self._similarity_sort_slot,
+                        self._rect_label_slot,
+                        self._rect_verify_slot,
+                        self._rect_mark_training_slot,
                         text_label=association.text_label,
                         embedding_model=self._embedding_model,
                         scale_x=scale_x,
@@ -601,6 +605,19 @@ class ImageMosaic(QtCore.QObject):
 
         # Re-render the mosaic
         self.render_mosaic()
+
+    def _rect_label_slot(self, rect: RectWidget):
+        opt = ConceptSelectionDialog.pick_concept_and_part(parent=self.parent())
+        if opt is None:
+            return
+        concept, part = opt
+        self.label_rect_widget(rect, concept, part)
+
+    def _rect_verify_slot(self, rect: RectWidget):
+        self.verify_rect_widget(rect, True)
+
+    def _rect_mark_training_slot(self, rect: RectWidget):
+        self.mark_training_rect_widget(rect, True)
 
     def update_embedding_model(self, embedding_model: "Embedding"):
         self._embedding_model = embedding_model
@@ -791,6 +808,51 @@ class ImageMosaic(QtCore.QObject):
             }
         )
 
+    def label_rect_widget(
+        self,
+        rect: RectWidget,
+        concept: Optional[str],
+        part: Optional[str],
+        render: bool = True,
+    ):
+        """
+        Apply a label to a single rect widget.
+
+        Args:
+            rect: The rect widget to label.
+            concept: The concept to apply.
+            part: The part to apply. If None, the existing part will be used.
+            render: Whether to re-render the mosaic after labeling.
+        """
+        # Set the new concept and immediately push to VARS
+        rect.association.set_verified_concept(
+            concept if concept is not None else rect.association.concept,
+            part if part is not None else rect.association.part,
+            SETTINGS.username.value,
+        )
+
+        try:
+            rect.association.push_changes()
+        except Exception as e:
+            LOGGER.error(
+                f"Error pushing changes for localization {rect.association.uuid}: {e}"
+            )
+            QtWidgets.QMessageBox.critical(
+                self._graphics_view,
+                "Error",
+                f"An error occurred while pushing changes for localization {rect.association.uuid}.",
+            )
+
+        # Update the widget's text label and deselect it
+        rect.text_label = rect.association.text_label
+        rect.is_selected = False
+
+        # Propagate visual changes
+        rect.update()
+
+        if render:
+            self.render_mosaic()
+
     def label_selected(self, concept: Optional[str], part: Optional[str]):
         """
         Apply a label to the selected rect widgets.
@@ -800,122 +862,105 @@ class ImageMosaic(QtCore.QObject):
             part: The part to apply. If None, the existing part will be used.
         """
         for rect in self.get_selected():
-            # Set the new concept and immediately push to VARS
-            rect.association.set_verified_concept(
-                concept if concept is not None else rect.association.concept,
-                part if part is not None else rect.association.part,
-                SETTINGS.username.value,
-            )
-
-            try:
-                rect.association.push_changes()
-            except Exception as e:
-                LOGGER.error(
-                    f"Error pushing changes for localization {rect.association.uuid}: {e}"
-                )
-                QtWidgets.QMessageBox.critical(
-                    self._graphics_view,
-                    "Error",
-                    f"An error occurred while pushing changes for localization {rect.association.uuid}.",
-                )
-
-            # Update the widget's text label and deselect it
-            rect.text_label = rect.association.text_label
-            rect.is_selected = False
-
-            # Propagate visual changes
-            rect.update()
+            self.label_rect_widget(rect, concept, part, render=False)
 
         self.render_mosaic()
 
-    def verify_selected(self):
+    def verify_rect_widget(self, rect: RectWidget, state: bool, render: bool = True):
         """
-        Verify the selected rect widgets.
-        """
-        self.label_selected(None, None)  # Use existing concept and part
+        Verify or unverify a single rect widget.
 
-    def unverify_selected(self):
+        Args:
+            rect: The rect widget to verify.
+            state: True to verify, False to unverify.
+            render: Whether to re-render the mosaic after verifying.
         """
-        Unverify the selected rect widgets.
-        """
-        for rect in self.get_selected():
-            # Unverify the localization and immediately push to VARS
+        if state:
+            rect.association.verify(SETTINGS.username.value)
+        else:
             rect.association.unverify()
 
-            try:
-                rect.association.push_changes()
-            except Exception as e:
-                LOGGER.error(
-                    f"Error pushing changes for localization {rect.association.uuid}: {e}"
-                )
-                QtWidgets.QMessageBox.critical(
-                    self._graphics_view,
-                    "Error",
-                    f"An error occurred while pushing changes for localization {rect.association.uuid}.",
-                )
+        try:
+            rect.association.push_changes()
+        except Exception as e:
+            LOGGER.error(
+                f"Error pushing changes for localization {rect.association.uuid}: {e}"
+            )
+            QtWidgets.QMessageBox.critical(
+                self._graphics_view,
+                "Error",
+                f"An error occurred while pushing changes for localization {rect.association.uuid}.",
+            )
 
-            # Update the widget's text label and deselect it
-            rect.text_label = rect.association.text_label
-            rect.is_selected = False
+        # Update the widget's text label and deselect it
+        rect.text_label = rect.association.text_label
+        rect.is_selected = False
 
-            # Propagate visual changes
-            rect.update()
+        # Propagate visual changes
+        rect.update()
 
-    def mark_training_selected(self) -> None:
+        if render:
+            self.render_mosaic()
+
+    def verify_selected(self, state: bool):
         """
-        Mark the selected rect widgets for training.
+        Verify the selected rect widgets.
+
+        Args:
+            state: True to verify, False to unverify.
         """
         for rect in self.get_selected():
-            # Mark the localization for training and immediately push to VARS
-            rect.association.mark_for_training()
-
-            try:
-                rect.association.push_changes()
-            except Exception as e:
-                LOGGER.error(
-                    f"Error pushing changes for localization {rect.association.uuid}: {e}"
-                )
-                QtWidgets.QMessageBox.critical(
-                    self._graphics_view,
-                    "Error",
-                    f"An error occurred while pushing changes for localization {rect.association.uuid}.",
-                )
-
-            # Update the widget's text label and deselect it
-            rect.text_label = rect.association.text_label
-            rect.is_selected = False
-
-            # Propagate visual changes
-            rect.update()
+            self.verify_rect_widget(rect, state, render=False)
 
         self.render_mosaic()
 
-    def unmark_training_selected(self) -> None:
+    def mark_training_rect_widget(
+        self, rect: RectWidget, state: bool, render: bool = True
+    ) -> None:
         """
-        Unmark the selected rect widgets for training.
+        Mark a single rect widget for training.
+
+        Args:
+            rect: The rect widget to mark.
+            state: True to mark for training, False to unmark.
+            render: Whether to re-render the mosaic after marking.
         """
-        for rect in self.get_selected():
-            # Unmark the localization for training and immediately push to VARS
+        if state:
+            rect.association.mark_for_training()
+        else:
             rect.association.unmark_for_training()
 
-            try:
-                rect.association.push_changes()
-            except Exception as e:
-                LOGGER.error(
-                    f"Error pushing changes for localization {rect.association.uuid}: {e}"
-                )
-                QtWidgets.QMessageBox.critical(
-                    self._graphics_view,
-                    "Error",
-                    f"An error occurred while pushing changes for localization {rect.association.uuid}.",
-                )
+        try:
+            rect.association.push_changes()
+        except Exception as e:
+            LOGGER.error(
+                f"Error pushing changes for localization {rect.association.uuid}: {e}"
+            )
+            QtWidgets.QMessageBox.critical(
+                self._graphics_view,
+                "Error",
+                f"An error occurred while pushing changes for localization {rect.association.uuid}.",
+            )
 
-            # Update the widget's text label and deselect it
-            rect.text_label = rect.association.text_label
-            rect.is_selected = False
+        # Update the widget's text label and deselect it
+        rect.text_label = rect.association.text_label
+        rect.is_selected = False
 
-            # Propagate visual changes
-            rect.update()
+        # Propagate visual changes
+        rect.update()
+
+        if render:
+            self.render_mosaic()
+
+    def mark_training_selected(self, state: bool) -> None:
+        """
+        Mark the selected rect widgets for training.
+
+        Args:
+            state: True to mark for training, False to unmark.
+        """
+        for rect in self.get_selected():
+            self.mark_training_rect_widget(rect, state, render=False)
 
         self.render_mosaic()
 

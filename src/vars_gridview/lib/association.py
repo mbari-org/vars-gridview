@@ -327,6 +327,17 @@ class BoundingBoxAssociation:
             self._data["verifier"] = verifier
             self._dirty_box = True
 
+    def verify(self, verifier: str) -> None:
+        """
+        Verify the bounding box.
+
+        Args:
+            verifier (str): The verifier to set.
+        """
+        if self._data.get("verifier", None) != verifier:
+            self._data["verifier"] = verifier
+            self._dirty_box = True
+
     def unverify(self) -> None:
         """
         Unverify the bounding box.

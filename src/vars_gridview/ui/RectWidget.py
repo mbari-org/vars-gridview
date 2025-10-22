@@ -25,6 +25,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     clicked = QtCore.pyqtSignal(object, object)  # self, event
     similaritySort = QtCore.pyqtSignal(object, bool)  # self, same_class_only
+    label = QtCore.pyqtSignal(object)  # self
+    verify = QtCore.pyqtSignal(object)  # self
+    markForTraining = QtCore.pyqtSignal(object)  # self
 
     def __init__(
         self,
@@ -35,6 +38,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         association_index: int,
         clicked_slot: callable,
         similarity_sort_slot: callable,
+        label_slot: callable,
+        verify_slot: callable,
+        mark_training_slot: callable,
         embedding_model: Optional[Embedding] = None,
         parent=None,
         text_label="rect widget",
@@ -75,6 +81,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         self._clicked_slot = clicked_slot
         self._similarity_sort_slot = similarity_sort_slot
+        self._label_slot = label_slot
+        self._verify_slot = verify_slot
+        self._mark_training_slot = mark_training_slot
 
         self.association.rect_widget = self  # back-reference
 
@@ -88,6 +97,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """
         self.clicked.connect(self._clicked_slot)
         self.similaritySort.connect(self._similarity_sort_slot)
+        self.label.connect(self._label_slot)
+        self.verify.connect(self._verify_slot)
+        self.markForTraining.connect(self._mark_training_slot)
 
     def get_image(self) -> Optional[np.ndarray]:
         """
@@ -575,13 +587,37 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         Handle a right click event. Open a context menu with options.
         """
         menu = QtWidgets.QMenu()
+
+        # Add actions for label, verify, mark for training, and verify + mark for training
+        label_action = menu.addAction("Label")
+        label_action.triggered.connect(lambda: self.label.emit(self))
+        verify_action = menu.addAction("Verify")
+        verify_action.triggered.connect(lambda: self.verify.emit(self))
+        mark_for_training_action = menu.addAction("Mark Training")
+        mark_for_training_action.triggered.connect(
+            lambda: self.markForTraining.emit(self)
+        )
+        verify_and_mark_action = menu.addAction("Verify + Mark Training")
+        verify_and_mark_action.triggered.connect(
+            lambda: (self.verify.emit(self), self.markForTraining.emit(self))
+        )
+
+        # Add separator
+        menu.addSeparator()
+
+        # Action to find similar
         similarity_sort = menu.addAction("Find similar")
         similarity_sort.triggered.connect(lambda: self.similaritySort.emit(self, False))
+
+        # Action to find similar with same label
         similarity_sort_same_label = menu.addAction("Find similar with same label")
         similarity_sort_same_label.triggered.connect(
             lambda: self.similaritySort.emit(self, True)
         )
+
+        # Disable similarity sort options if no embedding model is available
         no_embedding_model = self._embedding_model is None
         similarity_sort.setDisabled(no_embedding_model)
         similarity_sort_same_label.setDisabled(no_embedding_model)
+
         menu.exec(event.screenPos())
