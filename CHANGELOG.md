@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v0.25.0 (2025-10-22)
+
+### Bug Fixes
+
+- Move verification and training buttons to the left
+  ([`97d4a56`](https://github.com/mbari-org/vars-gridview/commit/97d4a56efb0943fd723d7c7cb6a119b88c98b8af))
+
+#102
+
+### Features
+
+- Add rect widget context menu actions for label, verify, mark training, and verify + mark
+  ([`99dff27`](https://github.com/mbari-org/vars-gridview/commit/99dff2795c1329d4e7cb805c99f514c564282399))
+
+#94
+
+### Refactoring
+
+- Comment out excessive debug logging statements in operations and ImageMosaic
+  ([`a8d8fc7`](https://github.com/mbari-org/vars-gridview/commit/a8d8fc725efb8ab8c64bc2c4565f1d8397795977))
+
+
 ## v0.24.0 (2025-09-24)
 
 ### Features
