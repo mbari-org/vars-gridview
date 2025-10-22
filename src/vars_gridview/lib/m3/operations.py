@@ -30,7 +30,7 @@ def get_kb_concepts() -> Dict[str, Optional[str]]:
     """
     global KB_CONCEPTS
     if not KB_CONCEPTS:
-        LOGGER.debug("Getting concepts from KB")
+        # LOGGER.debug("Getting concepts from KB")
         response = m3.VARS_KB_SERVER_CLIENT.get_concepts()
 
         try:
@@ -41,7 +41,7 @@ def get_kb_concepts() -> Dict[str, Optional[str]]:
 
         concept_names = response.json()
         KB_CONCEPTS = {concept: None for concept in concept_names}
-        LOGGER.debug(f"Got {len(KB_CONCEPTS)} concepts from KB")
+        # LOGGER.debug(f"Got {len(KB_CONCEPTS)} concepts from KB")
 
     return KB_CONCEPTS
 
@@ -70,7 +70,7 @@ def get_kb_name(concept: str) -> Optional[str]:
             raise e
 
         name = response.json()["name"]
-        LOGGER.debug(f"Got name {name} for concept {concept} from KB")
+        # LOGGER.debug(f"Got name {name} for concept {concept} from KB")
 
         kb_concepts[concept] = name
 
@@ -89,7 +89,7 @@ def get_kb_parts() -> List[str]:
     """
     global KB_PARTS
     if not KB_PARTS:
-        LOGGER.debug("Getting parts from KB")
+        # LOGGER.debug("Getting parts from KB")
         response = m3.VARS_KB_SERVER_CLIENT.get_parts()
 
         try:
@@ -117,7 +117,7 @@ def get_kb_descendants(concept: str) -> List[str]:
     Raises:
         requests.exceptions.HTTPError: If the request fails.
     """
-    LOGGER.debug(f"Getting descendants of {concept} from KB")
+    # LOGGER.debug(f"Getting descendants of {concept} from KB")
     response = m3.VARS_KB_SERVER_CLIENT.get_phylogeny_taxa(concept)
 
     if response.status_code == 404:
@@ -147,7 +147,7 @@ def get_users() -> List[dict]:
     """
     global USERS
     if not USERS:
-        LOGGER.debug("Getting users from VARS user server")
+        # LOGGER.debug("Getting users from VARS user server")
         response = m3.VARS_USER_SERVER_CLIENT.get_all_users()
 
         try:
@@ -180,7 +180,7 @@ def update_bounding_box_data(association_uuid: str, box_dict: dict) -> dict:
         "link_value": json.dumps(box_dict),
     }
 
-    LOGGER.debug(f"Updating bounding box data for {association_uuid}:\n{request_data}")
+    # LOGGER.debug(f"Updating bounding box data for {association_uuid}:\n{request_data}")
     response = m3.ANNOSAURUS_CLIENT.update_association(association_uuid, request_data)
     try:
         response.raise_for_status()
@@ -209,7 +209,7 @@ def update_bounding_box_part(association_uuid: str, part: str) -> dict:
         "to_concept": part,
     }
 
-    LOGGER.debug(f"Updating bounding box part for {association_uuid}:\n{request_data}")
+    # LOGGER.debug(f"Updating bounding box part for {association_uuid}:\n{request_data}")
     response = m3.ANNOSAURUS_CLIENT.update_association(association_uuid, request_data)
     try:
         response.raise_for_status()
@@ -242,9 +242,9 @@ def update_observation_concept(
         "observer": observer,  # when we update the concept, we also update the observer
     }
 
-    LOGGER.debug(
-        f"Updating observation concept for {observation_uuid}:\n{request_data}"
-    )
+    # LOGGER.debug(
+    #     f"Updating observation concept for {observation_uuid}:\n{request_data}"
+    # )
     response = m3.ANNOSAURUS_CLIENT.update_observation(observation_uuid, request_data)
 
     try:
@@ -266,7 +266,7 @@ def delete_association(association_uuid: str) -> None:
     Raises:
         requests.exceptions.HTTPError: If the request fails.
     """
-    LOGGER.debug(f"Deleting association {association_uuid}")
+    # LOGGER.debug(f"Deleting association {association_uuid}")
     response = m3.ANNOSAURUS_CLIENT.delete_association(association_uuid)
 
     try:
@@ -289,7 +289,7 @@ def get_observation(observation_uuid: str) -> dict:
     Raises:
         requests.exceptions.HTTPError: If the request fails.
     """
-    LOGGER.debug(f"Getting observation {observation_uuid}")
+    # LOGGER.debug(f"Getting observation {observation_uuid}")
     response = m3.ANNOSAURUS_CLIENT.get_observation(observation_uuid)
 
     try:
@@ -311,7 +311,7 @@ def delete_observation(observation_uuid: str) -> None:
     Raises:
         requests.exceptions.HTTPError: If the request fails.
     """
-    LOGGER.debug(f"Deleting observation {observation_uuid}")
+    # LOGGER.debug(f"Deleting observation {observation_uuid}")
     response = m3.ANNOSAURUS_CLIENT.delete_observation(observation_uuid)
 
     try:
@@ -334,7 +334,7 @@ def get_video_sequence_by_name(name: str) -> dict:
     Raises:
         requests.exceptions.HTTPError: If the request fails.
     """
-    LOGGER.debug(f"Getting video sequence by name {name}")
+    # LOGGER.debug(f"Getting video sequence by name {name}")
     response = m3.VAMPIRE_SQUID_CLIENT.get_video_sequence_by_name(name)
 
     try:
@@ -359,7 +359,7 @@ def get_image_reference(image_reference_uuid: str) -> dict:
     Raises:
         requests.exceptions.HTTPError: If the request fails.
     """
-    LOGGER.debug(f"Getting image reference {image_reference_uuid}")
+    # LOGGER.debug(f"Getting image reference {image_reference_uuid}")
     response = m3.ANNOSAURUS_CLIENT.get_image_reference(image_reference_uuid)
 
     try:
@@ -383,7 +383,7 @@ def get_video_sequence_names() -> List[str]:
     """
     global VIDEO_SEQUENCE_NAMES
     if not VIDEO_SEQUENCE_NAMES:
-        LOGGER.debug("Getting video sequence names from Vampire Squid")
+        # LOGGER.debug("Getting video sequence names from Vampire Squid")
         response = m3.VAMPIRE_SQUID_CLIENT.get_video_sequence_names()
 
         try:
@@ -393,7 +393,7 @@ def get_video_sequence_names() -> List[str]:
             raise e
 
         VIDEO_SEQUENCE_NAMES = response.json()
-        LOGGER.debug(f"Got {len(VIDEO_SEQUENCE_NAMES)} video sequence names")
+        # LOGGER.debug(f"Got {len(VIDEO_SEQUENCE_NAMES)} video sequence names")
 
     return VIDEO_SEQUENCE_NAMES
 
@@ -411,7 +411,7 @@ def query(query_request: QueryRequest) -> str:
     Raises:
         requests.exceptions.HTTPError: If the query fails.
     """
-    LOGGER.debug("Querying Annosaurus")
+    LOGGER.debug(f"Querying Annosaurus with request: {query_request}")
     response = m3.ANNOSAURUS_CLIENT.query(query_request)
 
     try:
@@ -475,7 +475,7 @@ def query_download(query_request: QueryRequest) -> str:
     Raises:
         requests.exceptions.HTTPError: If the query fails.
     """
-    LOGGER.debug("Querying Annosaurus (download)")
+    LOGGER.debug(f"Querying Annosaurus (download) with request: {query_request}")
     response = m3.ANNOSAURUS_CLIENT.query_download(query_request)
 
     try:
@@ -500,7 +500,7 @@ def query_count(query_request: QueryRequest) -> int:
     Raises:
         requests.exceptions.HTTPError: If the query fails.
     """
-    LOGGER.debug("Querying Annosaurus for count")
+    LOGGER.debug(f"Querying Annosaurus for count with request: {query_request}")
     response = m3.ANNOSAURUS_CLIENT.query_count(query_request)
 
     try:
@@ -533,8 +533,8 @@ def crop(
     Raises:
         requests.exceptions.HTTPError: If the request fails.
     """
-    timestamp_str = f" at {ms} ms" if ms is not None else ""
-    LOGGER.debug(f"Cropping {url}{timestamp_str} to {left}, {top}, {right}, {bottom}")
+    # timestamp_str = f" at {ms} ms" if ms is not None else ""
+    # LOGGER.debug(f"Cropping {url}{timestamp_str} to {left}, {top}, {right}, {bottom}")
     response = m3.SKIMMER_CLIENT.crop(url, left, top, right, bottom, ms)
 
     try:

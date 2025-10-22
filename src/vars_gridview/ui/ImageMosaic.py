@@ -427,9 +427,10 @@ class ImageMosaic(QtCore.QObject):
                 )
 
                 if mp4_video_data is not None:
-                    LOGGER.debug(
-                        f"Found MP4 video reference {mp4_video_data['video_reference']['uuid']} for imaged moment {row.imaged_moment_uuid}"
-                    )
+                    # LOGGER.debug(
+                    #     f"Found MP4 video reference {mp4_video_data['video_reference']['uuid']} for imaged moment {row.imaged_moment_uuid}"
+                    # )
+                    pass
                 else:
                     LOGGER.warning(
                         f"Could not find MP4 video reference for imaged moment {row.imaged_moment_uuid}"
@@ -509,9 +510,9 @@ class ImageMosaic(QtCore.QObject):
 
                     # If we don't have the image reference URL (wasn't fetched during query), try to fetch it and update the URL
                     if url is None:
-                        LOGGER.debug(
-                            f"Fetching image reference {image_reference_uuid} from M3"
-                        )
+                        # LOGGER.debug(
+                        #     f"Fetching image reference {image_reference_uuid} from M3"
+                        # )
                         try:
                             image_reference = operations.get_image_reference(
                                 image_reference_uuid

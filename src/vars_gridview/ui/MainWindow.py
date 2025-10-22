@@ -452,11 +452,7 @@ class MainWindow(TemplateBaseClass):
         Returns:
             QueryRequest: The generated QueryRequest object.
         """
-        print("--- Original Constraints ---")
-        print("\n".join(str(c.to_dict()) for c in constraints))
         merged_constraints = merge_constraints(constraints)
-        print("--- Merged Constraints ---")
-        print("\n".join(str(c.to_dict()) for c in merged_constraints))
 
         query_request = QueryRequest(
             select=[
