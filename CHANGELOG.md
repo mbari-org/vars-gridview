@@ -1,6 +1,16 @@
 # CHANGELOG
 
 
+## v0.25.1 (2025-10-22)
+
+### Bug Fixes
+
+- Add reauthentication decorator to handle JWT expiry
+  ([`86a52e0`](https://github.com/mbari-org/vars-gridview/commit/86a52e00677b5d6700cfae3733e35c9e86c7316f))
+
+#66
+
+
 ## v0.25.0 (2025-10-22)
 
 ### Bug Fixes
