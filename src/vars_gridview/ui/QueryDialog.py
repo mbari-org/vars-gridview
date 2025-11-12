@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QDialogButtonBox,
+    QDoubleSpinBox,
     QHBoxLayout,
     QInputDialog,
     QLineEdit,
@@ -19,6 +20,7 @@ from PyQt6.QtWidgets import (
     QSpinBox,
     QFormLayout,
     QCompleter,
+    QCheckBox,
 )
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
@@ -228,6 +230,46 @@ class ConceptDescInConstraintResult(InConstraintResult):
         )
 
 
+class DepthRangeConstraintResult(BaseResult):
+    """
+    A constraint result that creates min/max constraints for depth range.
+    """
+
+    def __init__(self, min_depth: Optional[float], max_depth: Optional[float]):
+        self.min_depth = min_depth
+        self.max_depth = max_depth
+
+    @property
+    def constraints(self) -> Iterable[QueryConstraint]:
+        if self.min_depth is not None and self.max_depth is not None:
+            # Both min and max specified - use minmax for between constraint
+            yield QueryConstraint(
+                column="depth_meters",
+                minmax=[self.min_depth, self.max_depth],
+            )
+        elif self.min_depth is not None:
+            # Only min specified - depth >= min
+            yield QueryConstraint(
+                column="depth_meters",
+                min=self.min_depth,
+            )
+        elif self.max_depth is not None:
+            # Only max specified - depth <= max
+            yield QueryConstraint(
+                column="depth_meters",
+                max=self.max_depth,
+            )
+
+    def __str__(self) -> str:
+        if self.min_depth is not None and self.max_depth is not None:
+            return f"Depth: {self.min_depth}m - {self.max_depth}m"
+        elif self.min_depth is not None:
+            return f"Depth: >= {self.min_depth}m"
+        elif self.max_depth is not None:
+            return f"Depth: <= {self.max_depth}m"
+        return "Depth: (no constraint)"
+
+
 # FILTER IMPLEMENTATIONS
 
 
@@ -353,6 +395,87 @@ class VerifierFilter(SimpleTextFilter):
     def __call__(self) -> Optional[VerifierConstraintResult]:
         result = super().__call__()
         return VerifierConstraintResult(result.value) if result else None
+
+
+class DepthRangeFilter(BaseFilter):
+    """
+    A filter that allows the user to specify a depth range constraint.
+    """
+
+    def __call__(self) -> Optional[DepthRangeConstraintResult]:
+        # Create a custom dialog for depth range input
+        dialog = QDialog(self.parent)
+        dialog.setWindowTitle("Depth Range")
+        layout = QFormLayout(dialog)
+
+        # Min depth input
+        min_depth_checkbox = QCheckBox("Set minimum depth")
+        min_depth_spinbox = QDoubleSpinBox()
+        min_depth_spinbox.setRange(0, 10000)
+        min_depth_spinbox.setValue(0)
+        min_depth_spinbox.setSuffix(" m")
+        min_depth_spinbox.setDecimals(2)
+        min_depth_spinbox.setEnabled(False)
+
+        # Max depth input
+        max_depth_checkbox = QCheckBox("Set maximum depth")
+        max_depth_spinbox = QDoubleSpinBox()
+        max_depth_spinbox.setRange(0, 10000)
+        max_depth_spinbox.setValue(1000)
+        max_depth_spinbox.setSuffix(" m")
+        max_depth_spinbox.setDecimals(2)
+        max_depth_spinbox.setEnabled(False)
+
+        # Connect checkboxes to enable/disable spinboxes
+        min_depth_checkbox.toggled.connect(min_depth_spinbox.setEnabled)
+        max_depth_checkbox.toggled.connect(max_depth_spinbox.setEnabled)
+
+        # Add widgets to layout
+        layout.addRow(min_depth_checkbox, min_depth_spinbox)
+        layout.addRow(max_depth_checkbox, max_depth_spinbox)
+
+        # Dialog buttons
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        layout.addWidget(button_box)
+
+        # Show dialog and get result
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            min_depth = (
+                min_depth_spinbox.value() if min_depth_checkbox.isChecked() else None
+            )
+            max_depth = (
+                max_depth_spinbox.value() if max_depth_checkbox.isChecked() else None
+            )
+
+            # Validate that at least one constraint is set
+            if min_depth is None and max_depth is None:
+                QMessageBox.warning(
+                    self.parent,
+                    "No Constraint",
+                    "Please set at least one depth constraint (minimum or maximum).",
+                )
+                return None
+
+            # Validate that min <= max if both are set
+            if (
+                min_depth is not None
+                and max_depth is not None
+                and min_depth > max_depth
+            ):
+                QMessageBox.warning(
+                    self.parent,
+                    "Invalid Range",
+                    "Minimum depth cannot be greater than maximum depth.",
+                )
+                return None
+
+            return DepthRangeConstraintResult(min_depth, max_depth)
+
+        return None
 
 
 # HELPER DIALOG CLASSES
@@ -753,6 +876,7 @@ class QueryDialog(QDialog):
             ),
             SimpleTextFilter(self, "Activity", "activity"),
             SimpleTextFilter(self, "Observation group", "observation_group"),
+            DepthRangeFilter(self, "Depth range"),
             GeneratorFilter(self, "Generator", "generator", prompt="Generator"),
             VerifierFilter(self, "Verifier", "verifier", prompt="Verifier"),
             FunctionalFilter(self, "Verified", lambda: VerifiedConstraintResult()),
