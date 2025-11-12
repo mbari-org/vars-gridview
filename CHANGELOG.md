@@ -1,6 +1,32 @@
 # CHANGELOG
 
 
+## v0.26.0 (2025-11-12)
+
+### Features
+
+- Add depth range constraint to query filters
+  ([#112](https://github.com/mbari-org/vars-gridview/pull/112),
+  [`aefd204`](https://github.com/mbari-org/vars-gridview/commit/aefd204cff7dedc976d939f0a84506c4b10452b1))
+
+* Initial plan
+
+* Add depth range filter to query constraints
+
+- Add DepthRangeConstraintResult class to handle min/max depth constraints - Add DepthRangeFilter
+  with custom dialog for depth range input - Add "Depth range" filter to default filters list -
+  Support querying depths between two values, >= min, or <= max - Add unit tests for depth
+  constraints
+
+Co-authored-by: kevinsbarnard <40082734+kevinsbarnard@users.noreply.github.com>
+
+* Add additional unit tests for DepthRangeConstraintResult
+
+---------
+
+Co-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>
+
+
 ## v0.25.1 (2025-10-22)
 
 ### Bug Fixes
