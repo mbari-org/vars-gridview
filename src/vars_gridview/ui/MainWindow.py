@@ -1105,7 +1105,9 @@ class MainWindow(TemplateBaseClass):
         imaged_moment_uuid = selected_rect.imaged_moment_uuid
 
         # Get the annotation MP4 video data
-        mp4_video_data = self.image_mosaic.moment_mp4_data.get(imaged_moment_uuid, None)
+        mp4_video_data = self.image_mosaic.moment_proxy_data.get(
+            imaged_moment_uuid, None
+        )
         if mp4_video_data is None:
             QtWidgets.QMessageBox.warning(self, "Missing Video", "ROI lacks MP4 video.")
             return
@@ -1178,7 +1180,7 @@ class MainWindow(TemplateBaseClass):
         localizations = []
         for rect in self.image_mosaic._rect_widgets:
             imaged_moment_uuid_other = rect.imaged_moment_uuid
-            mp4_video_data_other = self.image_mosaic.moment_mp4_data.get(
+            mp4_video_data_other = self.image_mosaic.moment_proxy_data.get(
                 imaged_moment_uuid_other, None
             )
             if mp4_video_data_other is None:

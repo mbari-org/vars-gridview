@@ -164,7 +164,7 @@ class ImageMosaic(QtCore.QObject):
         self.association_groups: Dict[UUID, List[BoundingBoxAssociation]] = {}
         self.observations: Dict[UUID, Observation] = {}
         self.moment_video_data = {}
-        self.moment_mp4_data = {}
+        self.moment_proxy_data = {}
         self.moment_timestamps = {}
         self.video_reference_uuid_to_mp4_video_reference = {}
         self.video_sequences_by_name = {}
@@ -207,8 +207,8 @@ class ImageMosaic(QtCore.QObject):
             # Fetch video sequence data for the given groups
             self._fetch_video_sequence_data()
 
-            # Derive and map MP4 image metadata
-            self._map_mp4_data(rows)
+            # Derive and map proxy image metadata
+            self._map_proxy_data(rows)
 
             # Create the ROI widgets
             self._create_rois()
@@ -407,9 +407,9 @@ class ImageMosaic(QtCore.QObject):
 
                 progress += 1
 
-    def _map_mp4_data(self, rows: List[Row]) -> None:
+    def _map_proxy_data(self, rows: List[Row]) -> None:
         for row in rows:
-            if row.imaged_moment_uuid not in self.moment_mp4_data:
+            if row.imaged_moment_uuid not in self.moment_proxy_data:
                 # Get imaged moment's time index
                 moment_timestamp = get_timestamp(
                     row.video_start_timestamp,
@@ -437,7 +437,7 @@ class ImageMosaic(QtCore.QObject):
                         f"Could not find MP4 video reference for imaged moment {row.imaged_moment_uuid}"
                     )
 
-                self.moment_mp4_data[row.imaged_moment_uuid] = mp4_video_data
+                self.moment_proxy_data[row.imaged_moment_uuid] = mp4_video_data
 
     def _create_rois(self) -> None:
         # Create the ROIs
@@ -465,44 +465,71 @@ class ImageMosaic(QtCore.QObject):
                 if image_reference_uuid is None:
                     # No image reference, need to use beholder
                     video_data = self.moment_video_data[imaged_moment_uuid]
-
-                    source_width = video_data["video_width"]
-                    source_height = video_data["video_height"]
-
-                    # Find the video URI of the MP4 video
-                    original_video_reference_uuid = video_data["video_reference_uuid"]
-                    if original_video_reference_uuid is None:
-                        LOGGER.error(
-                            f"Imaged moment {imaged_moment_uuid} has no video reference, skipping"
-                        )
-                        continue
-
-                    mp4_video_data = self.moment_mp4_data.get(imaged_moment_uuid, None)
-                    if mp4_video_data is None:
-                        LOGGER.warning(
-                            f"Imaged moment {imaged_moment_uuid} has no MP4 video reference, skipping"
-                        )
-                        continue
-
-                    # Get the MP4 video data
-                    mp4_video_reference_uri = mp4_video_data["video_reference"]["uri"]
-                    mp4_width = mp4_video_data["video_reference"]["width"]
-                    mp4_height = mp4_video_data["video_reference"]["height"]
-                    mp4_video_start_timestamp = parse_date(
-                        mp4_video_data["video"]["start_timestamp"]
-                    )  # datetime
                     moment_timestamp = self.moment_timestamps[imaged_moment_uuid]
 
-                    # Compute the offset in milliseconds
-                    elapsed_time_millis = round(
-                        (moment_timestamp - mp4_video_start_timestamp).total_seconds()
-                        * 1000
+                    # SPECIAL RULE: If the original video reference URI is non-http(s), we have to use the proxy video reference instead
+                    original_video_reference_uri = video_data.get("video_uri", None)
+                    use_proxy = (
+                        original_video_reference_uri is None
+                        or not original_video_reference_uri.startswith("http")
                     )
 
-                    scale_x = source_width / mp4_width
-                    scale_y = source_height / mp4_height
+                    if use_proxy:  # Use proxy video reference
+                        # Get the proxy video data, skip if unavailable
+                        proxy_video_data = self.moment_proxy_data.get(
+                            imaged_moment_uuid, None
+                        )
+                        if proxy_video_data is None:
+                            LOGGER.error(
+                                f"Imaged moment {imaged_moment_uuid} has no proxy video reference, skipping"
+                            )
+                            continue
 
-                    source_url = mp4_video_reference_uri
+                        # Get the source and proxy video dimensions to compute the scaling factors
+                        source_width = video_data["video_width"]
+                        source_height = video_data["video_height"]
+                        proxy_width = proxy_video_data["video_reference"]["width"]
+                        proxy_height = proxy_video_data["video_reference"]["height"]
+                        if (
+                            proxy_width is None
+                            or proxy_height is None
+                            or source_width is None
+                            or source_height is None
+                        ):
+                            LOGGER.error(
+                                f"Imaged moment {imaged_moment_uuid} is missing video dimensions needed for proxy scaling, skipping"
+                            )
+                            continue
+                        scale_x = source_width / proxy_width
+                        scale_y = source_height / proxy_height
+
+                        # Compute the elapsed time in milliseconds relative to the proxy video start
+                        proxy_video_start_timestamp = parse_date(
+                            proxy_video_data["video"]["start_timestamp"]
+                        )
+                        elapsed_time_millis = round(
+                            (
+                                moment_timestamp - proxy_video_start_timestamp
+                            ).total_seconds()
+                            * 1000
+                        )
+
+                        # Use the proxy video reference URI
+                        source_url = proxy_video_data["video_reference"]["uri"]
+                    else:  # Use original video reference
+                        # Compute the elapsed time in milliseconds relative to the original video start
+                        original_video_start_timestamp = video_data[
+                            "video_start_timestamp"
+                        ]
+                        elapsed_time_millis = round(
+                            (
+                                moment_timestamp - original_video_start_timestamp
+                            ).total_seconds()
+                            * 1000
+                        )
+
+                        # Use the original video reference
+                        source_url = original_video_reference_uri
 
                 else:
                     # We have an image reference UUID, so we can get the image directly
