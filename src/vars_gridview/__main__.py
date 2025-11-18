@@ -54,6 +54,14 @@ def main():
     try:
         main = MainWindow(app)
         main.show()
+
+        # Show a warning that this is the non-MP4 proxy version
+        QtWidgets.QMessageBox.warning(
+            main,
+            "VARS GridView - Source Video Version",
+            "This version of VARS GridView fetches ROIs and images from the original source file that the annotations were created on.\n"
+            "Be careful when opening and editing ROIs on MOV files that were corrected in GridView using the MP4 proxies, as the frame alignment may differ.",
+        )
     except Exception as e:
         LOGGER.critical(f"Could not create main window: {e}")
         LOGGER.debug(traceback.format_exc())  # Log the full traceback
