@@ -46,12 +46,14 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         text_label="rect widget",
         scale_x: float = 1.0,
         scale_y: float = 1.0,
+        video_url: Optional[str] = None,
         elapsed_time_millis: Optional[int] = None,
     ):
         QtWidgets.QGraphicsWidget.__init__(self, parent)
 
         self.associations = associations
         self.source_url = source_url
+        self.video_url = video_url
         self.elapsed_time_millis = elapsed_time_millis
         self.ancillary_data = ancillary_data
         self.video_data = video_data
@@ -128,6 +130,20 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             )
 
         return image
+
+    @property
+    def scale_x(self) -> float:
+        """
+        Get the scale factor in the x direction.
+        """
+        return self._scale_x
+
+    @property
+    def scale_y(self) -> float:
+        """
+        Get the scale factor in the y direction.
+        """
+        return self._scale_y
 
     @property
     def deleted(self) -> bool:

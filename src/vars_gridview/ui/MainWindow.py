@@ -1,17 +1,17 @@
 import os
-from pathlib import Path
-from shutil import rmtree
+import subprocess
 import sys
 import traceback
 import webbrowser
+from pathlib import Path
+from shutil import rmtree
 from time import sleep
 from typing import TYPE_CHECKING, List, Optional, Tuple
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import cv2
 import pyqtgraph as pg
 import qdarkstyle
-from iso8601 import parse_date
 from PyQt6 import QtCore, QtGui, QtWidgets
 from sharktopoda_client.client import SharktopodaClient
 from sharktopoda_client.dto import Localization
@@ -1099,151 +1099,130 @@ class MainWindow(TemplateBaseClass):
             QtWidgets.QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
             return
 
-        selected_rect = self.last_selected_rect
+        rect = self.last_selected_rect
 
-        # Get the annotation imaged moment UUID
-        imaged_moment_uuid = selected_rect.imaged_moment_uuid
-
-        # Get the annotation MP4 video data
-        mp4_video_data = self.image_mosaic.moment_proxy_data.get(
-            imaged_moment_uuid, None
-        )
-        if mp4_video_data is None:
-            QtWidgets.QMessageBox.warning(self, "Missing Video", "ROI lacks MP4 video.")
-            return
-
-        mp4_video = mp4_video_data["video"]
-        mp4_video_reference = mp4_video_data["video_reference"]
-
-        mp4_video_url = mp4_video_reference.get("uri", None)
-        mp4_start_timestamp = parse_date(mp4_video["start_timestamp"])
-
-        # Get the annotation timestamp
-        annotation_datetime = self.image_mosaic.moment_timestamps[imaged_moment_uuid]
-
-        # Compute the timedelta between the annotation and video start
-        annotation_timedelta = annotation_datetime - mp4_start_timestamp
-
-        if not self.sharktopoda_connected:
-            # Open the MP4 video at the computed timedelta (in seconds)
-            annotation_seconds = max(annotation_timedelta.total_seconds(), 0)
-            url = mp4_video_url + "#t={},{}".format(
-                annotation_seconds, annotation_seconds + 1e-3
-            )  # "pause" at the annotation
-            webbrowser.open(url)
-            return
-
-        # Open the video in Sharktopoda 2
-        annotation_milliseconds = max(annotation_timedelta.total_seconds() * 1000, 0)
-        video_reference_uuid = UUID(mp4_video_reference["uuid"])
-
-        mp4_width = mp4_video_reference.get("width", None)
-        mp4_height = mp4_video_reference.get("height", None)
-
-        if mp4_width is None or mp4_height is None:
+        # Guard if we don't have the necessary video data
+        if rect.video_url is None or rect.elapsed_time_millis is None:
             QtWidgets.QMessageBox.warning(
                 self,
-                "Bad MP4 Metadata",
-                "MP4 video metadata is missing width or height.",
-            )
-            return
-        elif mp4_width == 0 or mp4_height == 0:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Bad MP4 Metadata",
-                f"MP4 video metadata has resolution: {mp4_width}x{mp4_height}.",
+                "No Video Data",
+                "The selected ROI does not have the required video data.",
             )
             return
 
-        image_width = selected_rect.image_width
-        image_height = selected_rect.image_height
-        if image_width is None or image_height is None:
-            QtWidgets.QMessageBox.critical(
-                self,
-                "Could not get image size",
-                "Could not load the image for the annotation, so rescaling cannot be assessed.",
-            )
-            return
+        if not self.sharktopoda_connected:  # try VLC, then fall back to web browser
+            elapsed_time_seconds = rect.elapsed_time_millis / 1000.0
 
-        rescale_x = mp4_width / image_width
-        rescale_y = mp4_height / image_height
+            # Try to open with VLC if available
+            vlc_opened = False
+            vlc_commands = []
 
-        # Show warning if rescale dimensions are different
-        if abs(rescale_x / rescale_y - 1) > 0.01:  # 1% tolerance
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Different MP4 Aspect Ratio",
-                "MP4 video has different aspect ratio than ROI source image. The bounding box may not be displayed correctly.",
-            )
+            if sys.platform == "darwin":  # macOS
+                vlc_commands = [
+                    "/Applications/VLC.app/Contents/MacOS/VLC",
+                    "vlc",
+                ]
+            elif sys.platform == "win32":  # Windows
+                vlc_commands = [
+                    r"C:\Program Files\VideoLAN\VLC\vlc.exe",
+                    r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe",
+                    "vlc",
+                ]
+            else:  # Linux and others
+                vlc_commands = ["vlc"]
 
-        # Collect localizations for all rects that are on the same video
-        localizations = []
-        for rect in self.image_mosaic._rect_widgets:
-            imaged_moment_uuid_other = rect.imaged_moment_uuid
-            mp4_video_data_other = self.image_mosaic.moment_proxy_data.get(
-                imaged_moment_uuid_other, None
-            )
-            if mp4_video_data_other is None:
-                continue
-            mp4_video_reference_other = mp4_video_data_other["video_reference"]
-            video_reference_uuid_other = UUID(mp4_video_reference_other["uuid"])
-            if video_reference_uuid_other != video_reference_uuid:
-                continue
-
-            # Get the annotation timestamp
-            annotation_datetime_other = self.image_mosaic.moment_timestamps[
-                imaged_moment_uuid_other
-            ]
-
-            # Compute the timedelta between the annotation and video start
-            annotation_timedelta_other = annotation_datetime_other - mp4_start_timestamp
-
-            annotation_milliseconds_other = max(
-                annotation_timedelta_other.total_seconds() * 1000, 0
-            )
-
-            localization = Localization(
-                uuid=uuid4(),
-                concept=rect.association.concept,
-                elapsed_time_millis=annotation_milliseconds_other,
-                x=rescale_x * rect.association.x,
-                y=rescale_y * rect.association.y,
-                width=rescale_x * rect.association.width,
-                height=rescale_y * rect.association.height,
-                duration_millis=1000,
-                color=color_for_concept(rect.association.concept).name(),
-            )
-
-            localizations.append(localization)
-
-        def show_localizations():
-            sleep(
-                0.5
-            )  # A hack, since Sharktopoda 2 crashes if you send it a command too soon
-            self.sharktopoda_client.seek_elapsed_time(
-                video_reference_uuid, annotation_milliseconds
-            )
-            self.sharktopoda_client.clear_localizations(video_reference_uuid)
-
-            # Add localizations in chunks
-            chunk_size = 20
-            for i in range(0, len(localizations), chunk_size):
-                chunk = localizations[i : i + chunk_size]
-
-                self.sharktopoda_client.add_localizations(video_reference_uuid, chunk)
-
-            self.sharktopoda_client.show(video_reference_uuid)
-
-            # If on macOS, call the open command to bring Sharktopoda to the front
-            if sys.platform == "darwin":
+            for vlc_cmd in vlc_commands:
                 try:
-                    os.system(f"open -a {SHARKTOPODA_APP_NAME}")
-                except Exception as e:
-                    LOGGER.warning(f"Could not open Sharktopoda: {e}")
+                    # Create a clean environment without Qt-related variables to avoid conflicts
+                    env = os.environ.copy()
+                    env.pop("QT_PLUGIN_PATH", None)
+                    env.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
 
-        self.sharktopoda_client.open(
-            video_reference_uuid, mp4_video_url, callback=show_localizations
-        )
+                    subprocess.Popen(
+                        [
+                            vlc_cmd,
+                            rect.video_url,
+                            f"--start-time={elapsed_time_seconds}",
+                            "--start-paused",
+                        ],
+                        env=env,
+                    )
+                    vlc_opened = True
+                    LOGGER.info(f"Opened video in VLC: {rect.video_url}")
+                    break
+                except (FileNotFoundError, OSError):
+                    continue
+
+            if not vlc_opened:
+                # Fall back to web browser
+                url = rect.video_url + "#t={},{}".format(
+                    elapsed_time_seconds - 1e-3, elapsed_time_seconds
+                )  # "pause" at the annotation
+                webbrowser.open(url)
+                LOGGER.info(f"Opened video in web browser: {url}")
+
+        else:  # use Sharktopoda 2
+            # Get video reference UUID
+            video_reference_uuid = rect.video_data["video_reference_uuid"]
+
+            # Show warning if rescale dimensions are different
+            if abs(rect.scale_x / rect.scale_y - 1) > 0.01:  # 1% tolerance
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "Different MP4 Aspect Ratio",
+                    "MP4 video has different aspect ratio than ROI source image. The bounding box may not be displayed correctly.",
+                )
+
+            # Collect localizations for all rects that are on the same video
+            localizations = []
+            for rect_q in self.image_mosaic._rect_widgets:
+                if rect_q.video_url != rect.video_url:
+                    continue
+
+                localization = Localization(
+                    uuid=uuid4(),
+                    concept=rect_q.association.concept,
+                    elapsed_time_millis=rect_q.elapsed_time_millis,
+                    x=rect_q.scale_x * rect_q.association.x,
+                    y=rect_q.scale_y * rect_q.association.y,
+                    width=rect_q.scale_x * rect_q.association.width,
+                    height=rect_q.scale_y * rect_q.association.height,
+                    duration_millis=1000,
+                    color=color_for_concept(rect_q.association.concept).name(),
+                )
+
+                localizations.append(localization)
+
+            def show_localizations():
+                sleep(
+                    0.5
+                )  # A hack, since Sharktopoda 2 crashes if you send it a command too soon
+                self.sharktopoda_client.seek_elapsed_time(
+                    video_reference_uuid, rect.elapsed_time_millis
+                )
+                self.sharktopoda_client.clear_localizations(video_reference_uuid)
+
+                # Add localizations in chunks
+                chunk_size = 20
+                for i in range(0, len(localizations), chunk_size):
+                    chunk = localizations[i : i + chunk_size]
+
+                    self.sharktopoda_client.add_localizations(
+                        video_reference_uuid, chunk
+                    )
+
+                self.sharktopoda_client.show(video_reference_uuid)
+
+                # If on macOS, call the open command to bring Sharktopoda to the front
+                if sys.platform == "darwin":
+                    try:
+                        os.system(f"open -a {SHARKTOPODA_APP_NAME}")
+                    except Exception as e:
+                        LOGGER.warning(f"Could not open Sharktopoda: {e}")
+
+            self.sharktopoda_client.open(
+                video_reference_uuid, rect.video_url, callback=show_localizations
+            )
 
     @QtCore.pyqtSlot()
     def _style_gui(self):

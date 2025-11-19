@@ -461,76 +461,76 @@ class ImageMosaic(QtCore.QObject):
                 scale_y = 1.0
 
                 source_url = None
+                video_url = None
                 elapsed_time_millis = None
-                if image_reference_uuid is None:
-                    # No image reference, need to use beholder
-                    video_data = self.moment_video_data[imaged_moment_uuid]
-                    moment_timestamp = self.moment_timestamps[imaged_moment_uuid]
 
-                    # SPECIAL RULE: If the original video reference URI is non-http(s), we have to use the proxy video reference instead
-                    original_video_reference_uri = video_data.get("video_uri", None)
-                    use_proxy = (
-                        original_video_reference_uri is None
-                        or not original_video_reference_uri.startswith("http")
+                # No image reference, need to use beholder
+                video_data = self.moment_video_data[imaged_moment_uuid]
+                moment_timestamp = self.moment_timestamps[imaged_moment_uuid]
+
+                # SPECIAL RULE: If the original video reference URI is non-http(s), we have to use the proxy video reference instead
+                original_video_reference_uri = video_data.get("video_uri", None)
+                use_proxy = (
+                    original_video_reference_uri is None
+                    or not original_video_reference_uri.startswith("http")
+                )
+
+                if use_proxy:  # Use proxy video reference
+                    # Get the proxy video data, skip if unavailable
+                    proxy_video_data = self.moment_proxy_data.get(
+                        imaged_moment_uuid, None
+                    )
+                    if proxy_video_data is None:
+                        LOGGER.error(
+                            f"Imaged moment {imaged_moment_uuid} has no proxy video reference"
+                        )
+                        continue
+
+                    # Get the source and proxy video dimensions to compute the scaling factors
+                    source_width = video_data["video_width"]
+                    source_height = video_data["video_height"]
+                    proxy_width = proxy_video_data["video_reference"]["width"]
+                    proxy_height = proxy_video_data["video_reference"]["height"]
+                    if (
+                        proxy_width is None
+                        or proxy_height is None
+                        or source_width is None
+                        or source_height is None
+                    ):
+                        LOGGER.error(
+                            f"Imaged moment {imaged_moment_uuid} is missing video dimensions needed for proxy scaling, skipping"
+                        )
+                        continue
+                    scale_x = source_width / proxy_width
+                    scale_y = source_height / proxy_height
+
+                    # Compute the elapsed time in milliseconds relative to the proxy video start
+                    proxy_video_start_timestamp = parse_date(
+                        proxy_video_data["video"]["start_timestamp"]
+                    )
+                    elapsed_time_millis = round(
+                        (moment_timestamp - proxy_video_start_timestamp).total_seconds()
+                        * 1000
                     )
 
-                    if use_proxy:  # Use proxy video reference
-                        # Get the proxy video data, skip if unavailable
-                        proxy_video_data = self.moment_proxy_data.get(
-                            imaged_moment_uuid, None
-                        )
-                        if proxy_video_data is None:
-                            LOGGER.error(
-                                f"Imaged moment {imaged_moment_uuid} has no proxy video reference, skipping"
-                            )
-                            continue
+                    # Use the proxy video reference URI
+                    video_url = proxy_video_data["video_reference"]["uri"]
+                else:  # Use original video reference
+                    # Compute the elapsed time in milliseconds relative to the original video start
+                    original_video_start_timestamp = video_data["video_start_timestamp"]
+                    elapsed_time_millis = round(
+                        (
+                            moment_timestamp - original_video_start_timestamp
+                        ).total_seconds()
+                        * 1000
+                    )
 
-                        # Get the source and proxy video dimensions to compute the scaling factors
-                        source_width = video_data["video_width"]
-                        source_height = video_data["video_height"]
-                        proxy_width = proxy_video_data["video_reference"]["width"]
-                        proxy_height = proxy_video_data["video_reference"]["height"]
-                        if (
-                            proxy_width is None
-                            or proxy_height is None
-                            or source_width is None
-                            or source_height is None
-                        ):
-                            LOGGER.error(
-                                f"Imaged moment {imaged_moment_uuid} is missing video dimensions needed for proxy scaling, skipping"
-                            )
-                            continue
-                        scale_x = source_width / proxy_width
-                        scale_y = source_height / proxy_height
+                    # Use the original video reference
+                    video_url = original_video_reference_uri
 
-                        # Compute the elapsed time in milliseconds relative to the proxy video start
-                        proxy_video_start_timestamp = parse_date(
-                            proxy_video_data["video"]["start_timestamp"]
-                        )
-                        elapsed_time_millis = round(
-                            (
-                                moment_timestamp - proxy_video_start_timestamp
-                            ).total_seconds()
-                            * 1000
-                        )
-
-                        # Use the proxy video reference URI
-                        source_url = proxy_video_data["video_reference"]["uri"]
-                    else:  # Use original video reference
-                        # Compute the elapsed time in milliseconds relative to the original video start
-                        original_video_start_timestamp = video_data[
-                            "video_start_timestamp"
-                        ]
-                        elapsed_time_millis = round(
-                            (
-                                moment_timestamp - original_video_start_timestamp
-                            ).total_seconds()
-                            * 1000
-                        )
-
-                        # Use the original video reference
-                        source_url = original_video_reference_uri
-
+                if image_reference_uuid is None:
+                    # No image reference, so we have to use the video URL as the source (use Beholder)
+                    source_url = video_url
                 else:
                     # We have an image reference UUID, so we can get the image directly
                     # Get the URL for the image reference, if we have it
@@ -590,6 +590,7 @@ class ImageMosaic(QtCore.QObject):
                         embedding_model=self._embedding_model,
                         scale_x=scale_x,
                         scale_y=scale_y,
+                        video_url=video_url,
                         elapsed_time_millis=elapsed_time_millis,
                     )
                     rw_future.association_uuid = association.uuid
