@@ -528,7 +528,8 @@ class ImageMosaic(QtCore.QObject):
                     # Use the original video reference
                     video_url = original_video_reference_uri
 
-                if image_reference_uuid is None:
+                is_image = image_reference_uuid is not None
+                if not is_image:
                     # No image reference, so we have to use the video URL as the source (use Beholder)
                     source_url = video_url
                 else:
@@ -563,6 +564,12 @@ class ImageMosaic(QtCore.QObject):
 
                     source_url = url
 
+                    # Check if the scaling factors are 0 (which can happen if video dimensions are missing); if so, set to 1.0
+                    if scale_x == 0.0:
+                        scale_x = 1.0
+                    if scale_y == 0.0:
+                        scale_y = 1.0
+
                 self.n_images += 1
 
                 ancillary_data = (
@@ -578,6 +585,7 @@ class ImageMosaic(QtCore.QObject):
                         RectWidget,
                         other_locs + [association],
                         source_url,
+                        is_image,
                         ancillary_data,
                         video_data,
                         len(other_locs),

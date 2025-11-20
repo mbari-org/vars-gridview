@@ -33,6 +33,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self,
         associations: List[BoundingBoxAssociation],
         source_url: str,
+        is_image: bool,
         ancillary_data: dict,
         video_data: dict,
         association_index: int,
@@ -53,6 +54,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         self.associations = associations
         self.source_url = source_url
+        self.is_image = is_image
         self.video_url = video_url
         self.elapsed_time_millis = elapsed_time_millis
         self.ancillary_data = ancillary_data
@@ -108,7 +110,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         Get the image data for this rect widget.
         """
         try:
-            image = fetch_image(self.source_url, self.elapsed_time_millis)
+            image = fetch_image(
+                self.source_url, self.elapsed_time_millis if not self.is_image else None
+            )
         except HTTPError as e:
             QtWidgets.QMessageBox.critical(
                 None,
@@ -248,7 +252,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             round(self.association.y / self._scale_y),
             round(self.association.xf / self._scale_x),
             round(self.association.yf / self._scale_y),
-            ms=self.elapsed_time_millis,
+            ms=self.elapsed_time_millis if not self.is_image else None,
         )
 
         # Decode the image
