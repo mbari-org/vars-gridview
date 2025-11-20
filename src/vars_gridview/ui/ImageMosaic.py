@@ -482,15 +482,16 @@ class ImageMosaic(QtCore.QObject):
                     )
                     if proxy_video_data is None:
                         LOGGER.error(
-                            f"Imaged moment {imaged_moment_uuid} has no proxy video reference"
+                            f"Imaged moment {imaged_moment_uuid} has no proxy video reference, skipping"
                         )
                         continue
 
                     # Get the source and proxy video dimensions to compute the scaling factors
-                    source_width = video_data["video_width"]
-                    source_height = video_data["video_height"]
-                    proxy_width = proxy_video_data["video_reference"]["width"]
-                    proxy_height = proxy_video_data["video_reference"]["height"]
+                    source_width = video_data.get("video_width", None)
+                    source_height = video_data.get("video_height", None)
+                    proxy_video_reference = proxy_video_data.get("video_reference", {})
+                    proxy_width = proxy_video_reference.get("width", None)
+                    proxy_height = proxy_video_reference.get("height", None)
                     if (
                         proxy_width is None
                         or proxy_height is None
@@ -505,9 +506,19 @@ class ImageMosaic(QtCore.QObject):
                     scale_y = source_height / proxy_height
 
                     # Compute the elapsed time in milliseconds relative to the proxy video start
-                    proxy_video_start_timestamp = parse_date(
-                        proxy_video_data["video"]["start_timestamp"]
+                    proxy_video = proxy_video_data.get("video", {})
+                    proxy_video_start_timestamp = proxy_video.get(
+                        "start_timestamp", None
                     )
+                    if proxy_video_start_timestamp is None:
+                        LOGGER.error(
+                            f"Imaged moment {imaged_moment_uuid} proxy video reference missing start timestamp, skipping"
+                        )
+                        continue
+                    proxy_video_start_timestamp = parse_date(
+                        proxy_video_start_timestamp
+                    )
+
                     elapsed_time_millis = round(
                         (moment_timestamp - proxy_video_start_timestamp).total_seconds()
                         * 1000
