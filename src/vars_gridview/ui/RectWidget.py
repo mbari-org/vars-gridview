@@ -124,7 +124,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             LOGGER.error(f"Unexpected error while fetching image: {e}")
             return None
 
-        if self._scale_x != 1.0 or self._scale_y != 1.0:
+        if not self.is_image and (self._scale_x != 1.0 or self._scale_y != 1.0):
             image = cv2.resize(
                 image,
                 None,
@@ -245,15 +245,25 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """
         Get the region of interest for this rect widget.
         """
-        # Get the image from the Skimmer
-        response = operations.crop(
-            self.source_url,
-            round(self.association.x / self._scale_x),
-            round(self.association.y / self._scale_y),
-            round(self.association.xf / self._scale_x),
-            round(self.association.yf / self._scale_y),
-            ms=self.elapsed_time_millis if not self.is_image else None,
-        )
+        if self.is_image:
+            # If image, get ROI directly
+            response = operations.crop(
+                self.source_url,
+                round(self.association.x),
+                round(self.association.y),
+                round(self.association.xf),
+                round(self.association.yf),
+            )
+        else:
+            # Else, get ROI from video frame (scaling according to scale factors)
+            response = operations.crop(
+                self.source_url,
+                round(self.association.x / self._scale_x),
+                round(self.association.y / self._scale_y),
+                round(self.association.xf / self._scale_x),
+                round(self.association.yf / self._scale_y),
+                ms=self.elapsed_time_millis,
+            )
 
         # Decode the image
         image = cv2.imdecode(
