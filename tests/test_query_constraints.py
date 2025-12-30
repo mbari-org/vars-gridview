@@ -51,5 +51,38 @@ class TestDepthConstraints(unittest.TestCase):
         self.assertNotIn("equals", result_dict)
 
 
+class TestLikeConstraints(unittest.TestCase):
+    """Test the like and notlike constraints functionality."""
+
+    def test_like_constraint(self):
+        """Test that a like constraint is created correctly."""
+        constraint = QueryConstraint(column="link_value", like='%"verifier":%')
+        result_dict = constraint.to_dict()
+        
+        self.assertEqual(result_dict["column"], "link_value")
+        self.assertEqual(result_dict["like"], '%"verifier":%')
+        self.assertNotIn("notlike", result_dict)
+
+    def test_notlike_constraint(self):
+        """Test that a notlike constraint is created correctly."""
+        constraint = QueryConstraint(column="link_value", notlike='%"verifier":%')
+        result_dict = constraint.to_dict()
+        
+        self.assertEqual(result_dict["column"], "link_value")
+        self.assertEqual(result_dict["notlike"], '%"verifier":%')
+        self.assertNotIn("like", result_dict)
+
+    def test_notlike_skip_null(self):
+        """Test that null notlike value is excluded when skip_null=True."""
+        constraint = QueryConstraint(
+            column="link_value",
+            notlike=None
+        )
+        result_dict = constraint.to_dict(skip_null=True)
+        
+        self.assertIn("column", result_dict)
+        self.assertNotIn("notlike", result_dict)
+
+
 if __name__ == "__main__":
     unittest.main()

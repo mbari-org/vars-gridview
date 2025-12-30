@@ -199,6 +199,19 @@ class VerifiedConstraintResult(BaseResult):
         return "Verified"
 
 
+class NotVerifiedConstraintResult(BaseResult):
+    """
+    A constraint result that creates a constraint to check if the verifier field is NOT present (i.e., not verified).
+    """
+
+    @property
+    def constraints(self) -> Iterable[QueryConstraint]:
+        yield QueryConstraint(column="link_value", notlike='%"verifier":%')
+
+    def __str__(self) -> str:
+        return "Not Verified"
+
+
 class ConceptInConstraintResult(InConstraintResult):
     """
     A constraint result that creates an IN constraint for a list of concepts.
@@ -880,6 +893,7 @@ class QueryDialog(QDialog):
             GeneratorFilter(self, "Generator", "generator", prompt="Generator"),
             VerifierFilter(self, "Verifier", "verifier", prompt="Verifier"),
             FunctionalFilter(self, "Verified", lambda: VerifiedConstraintResult()),
+            FunctionalFilter(self, "Not Verified", lambda: NotVerifiedConstraintResult()),
         ]
 
     @pyqtSlot()
