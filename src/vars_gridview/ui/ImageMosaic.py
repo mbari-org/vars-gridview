@@ -5,7 +5,7 @@ Image mosaic widget manager.
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta
 from json import loads
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 from uuid import UUID
 
 import pyqtgraph as pg
@@ -161,7 +161,9 @@ class ImageMosaic(QtCore.QObject):
 
         # Metadata caches
         self.image_reference_urls = {}
-        self.association_groups: Dict[UUID, List[BoundingBoxAssociation]] = {}
+        self.association_groups: Dict[
+            Tuple[UUID, Optional[UUID]], List[BoundingBoxAssociation]
+        ] = {}
         self.observations: Dict[UUID, Observation] = {}
         self.moment_video_data = {}
         self.moment_proxy_data = {}
