@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.27.2 (2026-01-12)
+
+### Bug Fixes
+
+- Add splash screen, fix main window icon path
+  ([`43c4166`](https://github.com/mbari-org/vars-gridview/commit/43c41663bab43dbfb61689613a077c8fc4a6cb28))
+
+
 ## v0.27.1 (2026-01-12)
 
 ### Bug Fixes
