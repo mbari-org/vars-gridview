@@ -92,7 +92,7 @@ class MainWindow(TemplateBaseClass):
         # Set the window title
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.setWindowIcon(
-            QtGui.QIcon(str(ICONS_DIR / "VARSGridView.iconset" / "icon_256x256.png"))
+            QtGui.QIcon(str(ICONS_DIR / "VARSGridView.iconset" / "icon_256.png"))
         )
 
         # Style buttons

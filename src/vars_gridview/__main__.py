@@ -7,15 +7,15 @@ import logging
 import sys
 import traceback
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtWidgets, QtGui, QtCore
 
 from vars_gridview.lib.constants import (
     APP_NAME,
     APP_ORGANIZATION,
     APP_VERSION,
+    ICONS_DIR,
 )
 from vars_gridview.lib.log import LOGGER, AppLogger
-from vars_gridview.ui.MainWindow import MainWindow
 
 
 def parse_args() -> argparse.Namespace:
@@ -50,10 +50,25 @@ def main():
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_ORGANIZATION)
 
+    # Show the splash icon
+    splash_pixmap = QtGui.QPixmap(
+        str(ICONS_DIR / "VARSGridView.iconset" / "icon_256.png")
+    )
+    splash = QtWidgets.QSplashScreen(splash_pixmap)
+    splash.show()
+
+    # Process events multiple times and add a small delay to ensure splash is rendered
+    for _ in range(10):
+        app.processEvents()
+        QtCore.QThread.msleep(10)
+
     # Create the main window and show it
     try:
+        from vars_gridview.ui.MainWindow import MainWindow
+
         main = MainWindow(app)
         main.show()
+        splash.finish(main)
     except Exception as e:
         LOGGER.critical(f"Could not create main window: {e}")
         LOGGER.debug(traceback.format_exc())  # Log the full traceback
