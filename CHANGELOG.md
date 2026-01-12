@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.27.1 (2026-01-12)
+
+### Bug Fixes
+
+- Remove startup warning about source video version
+  ([`88b5ad3`](https://github.com/mbari-org/vars-gridview/commit/88b5ad3ef36485289a9f2860af07308dcda66340))
+
+
 ## v0.27.0 (2026-01-12)
 
 ### Bug Fixes
