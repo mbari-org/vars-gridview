@@ -16,6 +16,7 @@ class QueryConstraint:
     in_: list[str] | None = None
     isnull: bool | None = None
     like: str | None = None
+    notlike: str | None = None
     max: float | None = None
     min: float | None = None
     minmax: list[float] | None = None
@@ -29,6 +30,7 @@ class QueryConstraint:
             "in": self.in_,
             "isnull": self.isnull,
             "like": self.like,
+            "notlike": self.notlike,
             "max": self.max,
             "min": self.min,
             "minmax": self.minmax,
