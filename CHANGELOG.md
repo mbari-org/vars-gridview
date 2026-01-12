@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v0.28.0 (2026-01-12)
+
+### Features
+
+- Add "Not Verified" query filter ([#114](https://github.com/mbari-org/vars-gridview/pull/114),
+  [`9d270fe`](https://github.com/mbari-org/vars-gridview/commit/9d270fea9390781cba0233613e2849d5a7770f34))
+
+- Add notlike field to QueryConstraint dataclass - Create NotVerifiedConstraintResult class - Add
+  "Not Verified" filter to QueryDialog filters list - Add tests for notlike constraint functionality
+
+implements #113
+
+
 ## v0.27.2 (2026-01-12)
 
 ### Bug Fixes
