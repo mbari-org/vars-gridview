@@ -1,6 +1,36 @@
 # CHANGELOG
 
 
+## v0.27.0 (2026-01-12)
+
+### Bug Fixes
+
+- Add warning about source video version
+  ([`4ef636e`](https://github.com/mbari-org/vars-gridview/commit/4ef636efa686fac17669351c15890248defb58c9))
+
+- Fix image reference image and ROI fetch
+  ([`16fc33b`](https://github.com/mbari-org/vars-gridview/commit/16fc33b1a41c81b05060d286e6e5dbf3657d780e))
+
+- Fix image/ROI scaling for images with different-res proxies
+  ([`0808431`](https://github.com/mbari-org/vars-gridview/commit/0808431788c1795330f2165825ca36f1ba281498))
+
+- Handle missing video dimensions, missing proxy video reference, missing video start timestamp
+  ([`38489b0`](https://github.com/mbari-org/vars-gridview/commit/38489b0413b2119b23228ed7660a1e16f2d8d2d4))
+
+### Features
+
+- Allow use of non-MP4 videos, maintaining proxying behavior in case of non-http(s) uri
+  ([`65452a2`](https://github.com/mbari-org/vars-gridview/commit/65452a27bd486e520e1920e6b3d81c7df3f54ac8))
+
+- Rework open video to use source video, add VLC capability
+  ([`8b0fad7`](https://github.com/mbari-org/vars-gridview/commit/8b0fad7b400b9d914f1e8e214d88dfc2e999b81f))
+
+### Refactoring
+
+- Correct association group type hint
+  ([`20eaef4`](https://github.com/mbari-org/vars-gridview/commit/20eaef44424248c17703577a5c89671fd0d91755))
+
+
 ## v0.26.0 (2025-11-12)
 
 ### Features
