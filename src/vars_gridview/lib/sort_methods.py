@@ -148,7 +148,7 @@ class IntensityMeanSort(SortMethod):
 
 
 class IntensityVarianceSort(SortMethod):
-    NAME = "Inteinsity variance"
+    NAME = "Intensity variance"
 
     @staticmethod
     def key(rect: RectWidget) -> float:
