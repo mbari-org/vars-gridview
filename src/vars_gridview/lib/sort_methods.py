@@ -127,6 +127,18 @@ class AreaSort(SortMethod):
         return WidthSort.key(rect) * HeightSort.key(rect)
 
 
+class AspectRatioSort(SortMethod):
+    NAME = "Aspect ratio"
+
+    @staticmethod
+    def key(rect: RectWidget) -> float:
+        height = HeightSort.key(rect)
+        width = WidthSort.key(rect)
+        # Return width/height to get aspect ratio
+        # Values > 1 are wide/horizontal, values < 1 are tall/narrow
+        return width / height if height > 0 else 0.0
+
+
 class IntensityMeanSort(SortMethod):
     NAME = "Intensity mean"
 
@@ -136,7 +148,7 @@ class IntensityMeanSort(SortMethod):
 
 
 class IntensityVarianceSort(SortMethod):
-    NAME = "Inteinsity variance"
+    NAME = "Intensity variance"
 
     @staticmethod
     def key(rect: RectWidget) -> float:

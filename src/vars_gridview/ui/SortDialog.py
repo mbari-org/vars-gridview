@@ -37,6 +37,7 @@ class SortDialog(QDialog):
             sm.WidthSort,
             sm.HeightSort,
             sm.AreaSort,
+            sm.AspectRatioSort,
             sm.IntensityMeanSort,
             sm.IntensityVarianceSort,
             sm.HueMeanSort,
