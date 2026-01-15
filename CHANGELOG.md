@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.29.0 (2026-01-15)
+
+### Features
+
+- Add aspect ratio sort
+  ([`3558593`](https://github.com/mbari-org/vars-gridview/commit/35585930a1b026d828e4891ef36925252db388f0))
+
+
 ## v0.28.0 (2026-01-12)
 
 ### Features
