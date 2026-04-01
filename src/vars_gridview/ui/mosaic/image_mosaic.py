@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from math import inf
+from threading import Event
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, cast
 from uuid import UUID
 
@@ -18,15 +19,19 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from pydantic import BaseModel
 
 from vars_gridview.lib.annotation.association import BoundingBoxAssociation
-from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.config.constants import get_settings
+from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.sorting.sort_methods import SortMethod, SortMethodGroup
 from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.controllers.selection_model import SelectionModel
 from vars_gridview.services.localization_store import LocalizationStore
-from vars_gridview.services.roi_loader import RoiLoader
+from vars_gridview.services.mosaic_pipeline import MosaicPipeline
+from vars_gridview.services.roi_loader import RoiLoadResult, RoiLoader
 from vars_gridview.ui.dialogs.concept_selection_dialog import ConceptSelectionDialog
-from vars_gridview.ui.mosaic.mosaic_view import MosaicView
+from vars_gridview.ui.coordinators.mosaic_load_coordinator import MosaicLoadCoordinator
+from vars_gridview.ui.mosaic.mosaic_view import MosaicView, MosaicVisibilityFilters
+from vars_gridview.ui.mosaic.rect_widget_factory import RectWidgetFactory
 from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 if TYPE_CHECKING:
@@ -99,24 +104,36 @@ class Row(BaseModel):
         Raises:
             pydantic.ValidationError: If any field fails validation.
         """
-        # Turn "null" into None
-        row = list(map(lambda v: None if v == "null" else v, row))
+        if len(headers) != len(row):
+            raise ValueError(
+                f"Header/row length mismatch: {len(headers)} headers, {len(row)} values"
+            )
 
-        # Turn empty fields into None
-        row = list(map(lambda v: None if v == "" and v is not None else v, row))
+        # Normalize null/blank tokens while preserving non-string values.
+        def _normalize_cell(value: object) -> object:
+            if not isinstance(value, str):
+                return value
+            trimmed = value.strip()
+            if trimmed == "":
+                return None
+            if trimmed.lower() == "null":
+                return None
+            return trimmed
+
+        row = list(map(_normalize_cell, row))
 
         # Create a dictionary of the row data
         row_dict = dict(zip(headers, row))
 
         # Parse ISO8601 dates
-        if row_dict["index_recorded_timestamp"] is not None:
-            row_dict["index_recorded_timestamp"] = parse_date(
-                row_dict["index_recorded_timestamp"]
-            )
-        if row_dict["video_start_timestamp"] is not None:
-            row_dict["video_start_timestamp"] = parse_date(
-                row_dict["video_start_timestamp"]
-            )
+        for key in ("index_recorded_timestamp", "video_start_timestamp"):
+            timestamp_raw = row_dict.get(key)
+            if timestamp_raw is None:
+                continue
+            try:
+                row_dict[key] = parse_date(str(timestamp_raw))
+            except Exception as exc:  # noqa: BLE001
+                raise ValueError(f"Invalid {key}: {timestamp_raw}") from exc
 
         return cls(**row_dict)
 
@@ -141,6 +158,10 @@ class ImageMosaic(QtCore.QObject):
     stats_changed = QtCore.pyqtSignal(dict)
     similarity_sort_progress = QtCore.pyqtSignal(int, int)
     embedding_precompute_progress = QtCore.pyqtSignal(int, int)
+    video_sequence_prepare_progress = QtCore.pyqtSignal(int, int)
+    proxy_prepare_progress = QtCore.pyqtSignal(int, int)
+    roi_spec_prepare_progress = QtCore.pyqtSignal(int, int)
+    localization_prepare_progress = QtCore.pyqtSignal(int, int)
 
     def __init__(
         self,
@@ -156,8 +177,10 @@ class ImageMosaic(QtCore.QObject):
         label_action_callback=None,
         verify_action_callback=None,
         mark_training_action_callback=None,
+        settings: AppSettings | None = None,
     ) -> None:
         super().__init__()
+        self._settings = settings or get_settings()
 
         # Initialize the graphics
         self._graphics_view = graphics_view
@@ -189,6 +212,7 @@ class ImageMosaic(QtCore.QObject):
 
         # Non-Qt data store backing metadata and association groups.
         self.store = LocalizationStore()
+        self._mosaic_pipeline = MosaicPipeline()
         self._roi_loader = RoiLoader()
         self.video_reference_uuid_to_mp4_video_reference = {}
 
@@ -207,8 +231,20 @@ class ImageMosaic(QtCore.QObject):
         self._roi_loading_pending: list[RectWidget] = []
         self._roi_loading_inflight = 0
         self._roi_loading_max_concurrency = 4
+        self._load_coordinator = MosaicLoadCoordinator(
+            parent=self,
+            dialog_parent=self._graphics_view,
+        )
+        self._rect_widget_factory = RectWidgetFactory(
+            rect_clicked_slot=self._rect_clicked_slot,
+            similarity_sort_slot=self._similarity_sort_slot,
+            rect_label_slot=self._rect_label_slot,
+            rect_verify_slot=self._rect_verify_slot,
+            rect_mark_training_slot=self._rect_mark_training_slot,
+            settings=self._settings,
+        )
 
-        SETTINGS.gui_zoom.valueChanged.connect(self.zoom_updated)
+        self._settings.gui_zoom.valueChanged.connect(self.zoom_updated)
         self.similarity_sort_progress.connect(self._on_similarity_sort_progress)
         self.embedding_precompute_progress.connect(
             self._on_embedding_precompute_progress
@@ -271,28 +307,14 @@ class ImageMosaic(QtCore.QObject):
             query_headers: Column names as returned by the query endpoint.
             query_rows: One inner list per result row.
         """
-        # Clear derived query data
-        self.store.reset_for_query()
-
         # Clear existing widgets
         self._cancel_pending_roi_loading()
         self._rect_widgets.clear()
         self.selection_model.clear()
 
-        # Parse rows
-        rows = []
-        for row in query_rows:
-            try:
-                rows.append(Row.parse(query_headers, row))
-            except Exception as e:
-                LOGGER.error(f"Error parsing row {row}: {e}")
-
         try:
-            # Populate metadata from the rows
-            self._map_metadata(rows)
-
-            # Extract associations into groups
-            self._extract_associations(rows)
+            # Parse rows and build localization store off the UI thread.
+            rows = self._prepare_localization_data(query_headers, query_rows)
 
             # Fetch video sequence data for the given groups
             self._fetch_video_sequence_data()
@@ -305,6 +327,35 @@ class ImageMosaic(QtCore.QObject):
         except Cancelled:
             LOGGER.info("Image mosaic loading cancelled by user")
             return
+
+    def _prepare_localization_data(
+        self,
+        query_headers: list[str],
+        query_rows: list[list[str]],
+    ) -> list[Row]:
+        """Parse rows and build localization state off the UI thread."""
+        cached_image_reference_urls = dict(self.store.image_reference_urls)
+        cached_video_sequences_by_name = dict(self.store.video_sequences_by_name)
+
+        payload = self._run_cancellable_stage(
+            label="Preparing localization data...",
+            maximum=max(0, len(query_rows)),
+            cancelled_message="Localization preparation cancelled",
+            missing_result_message="Localization preparation returned no result",
+            worker_factory=lambda cancel_event,
+            progress_callback: self._mosaic_pipeline.build_localization_state(
+                query_rows=query_rows,
+                row_parser=lambda row: Row.parse(query_headers, row),
+                cached_image_reference_urls=cached_image_reference_urls,
+                cached_video_sequences_by_name=cached_video_sequences_by_name,
+                cancel_event=cancel_event,
+                progress_callback=progress_callback,
+                cancelled_message="Localization preparation cancelled",
+            ),
+        )
+        rows, store = cast(tuple[list[object], LocalizationStore], payload)
+        self.store = store
+        return cast(list[Row], rows)
 
     def _map_metadata(self, rows: list[Row]) -> None:
         """Populate internal lookup tables from *rows*."""
@@ -319,67 +370,140 @@ class ImageMosaic(QtCore.QObject):
             raise RuntimeError(
                 "ImageMosaic is missing VampireSquid client; call configure_services() after login"
             )
-        try:
-            self._roi_loader.fetch_video_sequence_data(
+        self._run_cancellable_stage(
+            label="Fetching video sequence data...",
+            maximum=0,
+            cancelled_message="Video sequence fetch cancelled",
+            missing_result_message=None,
+            worker_factory=lambda cancel_event,
+            progress_callback: self._roi_loader.fetch_video_sequence_data(
                 vampire_squid_client=self._vampire_squid_client,
                 moment_video_data=self.moment_video_data,
                 video_sequences_by_name=self.video_sequences_by_name,
-            )
-        except RuntimeError as exc:
-            if str(exc) == "Video sequence fetch cancelled":
-                raise Cancelled from exc
-            raise
+                progress_callback=progress_callback,
+                should_cancel=cancel_event.is_set,
+            ),
+        )
 
     def _map_proxy_data(self, rows: list[Row]) -> None:
-        """Derive proxy video data for each imaged moment in *rows*."""
-        self._roi_loader.map_proxy_data(
-            rows=list(rows),
-            moment_proxy_data=self.moment_proxy_data,
-            moment_timestamps=self.moment_timestamps,
-            video_sequences_by_name=self.video_sequences_by_name,
+        """Derive proxy video data for each imaged moment in *rows* off-thread."""
+        payload = self._run_cancellable_stage(
+            label="Preparing proxy mappings...",
+            maximum=max(0, len(rows)),
+            cancelled_message="Proxy mapping cancelled",
+            missing_result_message="Proxy mapping returned no result",
+            worker_factory=lambda cancel_event,
+            progress_callback: self._mosaic_pipeline.build_proxy_mapping(
+                rows=list(rows),
+                existing_moment_proxy_data=self.moment_proxy_data,
+                existing_moment_timestamps=self.moment_timestamps,
+                video_sequences_by_name=self.video_sequences_by_name,
+                roi_loader=self._roi_loader,
+                cancel_event=cancel_event,
+                progress_callback=progress_callback,
+            ),
         )
+        proxy_data, timestamps = cast(
+            tuple[dict[UUID, dict | None], dict[UUID, object]],
+            payload,
+        )
+        self.store.moment_proxy_data = proxy_data
+        self.store.moment_timestamps = timestamps
 
     def _create_rois(self) -> None:
         if self._annosaurus_client is None or self._roi_service is None:
             raise RuntimeError(
                 "ImageMosaic is missing Annosaurus/ROI services; call configure_services() after login"
             )
-        try:
-            load_result = self._roi_loader.create_rect_widgets(
+
+        load_result = self._run_cancellable_stage(
+            label="Preparing ROI widgets...",
+            maximum=0,
+            cancelled_message="ROI creation cancelled",
+            missing_result_message="ROI spec preparation returned no result",
+            worker_factory=lambda cancel_event,
+            progress_callback: self._roi_loader.create_widget_specs(
                 annosaurus_client=self._annosaurus_client,
-                roi_service=self._roi_service,
                 association_groups=self.association_groups,
                 moment_video_data=self.moment_video_data,
                 moment_proxy_data=self.moment_proxy_data,
                 moment_timestamps=self.moment_timestamps,
                 image_reference_urls=self.image_reference_urls,
                 moment_ancillary_data=self.moment_ancillary_data,
-                rect_clicked_slot=self._rect_clicked_slot,
-                similarity_sort_slot=self._similarity_sort_slot,
-                rect_label_slot=self._rect_label_slot,
-                rect_verify_slot=self._rect_verify_slot,
-                rect_mark_training_slot=self._rect_mark_training_slot,
-                embedding_model=self._embedding_model,
-            )
-        except RuntimeError as exc:
-            if str(exc) == "ROI creation cancelled":
-                raise Cancelled from exc
-            raise
+                progress_callback=progress_callback,
+                should_cancel=cancel_event.is_set,
+            ),
+        )
+        load_result = cast(RoiLoadResult, load_result)
 
-        self._rect_widgets = load_result.rect_widgets
+        rect_widgets, failed_association_uuids = self._build_rect_widgets_from_specs(
+            load_result
+        )
+
+        self._rect_widgets = rect_widgets
         self.n_images = load_result.n_images
         self.n_localizations = load_result.n_localizations
         self._start_async_roi_loading()
 
-        if load_result.failed_association_uuids:
-            error_message = "\n".join(
-                [str(uuid) for uuid in load_result.failed_association_uuids]
+        self._show_roi_creation_failures(failed_association_uuids)
+
+    def _build_rect_widgets_from_specs(
+        self,
+        load_result: RoiLoadResult,
+    ) -> tuple[list[RectWidget], list[UUID]]:
+        """Materialize `RectWidget` instances from service-provided specs."""
+        rect_widgets: list[RectWidget] = []
+        failed_association_uuids = list(load_result.failed_association_uuids)
+        for spec in load_result.widget_specs:
+            try:
+                rw = self._rect_widget_factory.create(
+                    spec,
+                    embedding_model=self._embedding_model,
+                    roi_service=self._roi_service,
+                )
+                rect_widgets.append(rw)
+            except Exception as exc:  # noqa: BLE001
+                assoc = spec.associations[spec.association_index]
+                LOGGER.error(f"Error creating rect widget {assoc.uuid}: {exc}")
+                failed_association_uuids.append(assoc.uuid)
+        return rect_widgets, failed_association_uuids
+
+    def _show_roi_creation_failures(self, failed_association_uuids: list[UUID]) -> None:
+        """Show a warning dialog listing associations that could not be materialized."""
+        if not failed_association_uuids:
+            return
+        error_message = "\n".join([str(uuid) for uuid in failed_association_uuids])
+        QtWidgets.QMessageBox.warning(
+            self._graphics_view,
+            "Failed to Create ROIs",
+            f"The following bounding box associations could not be loaded:\n{error_message}",
+        )
+
+    def _run_cancellable_stage(
+        self,
+        *,
+        label: str,
+        maximum: int,
+        cancelled_message: str,
+        missing_result_message: str | None,
+        worker_factory: Callable[[Event, Callable[[int, int], None]], object],
+    ) -> object | None:
+        """Run one load stage and normalize cancellation handling."""
+        try:
+            result = self._load_coordinator.run_stage(
+                label=label,
+                maximum=maximum,
+                cancelled_message=cancelled_message,
+                worker_factory=worker_factory,
             )
-            QtWidgets.QMessageBox.warning(
-                self._graphics_view,
-                "Failed to Create ROIs",
-                f"The following bounding box associations could not be loaded:\n{error_message}",
-            )
+        except RuntimeError as exc:
+            if str(exc) == cancelled_message:
+                raise Cancelled from exc
+            raise
+
+        if result is None and missing_result_message is not None:
+            raise RuntimeError(missing_result_message)
+        return result
 
     def _similarity_sort_slot(self, clicked_rect: RectWidget, same_class_only: bool):
         if not self._rect_widgets:
@@ -747,18 +871,15 @@ class ImageMosaic(QtCore.QObject):
         """
         Load images + annotations and populate the mosaic
         """
-        # Get the subset of rect widgets to render based on display flags.
-        rect_widgets_to_render = []
-        for rw in self._rect_widgets:
-            if self.hide_labeled and rw.association.verified:
-                continue
-            if self.hide_unlabeled and not rw.association.verified:
-                continue
-            if self.hide_training and rw.association.is_training:
-                continue
-            if self.hide_nontraining and not rw.association.is_training:
-                continue
-            rect_widgets_to_render.append(rw)
+        rect_widgets_to_render = self._mosaic_view.select_visible_widgets(
+            all_widgets=self._rect_widgets,
+            filters=MosaicVisibilityFilters(
+                hide_labeled=self.hide_labeled,
+                hide_unlabeled=self.hide_unlabeled,
+                hide_training=self.hide_training,
+                hide_nontraining=self.hide_nontraining,
+            ),
+        )
 
         render_result = self._mosaic_view.render(
             all_widgets=self._rect_widgets,
@@ -846,12 +967,14 @@ class ImageMosaic(QtCore.QObject):
         begin_idx = min(first_idx, last_idx)
         end_idx = max(first_idx, last_idx)
 
-        # Select all widgets in the range
-        range_selection: list[RectWidget] = []
-        for idx in range(begin_idx, end_idx + 1):
-            # Only select if it's visible
-            if self._rect_widgets[idx].isVisible():
-                range_selection.append(self._rect_widgets[idx])
+        range_selection = cast(
+            list[RectWidget],
+            self._mosaic_view.visible_widgets_in_range(
+                all_widgets=self._rect_widgets,
+                begin_index=begin_idx,
+                end_index=end_idx,
+            ),
+        )
         self.selection_model.set_selection(range_selection)
 
     def clear_selected(self):
@@ -870,20 +993,8 @@ class ImageMosaic(QtCore.QObject):
                 rect_widget.update()
 
     def _scroll_to_rect_if_needed(self, rect_widget: RectWidget) -> None:
-        """Scroll only when *rect_widget* is outside the current viewport."""
-        viewport = self._graphics_view.viewport()
-        if viewport is None:
-            return
-
-        item_rect_scene = rect_widget.sceneBoundingRect()
-        item_rect_view = self._graphics_view.mapFromScene(
-            item_rect_scene
-        ).boundingRect()
-        viewport_rect = viewport.rect()
-        if viewport_rect.contains(item_rect_view):
-            return
-
-        self._graphics_view.ensureVisible(item_rect_scene, 8, 8)
+        """Delegate scroll-into-view behavior to `MosaicView`."""
+        self._mosaic_view.ensure_widget_visible_if_needed(rect_widget)
 
     def select_relative(self, key: QtCore.Qt.Key) -> bool:
         """
@@ -911,24 +1022,20 @@ class ImageMosaic(QtCore.QObject):
         # Get the index of the first selected widget
         first_idx = self._rect_widgets.index(first)
 
-        # Get the index of the next widget
-        if key == QtCore.Qt.Key.Key_Left:
-            next_idx = first_idx - 1
-        elif key == QtCore.Qt.Key.Key_Right:
-            next_idx = first_idx + 1
-        elif key == QtCore.Qt.Key.Key_Up:
-            next_idx = first_idx - self._n_columns
-        elif key == QtCore.Qt.Key.Key_Down:
-            next_idx = first_idx + self._n_columns
-        else:
+        next_idx = MosaicView.compute_relative_index(
+            current_index=first_idx,
+            key=key,
+            columns=self._n_columns,
+            total_items=len(self._rect_widgets),
+        )
+        if next_idx is None:
             return False
 
         # Select the next widget if it's in bounds
-        if 0 <= next_idx < len(self._rect_widgets):
-            self.clear_selected()
-            next_widget = self._rect_widgets[next_idx]
-            self._rect_clicked_slot(next_widget, None)
-            self._scroll_to_rect_if_needed(next_widget)
+        self.clear_selected()
+        next_widget = self._rect_widgets[next_idx]
+        self._rect_clicked_slot(next_widget, None)
+        self._scroll_to_rect_if_needed(next_widget)
 
         return True
 

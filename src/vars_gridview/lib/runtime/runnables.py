@@ -6,10 +6,10 @@ via typed Qt signals.
 
 Typical usage::
 
-    task = HttpGetTask(url)
-    task.signals.success.connect(on_response)
-    task.signals.error.connect(on_error)
-    enqueue(task)
+    worker = Worker(load_payload, arg1, arg2)
+    worker.signals.result.connect(on_result)
+    worker.signals.error.connect(on_error)
+    enqueue(worker)
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ from __future__ import annotations
 import traceback
 from typing import Callable, TypeVar
 
-import requests
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
 
 
@@ -85,42 +84,4 @@ class Worker(QRunnable):
             self.signals.finished.emit()
 
 
-class HttpGetTask(QRunnable):
-    """Off-thread HTTP GET task.
-
-    Emits :attr:`signals.success` with the :class:`~requests.Response` on HTTP
-    200, or :attr:`signals.error` with the exception on any failure.
-
-    Args:
-        url: URL to fetch.
-    """
-
-    class Signals(QObject):
-        """Signals for :class:`HttpGetTask`.
-
-        Attributes:
-            success: Emitted with the :class:`~requests.Response`.
-            error: Emitted with the exception on failure.
-            responseReceived: Alias for *success* (backward compatibility).
-        """
-
-        success = pyqtSignal(object)
-        error = pyqtSignal(Exception)
-        responseReceived = success  # backward-compat alias
-
-    def __init__(self, url: str) -> None:
-        super().__init__()
-        self._url = url
-        self.signals = HttpGetTask.Signals()
-
-    def run(self) -> None:
-        """Perform the GET request and emit the appropriate signal."""
-        try:
-            response = requests.get(self._url, timeout=30)
-            response.raise_for_status()
-            self.signals.success.emit(response)
-        except Exception as exc:  # noqa: BLE001
-            self.signals.error.emit(exc)
-
-
-__all__ = ["enqueue", "start", "Worker", "WorkerSignals", "HttpGetTask"]
+__all__ = ["enqueue", "start", "Worker", "WorkerSignals"]

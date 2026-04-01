@@ -1,6 +1,7 @@
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.config.constants import get_settings
+from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.ui.widgets.file_selection_line_edit import DirectorySelectionLineEdit
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
@@ -12,15 +13,21 @@ class CacheTab(AbstractSettingsTab):
 
     clearCache = QtCore.pyqtSignal()
 
-    def __init__(self, clear_cache_slot, parent=None):
+    def __init__(
+        self,
+        clear_cache_slot,
+        settings: AppSettings | None = None,
+        parent=None,
+    ):
         super().__init__("Cache", parent=parent)
+        self._settings = settings or get_settings()
 
         self.clearCache.connect(clear_cache_slot)
 
         self.cache_dir_lineedit = DirectorySelectionLineEdit(parent=self)
-        self.cache_dir_lineedit.setText(SETTINGS.cache_dir.value)
+        self.cache_dir_lineedit.setText(self._settings.cache_dir.value)
         self.cache_dir_lineedit.textChanged.connect(self.settingsChanged.emit)
-        SETTINGS.cache_dir.valueChanged.connect(self.cache_dir_lineedit.setText)
+        self._settings.cache_dir.valueChanged.connect(self.cache_dir_lineedit.setText)
 
         self.cache_dir_lineedit.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
@@ -36,7 +43,7 @@ class CacheTab(AbstractSettingsTab):
 
     def refresh_from_settings(self) -> None:
         previous = self.cache_dir_lineedit.blockSignals(True)
-        self.cache_dir_lineedit.setText(SETTINGS.cache_dir.value)
+        self.cache_dir_lineedit.setText(self._settings.cache_dir.value)
         self.cache_dir_lineedit.blockSignals(previous)
 
     def arrange(self):
@@ -56,6 +63,6 @@ class CacheTab(AbstractSettingsTab):
 
     def apply_settings(self) -> set[str]:
         changed: set[str] = set()
-        if SETTINGS.cache_dir.set_value(self.cache_dir_lineedit.text()):
-            changed.add(SETTINGS.cache_dir.key)
+        if self._settings.cache_dir.set_value(self.cache_dir_lineedit.text()):
+            changed.add(self._settings.cache_dir.key)
         return changed

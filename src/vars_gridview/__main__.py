@@ -14,6 +14,7 @@ from vars_gridview.lib.config.constants import (
     APP_ORGANIZATION,
     APP_VERSION,
     ICONS_DIR,
+    get_settings,
 )
 from vars_gridview.lib.runtime.log import LOGGER, AppLogger
 
@@ -66,7 +67,7 @@ def main():
     try:
         from vars_gridview.ui.MainWindow import MainWindow
 
-        main = MainWindow(app)
+        main = MainWindow(app, settings=get_settings())
         main.show()
         splash.finish(main)
     except Exception as e:

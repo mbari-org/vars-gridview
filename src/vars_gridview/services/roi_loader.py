@@ -1,13 +1,14 @@
-"""ROI loader service for building mosaic rect widgets.
+"""ROI loader service for preparing mosaic ROI widget data.
 
-`RoiLoader` encapsulates the ROI widget construction pipeline used by
-`ImageMosaic`. It computes per-group source context, fetches missing image
-references, and creates `RectWidget` instances.
+`RoiLoader` encapsulates non-Qt ROI preparation logic used by `ImageMosaic`.
+It computes per-group source context, fetches missing image references, and
+returns plain data specs that the UI layer uses to construct `RectWidget`
+instances on the main thread.
 
 Thread-affinity note:
     ``RectWidget`` is a Qt graphics widget and must be created on the GUI
-    thread. This loader therefore creates widgets synchronously while using
-    thread pools only for non-Qt network/data tasks.
+    thread. This loader returns plain data specs only and does not construct
+    Qt widgets.
 """
 
 from __future__ import annotations
@@ -15,34 +16,47 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 from uuid import UUID
 
-import pyqtgraph as pg
 from iso8601 import parse_date
 
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.common.time import get_timestamp
 from vars_gridview.lib.m3.clients import AnnosaurusClient, VampireSquidClient
-from vars_gridview.services.roi_service import RoiService
-from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.vision.embedding import Embedding
+    from vars_gridview.lib.annotation.association import BoundingBoxAssociation
 
 
 @dataclass
 class RoiLoadResult:
-    """Result bundle returned by `RoiLoader.create_rect_widgets`."""
+    """Result bundle returned by `RoiLoader.create_widget_specs`."""
 
-    rect_widgets: list[RectWidget]
+    widget_specs: list["RoiWidgetSpec"]
     n_images: int
     n_localizations: int
     failed_association_uuids: list[UUID]
 
 
+@dataclass
+class RoiWidgetSpec:
+    """Plain data required to construct one mosaic `RectWidget`."""
+
+    associations: list["BoundingBoxAssociation"]
+    source_url: str
+    is_image: bool
+    ancillary_data: dict
+    video_data: dict
+    association_index: int
+    scale_x: float
+    scale_y: float
+    video_url: str | None
+    elapsed_time_millis: int | None
+
+
 class RoiLoader:
-    """Build `RectWidget` instances from grouped localization metadata."""
+    """Build plain ROI widget specs from grouped localization metadata."""
 
     def fetch_video_sequence_data(
         self,
@@ -50,6 +64,8 @@ class RoiLoader:
         vampire_squid_client: VampireSquidClient,
         moment_video_data: dict[UUID, dict],
         video_sequences_by_name: dict[str, dict | None],
+        progress_callback: Callable[[int, int], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> None:
         """Fetch and cache video-sequence records needed by current moments."""
         video_sequence_names = set(
@@ -59,12 +75,11 @@ class RoiLoader:
         )
         video_sequence_names -= set(video_sequences_by_name.keys())
 
-        with (
-            pg.ProgressDialog(
-                "Fetching video sequence data...", maximum=len(video_sequence_names)
-            ) as progress,
-            ThreadPoolExecutor(max_workers=10) as executor,
-        ):
+        total = len(video_sequence_names)
+        if progress_callback is not None:
+            progress_callback(0, total)
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
             vs_futures = {
                 executor.submit(
                     vampire_squid_client.get_video_sequence_by_name, name
@@ -72,8 +87,9 @@ class RoiLoader:
                 for name in video_sequence_names
             }
 
+            done = 0
             for vs_future in as_completed(vs_futures):
-                if progress.wasCanceled():
+                if should_cancel is not None and should_cancel():
                     for future in vs_futures:
                         future.cancel()
                     executor.shutdown(wait=False)
@@ -95,7 +111,9 @@ class RoiLoader:
                         video_sequence_data
                     )
 
-                progress += 1
+                done += 1
+                if progress_callback is not None:
+                    progress_callback(done, total)
 
     def map_proxy_data(
         self,
@@ -104,11 +122,22 @@ class RoiLoader:
         moment_proxy_data: dict[UUID, dict | None],
         moment_timestamps: dict[UUID, object],
         video_sequences_by_name: dict[str, dict | None],
+        progress_callback: Callable[[int, int], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> None:
         """Populate per-moment proxy video mappings used for ROI creation."""
-        for row in rows:
+        total = len(rows)
+        if progress_callback is not None:
+            progress_callback(0, total)
+
+        for idx, row in enumerate(rows, start=1):
+            if should_cancel is not None and should_cancel():
+                raise RuntimeError("Proxy mapping cancelled")
+
             imaged_moment_uuid = getattr(row, "imaged_moment_uuid")
             if imaged_moment_uuid in moment_proxy_data:
+                if progress_callback is not None and (idx == total or idx % 250 == 0):
+                    progress_callback(idx, total)
                 continue
 
             moment_timestamp = get_timestamp(
@@ -134,6 +163,9 @@ class RoiLoader:
                 )
 
             moment_proxy_data[imaged_moment_uuid] = mp4_video_data
+
+            if progress_callback is not None and (idx == total or idx % 250 == 0):
+                progress_callback(idx, total)
 
     def find_mp4_video_data(
         self,
@@ -183,98 +215,79 @@ class RoiLoader:
 
         return None
 
-    def create_rect_widgets(
+    def create_widget_specs(
         self,
         *,
         annosaurus_client: AnnosaurusClient,
-        roi_service: RoiService | None,
         association_groups: dict[tuple[UUID, UUID | None], list],
         moment_video_data: dict[UUID, dict],
         moment_proxy_data: dict[UUID, dict | None],
         moment_timestamps: dict[UUID, object],
         image_reference_urls: dict[UUID | None, str | None],
         moment_ancillary_data: dict[UUID, dict],
-        rect_clicked_slot,
-        similarity_sort_slot,
-        rect_label_slot,
-        rect_verify_slot,
-        rect_mark_training_slot,
-        embedding_model: Embedding | None,
+        progress_callback: Callable[[int, int], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> RoiLoadResult:
-        """Create all ROI widgets for the current query result set.
-
-        The method preserves existing behavior from `ImageMosaic._create_rois`:
-        progress reporting, per-association error handling, and proxy scaling
-        logic.
-        """
+        """Create all ROI widget specs for the current query result set."""
         n_images = 0
         n_localizations = 0
-        rect_widgets: list[RectWidget] = []
+        widget_specs: list[RoiWidgetSpec] = []
         failed_association_uuids: list[UUID] = []
+        total = sum(len(group) for group in association_groups.values())
+        done = 0
+        if progress_callback is not None:
+            progress_callback(0, total)
 
-        with (
-            pg.ProgressDialog(
-                "Creating ROIs...",
-                0,
-                sum(len(group) for group in association_groups.values()),
-            ) as dlg,
-        ):
-            for group_key, associations in association_groups.items():
-                group_context = self._build_group_context(
-                    annosaurus_client=annosaurus_client,
-                    group_key=group_key,
-                    moment_video_data=moment_video_data,
-                    moment_proxy_data=moment_proxy_data,
-                    moment_timestamps=moment_timestamps,
-                    image_reference_urls=image_reference_urls,
-                )
-                if group_context is None:
-                    continue
+        for group_key, associations in association_groups.items():
+            group_context = self._build_group_context(
+                annosaurus_client=annosaurus_client,
+                group_key=group_key,
+                moment_video_data=moment_video_data,
+                moment_proxy_data=moment_proxy_data,
+                moment_timestamps=moment_timestamps,
+                image_reference_urls=image_reference_urls,
+            )
+            if group_context is None:
+                continue
 
-                n_images += 1
+            n_images += 1
 
-                imaged_moment_uuid = group_key[0]
-                ancillary_data = moment_ancillary_data.get(imaged_moment_uuid, {}) or {}
-                video_data = moment_video_data.get(imaged_moment_uuid, {}) or {}
+            imaged_moment_uuid = group_key[0]
+            ancillary_data = moment_ancillary_data.get(imaged_moment_uuid, {}) or {}
+            video_data = moment_video_data.get(imaged_moment_uuid, {}) or {}
 
-                for association in associations:
-                    if dlg.wasCanceled():
-                        raise RuntimeError("ROI creation cancelled")
+            for association in associations:
+                if should_cancel is not None and should_cancel():
+                    raise RuntimeError("ROI creation cancelled")
 
-                    other_locs = list(associations)
-                    other_locs.remove(association)
+                other_locs = list(associations)
+                other_locs.remove(association)
 
-                    try:
-                        rw = RectWidget(
-                            other_locs + [association],
-                            group_context["source_url"],
-                            group_context["is_image"],
-                            ancillary_data,
-                            video_data,
-                            len(other_locs),
-                            rect_clicked_slot,
-                            similarity_sort_slot,
-                            rect_label_slot,
-                            rect_verify_slot,
-                            rect_mark_training_slot,
-                            text_label=association.text_label,
-                            embedding_model=embedding_model,
-                            roi_service=roi_service,
+                try:
+                    widget_specs.append(
+                        RoiWidgetSpec(
+                            associations=other_locs + [association],
+                            source_url=group_context["source_url"],
+                            is_image=group_context["is_image"],
+                            ancillary_data=ancillary_data,
+                            video_data=video_data,
+                            association_index=len(other_locs),
                             scale_x=group_context["scale_x"],
                             scale_y=group_context["scale_y"],
                             video_url=group_context["video_url"],
                             elapsed_time_millis=group_context["elapsed_time_millis"],
-                            preload_roi=False,
                         )
-                        rect_widgets.append(rw)
-                    except Exception as exc:  # noqa: BLE001
-                        LOGGER.error(f"Error creating rect widget: {exc}")
-                        failed_association_uuids.append(association.uuid)
-                    n_localizations += 1
-                    dlg += 1
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    LOGGER.error(f"Error preparing rect widget spec: {exc}")
+                    failed_association_uuids.append(association.uuid)
+                n_localizations += 1
+                done += 1
+                if progress_callback is not None:
+                    progress_callback(done, total)
 
         return RoiLoadResult(
-            rect_widgets=rect_widgets,
+            widget_specs=widget_specs,
             n_images=n_images,
             n_localizations=n_localizations,
             failed_association_uuids=failed_association_uuids,
@@ -402,4 +415,4 @@ class RoiLoader:
         }
 
 
-__all__ = ["RoiLoader", "RoiLoadResult"]
+__all__ = ["RoiLoader", "RoiLoadResult", "RoiWidgetSpec"]

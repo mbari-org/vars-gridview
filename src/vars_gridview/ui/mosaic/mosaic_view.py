@@ -17,6 +17,16 @@ class MosaicRenderResult:
     rendered_count: int
 
 
+@dataclass
+class MosaicVisibilityFilters:
+    """Visibility toggles used to choose which widgets are rendered."""
+
+    hide_labeled: bool = False
+    hide_unlabeled: bool = False
+    hide_training: bool = False
+    hide_nontraining: bool = False
+
+
 class MosaicView:
     """Owns QGraphicsScene/QGraphicsWidget layout for mosaic tiles."""
 
@@ -125,6 +135,99 @@ class MosaicView:
 
         return MosaicRenderResult(columns=columns, rendered_count=len(visible_widgets))
 
+    def select_visible_widgets(
+        self,
+        *,
+        all_widgets: list,
+        filters: MosaicVisibilityFilters,
+    ) -> list:
+        """Return widgets that pass current visibility filter toggles."""
+        visible_widgets = []
+        for widget in all_widgets:
+            association = getattr(widget, "association", None)
+            if association is None:
+                continue
+            if filters.hide_labeled and getattr(association, "verified", False):
+                continue
+            if filters.hide_unlabeled and not getattr(association, "verified", False):
+                continue
+            if filters.hide_training and getattr(association, "is_training", False):
+                continue
+            if filters.hide_nontraining and not getattr(
+                association, "is_training", False
+            ):
+                continue
+            visible_widgets.append(widget)
+        return visible_widgets
+
+    def ensure_widget_visible_if_needed(self, rect_widget: object) -> None:
+        """Scroll view only when `rect_widget` is outside current viewport."""
+        viewport = self._graphics_view.viewport()
+        if viewport is None:
+            return
+
+        item_rect_scene = rect_widget.sceneBoundingRect()
+        item_rect_view = self._graphics_view.mapFromScene(
+            item_rect_scene
+        ).boundingRect()
+        viewport_rect = viewport.rect()
+        if viewport_rect.contains(item_rect_view):
+            return
+
+        self._graphics_view.ensureVisible(item_rect_scene, 8, 8)
+
+    def visible_widgets_in_range(
+        self,
+        *,
+        all_widgets: list,
+        begin_index: int,
+        end_index: int,
+    ) -> list:
+        """Return currently visible widgets within an inclusive index range."""
+        if begin_index < 0 or end_index < begin_index:
+            return []
+        max_index = len(all_widgets) - 1
+        if max_index < 0:
+            return []
+        bounded_begin = min(begin_index, max_index)
+        bounded_end = min(end_index, max_index)
+
+        visible: list = []
+        for idx in range(bounded_begin, bounded_end + 1):
+            widget = all_widgets[idx]
+            if widget.isVisible():
+                visible.append(widget)
+        return visible
+
+    @staticmethod
+    def compute_relative_index(
+        *,
+        current_index: int,
+        key: QtCore.Qt.Key,
+        columns: int,
+        total_items: int,
+    ) -> int | None:
+        """Compute next selection index for arrow-key navigation."""
+        if current_index < 0 or current_index >= total_items:
+            return None
+        if columns <= 0:
+            return None
+
+        if key == QtCore.Qt.Key.Key_Left:
+            next_index = current_index - 1
+        elif key == QtCore.Qt.Key.Key_Right:
+            next_index = current_index + 1
+        elif key == QtCore.Qt.Key.Key_Up:
+            next_index = current_index - columns
+        elif key == QtCore.Qt.Key.Key_Down:
+            next_index = current_index + columns
+        else:
+            return None
+
+        if 0 <= next_index < total_items:
+            return next_index
+        return None
+
     @staticmethod
     def _coerce_margin(value: object) -> int:
         if isinstance(value, (int, float)):
@@ -132,4 +235,4 @@ class MosaicView:
         return 0
 
 
-__all__ = ["MosaicView", "MosaicRenderResult"]
+__all__ = ["MosaicView", "MosaicRenderResult", "MosaicVisibilityFilters"]

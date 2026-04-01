@@ -13,11 +13,23 @@ from vars_gridview.ui.coordinators.main_window_menu_coordinator import (
 from vars_gridview.ui.coordinators.video_navigation_coordinator import (
     VideoNavigationCoordinator,
 )
+from vars_gridview.ui.coordinators.shutdown_save_coordinator import (
+    ShutdownSaveCoordinator,
+)
+from vars_gridview.ui.coordinators.query_presentation_coordinator import (
+    QueryPresentationCoordinator,
+)
+from vars_gridview.ui.coordinators.dirty_association_save_coordinator import (
+    DirtyAssociationSaveCoordinator,
+)
 
 __all__ = [
     "AnnotationActionCoordinator",
     "AnnotationOperationPresenter",
     "DetailPaneCoordinator",
+    "DirtyAssociationSaveCoordinator",
     "MainWindowMenuCoordinator",
+    "QueryPresentationCoordinator",
+    "ShutdownSaveCoordinator",
     "VideoNavigationCoordinator",
 ]

@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui
+from uuid import UUID
 
-from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.config.constants import get_settings
+from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.ui.mosaic.bounding_box import BoundingBox
 from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
@@ -31,6 +33,7 @@ class BoxHandler:
         change_concept_callback=None,
         change_part_callback=None,
         delete_callback=None,
+        settings: AppSettings | None = None,
     ) -> None:
         """Construct a :class:`BoxHandler`.
 
@@ -51,6 +54,7 @@ class BoxHandler:
         """
         self.boxes: list[BoundingBox] = []
         self.dragging = False
+        self._settings = settings or get_settings()
 
         self.view_box = pg.ViewBox()
         self.graphics_view = graphics_view
@@ -89,7 +93,9 @@ class BoxHandler:
             image_height: Optional known image height to avoid re-fetching image
                 metadata from the rect widget.
         """
-        q_color = QtGui.QColor.fromString(SETTINGS.selection_highlight_color.value)
+        q_color = QtGui.QColor.fromString(
+            self._settings.selection_highlight_color.value
+        )
         for idx, association in enumerate(rect_widget.associations):
             if association.deleted:
                 continue
@@ -149,7 +155,9 @@ class BoxHandler:
         active_by_uuid = {str(assoc.uuid): assoc for assoc in active_assocs}
         selected_assoc_uuid = str(rect_widget.association.uuid)
 
-        q_color = QtGui.QColor.fromString(SETTINGS.selection_highlight_color.value)
+        q_color = QtGui.QColor.fromString(
+            self._settings.selection_highlight_color.value
+        )
         selected_color = q_color.getRgb()
         selected_style = QtCore.Qt.PenStyle.DashLine
 
@@ -180,11 +188,32 @@ class BoxHandler:
             if box.dirty:
                 if self._push_changes_callback is not None:
                     self._push_changes_callback(box.association)
+                    box.dirty = False
                 else:
                     LOGGER.error(
                         "Cannot persist dirty association without push callback; "
                         "configure BoxHandler with an AnnotationService-backed callback"
                     )
+
+    def get_dirty_associations(self) -> list:
+        """Return dirty, non-deleted associations from current overlays.
+
+        This method must be called on the UI thread. The returned associations
+        are plain model objects and can be handed to a worker for network I/O.
+        """
+        return [
+            box.association
+            for box in self.boxes
+            if box.dirty and not box.association.deleted
+        ]
+
+    def clear_dirty_for(self, association_uuids: set[UUID]) -> None:
+        """Clear dirty flags for boxes whose associations were saved."""
+        if not association_uuids:
+            return
+        for box in self.boxes:
+            if box.association.uuid in association_uuids:
+                box.dirty = False
 
     def map_pos_to_item(self, pos: QtCore.QPointF) -> QtCore.QPointF:
         """

@@ -14,7 +14,8 @@ from requests import HTTPError
 from scipy.spatial.distance import cosine
 
 from vars_gridview.lib.annotation.association import BoundingBoxAssociation
-from vars_gridview.lib.config.constants import ICONS_DIR, SETTINGS
+from vars_gridview.lib.config.constants import ICONS_DIR, get_settings
+from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.lib.common.time import get_timestamp
@@ -57,8 +58,10 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         video_url: str | None = None,
         elapsed_time_millis: int | None = None,
         preload_roi: bool = True,
+        settings: AppSettings | None = None,
     ) -> None:
         QtWidgets.QGraphicsWidget.__init__(self, parent)
+        self._settings = settings or get_settings()
 
         self.associations = associations
         self.source_url = source_url
@@ -68,7 +71,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.ancillary_data = ancillary_data
         self.video_data = video_data
         self.localization_index = association_index
-        self._zoom = SETTINGS.gui_zoom.value
+        self._zoom = self._settings.gui_zoom.value
         self._scale_x = scale_x
         self._scale_y = scale_y
 
@@ -86,6 +89,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         self._embedding_model = embedding_model
         self._roi_service = roi_service
+        self._source_image_width: int | None = None
+        self._source_image_height: int | None = None
+        self._cache_source_dimensions_from_metadata()
 
         self.roi = None
         self.pic = None
@@ -108,6 +114,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self._deleted = False  # Flag to indicate if this rect widget has been deleted. Used to prevent double deletion.
         self._roi_refresh_generation = 0
         self._roi_batch_generation = 0
+        self._roi_refresh_timer = QtCore.QTimer(self)
+        self._roi_refresh_timer.setSingleShot(True)
+        self._roi_refresh_timer.timeout.connect(self._start_roi_refresh_worker)
 
         self._connect()
 
@@ -133,6 +142,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             )
             if image is None:
                 return None
+            self.set_source_image_dimensions(image.shape[1], image.shape[0])
         except HTTPError as e:
             LOGGER.error(f"Failed to load image from {self.source_url}: {e}")
             return None
@@ -303,16 +313,20 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def request_roi_refresh(self) -> None:
         """Refresh ROI image asynchronously and apply only the latest result."""
+        self.request_roi_refresh_debounced()
+
+    def request_roi_refresh_debounced(self, debounce_ms: int = 120) -> None:
+        """Schedule an ROI refresh after a short debounce delay."""
+        self._roi_refresh_timer.start(max(0, int(debounce_ms)))
+
+    def _start_roi_refresh_worker(self) -> None:
+        """Start an async ROI refresh worker for the latest request."""
         self._roi_refresh_generation += 1
         generation = self._roi_refresh_generation
 
         worker = Worker(self._fetch_roi_with_generation, generation)
         worker.signals.result.connect(self._on_async_roi_refresh_result)
-        worker.signals.error.connect(
-            lambda err: LOGGER.error(
-                f"Error refreshing ROI for {self.association.uuid}: {err[1]}"
-            )
-        )
+        worker.signals.error.connect(self._on_async_roi_refresh_error)
         QThreadPool.globalInstance().start(worker)
 
     def _fetch_roi_with_generation(self, generation: int):
@@ -330,6 +344,20 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self._roi_loaded = True
         self.pic = self.getpic(roi)
         # Invalidate cached embedding; bulk precompute is coordinated by ImageMosaic.
+        self.invalidate_embedding_cache()
+        self.update()
+        self.roiRefreshed.emit(self)
+
+    @QtCore.pyqtSlot(tuple)
+    def _on_async_roi_refresh_error(self, err: tuple) -> None:
+        message = str(err[1]) if len(err) > 1 else "Unknown error"
+        LOGGER.error(f"Error refreshing ROI for {self.association.uuid}: {message}")
+
+        # Keep tile UI stable and allow mosaic loading progress to continue.
+        placeholder = self._make_placeholder_roi()
+        self.roi = placeholder
+        self._roi_loaded = False
+        self.pic = self.getpic(placeholder)
         self.invalidate_embedding_cache()
         self.update()
         self.roiRefreshed.emit(self)
@@ -404,17 +432,29 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     @property
     def image_width(self) -> int | None:
-        image = self.get_image()
-        if image is None:
-            return None
-        return image.shape[1]
+        return self._source_image_width
 
     @property
     def image_height(self) -> int | None:
-        image = self.get_image()
-        if image is None:
-            return None
-        return image.shape[0]
+        return self._source_image_height
+
+    def set_source_image_dimensions(
+        self, width: int | None, height: int | None
+    ) -> None:
+        """Cache source-frame dimensions for non-blocking bound checks."""
+        if width is None or height is None:
+            return
+        if width <= 0 or height <= 0:
+            return
+        self._source_image_width = width
+        self._source_image_height = height
+
+    def _cache_source_dimensions_from_metadata(self) -> None:
+        """Initialize source-frame dimensions from query metadata when available."""
+        width = self.video_data.get("video_width")
+        height = self.video_data.get("video_height")
+        if isinstance(width, int) and isinstance(height, int):
+            self.set_source_image_dimensions(width, height)
 
     def annotation_datetime(self) -> datetime | None:
         video_start_datetime = self.video_data["video_start_timestamp"]
@@ -643,6 +683,23 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         orpixmap = QtGui.QPixmap.fromImage(qimg)
         return orpixmap
 
+    def _make_placeholder_roi(self) -> np.ndarray:
+        """Build a fallback ROI image when loading fails."""
+        width = max(1, int(self.picdims[0]))
+        height = max(1, int(self.picdims[1]))
+        placeholder = np.zeros((height, width, 3), dtype=np.uint8)
+        cv2.putText(
+            placeholder,
+            "ROI unavailable",
+            (10, height // 2),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (180, 180, 180),
+            1,
+            cv2.LINE_AA,
+        )
+        return placeholder
+
     def paint(self, painter, option, widget):
         pen = QtGui.QPen()
         pen.setWidth(1)
@@ -656,7 +713,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         if self.is_selected:
             painter.fillRect(
                 self.outline_rect,
-                QtGui.QColor.fromString(SETTINGS.selection_highlight_color.value),
+                QtGui.QColor.fromString(self._settings.selection_highlight_color.value),
             )
 
         # Fill border background if verified
@@ -698,7 +755,10 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         # Set font
         font = QtGui.QFont(
-            "Arial", SETTINGS.label_font_size.value, QtGui.QFont.Weight.Bold, False
+            "Arial",
+            self._settings.label_font_size.value,
+            QtGui.QFont.Weight.Bold,
+            False,
         )
         painter.setFont(font)
 

@@ -1,6 +1,7 @@
 from PyQt6 import QtWidgets
 
-from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.config.constants import get_settings
+from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
 
@@ -9,24 +10,31 @@ class VideoPlayerTab(AbstractSettingsTab):
     Video player tab.
     """
 
-    def __init__(self, connect_slot, connected_signal, parent=None):
+    def __init__(
+        self,
+        connect_slot,
+        connected_signal,
+        settings: AppSettings | None = None,
+        parent=None,
+    ):
         super().__init__("Video player", parent=parent)
+        self._settings = settings or get_settings()
 
         self.sharktopoda_autoconnect_checkbox = QtWidgets.QCheckBox()
         self.sharktopoda_autoconnect_checkbox.setChecked(
-            SETTINGS.sharktopoda_autoconnect.value
+            self._settings.sharktopoda_autoconnect.value
         )
         self.sharktopoda_autoconnect_checkbox.stateChanged.connect(
             self.settingsChanged.emit
         )
-        SETTINGS.sharktopoda_autoconnect.valueChanged.connect(
+        self._settings.sharktopoda_autoconnect.valueChanged.connect(
             self.sharktopoda_autoconnect_checkbox.setChecked
         )
 
         self.sharktopoda_host_edit = QtWidgets.QLineEdit()
-        self.sharktopoda_host_edit.setText(SETTINGS.sharktopoda_host.value)
+        self.sharktopoda_host_edit.setText(self._settings.sharktopoda_host.value)
         self.sharktopoda_host_edit.textChanged.connect(self.settingsChanged.emit)
-        SETTINGS.sharktopoda_host.valueChanged.connect(
+        self._settings.sharktopoda_host.valueChanged.connect(
             self.sharktopoda_host_edit.setText
         )
 
@@ -34,12 +42,12 @@ class VideoPlayerTab(AbstractSettingsTab):
         self.sharktopoda_outgoing_port_edit.setMinimum(0)
         self.sharktopoda_outgoing_port_edit.setMaximum(65535)
         self.sharktopoda_outgoing_port_edit.setValue(
-            SETTINGS.sharktopoda_outgoing_port.value
+            self._settings.sharktopoda_outgoing_port.value
         )
         self.sharktopoda_outgoing_port_edit.valueChanged.connect(
             self.settingsChanged.emit
         )
-        SETTINGS.sharktopoda_outgoing_port.valueChanged.connect(
+        self._settings.sharktopoda_outgoing_port.valueChanged.connect(
             self.sharktopoda_outgoing_port_edit.setValue
         )
 
@@ -47,12 +55,12 @@ class VideoPlayerTab(AbstractSettingsTab):
         self.sharktopoda_incoming_port_edit.setMinimum(0)
         self.sharktopoda_incoming_port_edit.setMaximum(65535)
         self.sharktopoda_incoming_port_edit.setValue(
-            SETTINGS.sharktopoda_incoming_port.value
+            self._settings.sharktopoda_incoming_port.value
         )
         self.sharktopoda_incoming_port_edit.valueChanged.connect(
             self.settingsChanged.emit
         )
-        SETTINGS.sharktopoda_incoming_port.valueChanged.connect(
+        self._settings.sharktopoda_incoming_port.valueChanged.connect(
             self.sharktopoda_incoming_port_edit.setValue
         )
 
@@ -88,23 +96,23 @@ class VideoPlayerTab(AbstractSettingsTab):
     def refresh_from_settings(self) -> None:
         prev_auto = self.sharktopoda_autoconnect_checkbox.blockSignals(True)
         self.sharktopoda_autoconnect_checkbox.setChecked(
-            SETTINGS.sharktopoda_autoconnect.value
+            self._settings.sharktopoda_autoconnect.value
         )
         self.sharktopoda_autoconnect_checkbox.blockSignals(prev_auto)
 
         prev_host = self.sharktopoda_host_edit.blockSignals(True)
-        self.sharktopoda_host_edit.setText(SETTINGS.sharktopoda_host.value)
+        self.sharktopoda_host_edit.setText(self._settings.sharktopoda_host.value)
         self.sharktopoda_host_edit.blockSignals(prev_host)
 
         prev_out = self.sharktopoda_outgoing_port_edit.blockSignals(True)
         self.sharktopoda_outgoing_port_edit.setValue(
-            SETTINGS.sharktopoda_outgoing_port.value
+            self._settings.sharktopoda_outgoing_port.value
         )
         self.sharktopoda_outgoing_port_edit.blockSignals(prev_out)
 
         prev_in = self.sharktopoda_incoming_port_edit.blockSignals(True)
         self.sharktopoda_incoming_port_edit.setValue(
-            SETTINGS.sharktopoda_incoming_port.value
+            self._settings.sharktopoda_incoming_port.value
         )
         self.sharktopoda_incoming_port_edit.blockSignals(prev_in)
 
@@ -131,19 +139,19 @@ class VideoPlayerTab(AbstractSettingsTab):
     def apply_settings(self) -> set[str]:
         changed: set[str] = set()
 
-        if SETTINGS.sharktopoda_host.set_value(self.sharktopoda_host_edit.text()):
-            changed.add(SETTINGS.sharktopoda_host.key)
-        if SETTINGS.sharktopoda_outgoing_port.set_value(
+        if self._settings.sharktopoda_host.set_value(self.sharktopoda_host_edit.text()):
+            changed.add(self._settings.sharktopoda_host.key)
+        if self._settings.sharktopoda_outgoing_port.set_value(
             self.sharktopoda_outgoing_port_edit.value()
         ):
-            changed.add(SETTINGS.sharktopoda_outgoing_port.key)
-        if SETTINGS.sharktopoda_incoming_port.set_value(
+            changed.add(self._settings.sharktopoda_outgoing_port.key)
+        if self._settings.sharktopoda_incoming_port.set_value(
             self.sharktopoda_incoming_port_edit.value()
         ):
-            changed.add(SETTINGS.sharktopoda_incoming_port.key)
-        if SETTINGS.sharktopoda_autoconnect.set_value(
+            changed.add(self._settings.sharktopoda_incoming_port.key)
+        if self._settings.sharktopoda_autoconnect.set_value(
             self.sharktopoda_autoconnect_checkbox.isChecked()
         ):
-            changed.add(SETTINGS.sharktopoda_autoconnect.key)
+            changed.add(self._settings.sharktopoda_autoconnect.key)
 
         return changed

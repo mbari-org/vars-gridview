@@ -95,6 +95,7 @@ class BoundingBox(pg.RectROI):
 
         self._menu = QtWidgets.QMenu()
         self._setup_menu()
+        self._missing_dims_notified = False
 
         self.setAcceptedMouseButtons(QtCore.Qt.MouseButton.LeftButton)
 
@@ -183,12 +184,22 @@ class BoundingBox(pg.RectROI):
         image_width = self.rect_widget.image_width
         image_height = self.rect_widget.image_height
         if image_width is None or image_height is None:
-            QtWidgets.QMessageBox.critical(
-                self,
-                "Could not get image size",
-                "Could not load the image for the annotation, so bounding box validity cannot be assessed.",
+            if not self._missing_dims_notified:
+                self._missing_dims_notified = True
+                self.image_mosaic.stats_changed.emit(
+                    {
+                        "Status": (
+                            "Waiting for source image dimensions; "
+                            "bounds check deferred"
+                        )
+                    }
+                )
+            LOGGER.debug(
+                "Skipping bounds check for %s because source dimensions are unavailable",
+                self.association.uuid,
             )
             return
+        self._missing_dims_notified = False
 
         min_x = 0
         max_x = image_width - w

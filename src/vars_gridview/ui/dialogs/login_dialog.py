@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.config.constants import get_settings
+from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.ui.style import UiDimensions
 
 
@@ -22,18 +23,20 @@ class LoginDialog(QtWidgets.QDialog):
             self,
             parent: QtWidgets.QWidget | None = None,
             completer: QtWidgets.QCompleter | None = None,
+            settings: AppSettings | None = None,
         ) -> None:
             super().__init__(parent)
+            self._settings = settings or get_settings()
 
             self._username_line_edit = QtWidgets.QLineEdit()
-            self._username_line_edit.setText(SETTINGS.username.value)
+            self._username_line_edit.setText(self._settings.username.value)
             if completer is not None:
                 self._username_line_edit.setCompleter(completer)
 
             self._password_line_edit = QtWidgets.QLineEdit()
             self._password_line_edit.setEchoMode(QtWidgets.QLineEdit.EchoMode.Password)
 
-            raziel_url = SETTINGS.raz_url.value
+            raziel_url = self._settings.raz_url.value
             self._raziel_url_line_edit = QtWidgets.QLineEdit()
             self._raziel_url_line_edit.setText(raziel_url)
             self._raziel_url_line_edit.setPlaceholderText(raziel_url)
@@ -71,7 +74,7 @@ class LoginDialog(QtWidgets.QDialog):
 
         @QtCore.pyqtSlot(str)
         def _update_raziel_url_setting(self, text):
-            SETTINGS.raz_url.value = text
+            self._settings.raz_url.value = text
 
         @property
         def credentials(self) -> tuple[str, str]:
@@ -91,6 +94,7 @@ class LoginDialog(QtWidgets.QDialog):
         self,
         parent: QtWidgets.QWidget | None = None,
         completer: QtWidgets.QCompleter | None = None,
+        settings: AppSettings | None = None,
     ) -> None:
         super().__init__(parent)
 
@@ -98,7 +102,7 @@ class LoginDialog(QtWidgets.QDialog):
 
         self.setMinimumWidth(UiDimensions.DIALOG_MIN_WIDTH)
 
-        self._login_form = LoginDialog.LoginForm(self, completer)
+        self._login_form = LoginDialog.LoginForm(self, completer, settings=settings)
 
         self._dialog_buttons = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Ok

@@ -1,6 +1,7 @@
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.config.constants import get_settings
+from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.vision.embedding import HttpEmbedding
 from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
@@ -11,23 +12,26 @@ class EmbeddingsTab(AbstractSettingsTab):
     Embeddings tab.
     """
 
-    def __init__(self, parent=None):
+    def __init__(self, settings: AppSettings | None = None, parent=None):
         super().__init__("Embeddings", parent=parent)
+        self._settings = settings or get_settings()
 
         self._embeddings_enabled_toggle = QtWidgets.QCheckBox()
-        self._embeddings_enabled_toggle.setChecked(SETTINGS.embeddings_enabled.value)
+        self._embeddings_enabled_toggle.setChecked(
+            self._settings.embeddings_enabled.value
+        )
         self._embeddings_enabled_toggle.stateChanged.connect(self.settingsChanged.emit)
-        SETTINGS.embeddings_enabled.valueChanged.connect(
+        self._settings.embeddings_enabled.valueChanged.connect(
             self._embeddings_enabled_toggle.setChecked
         )
 
         self._service_url_edit = QtWidgets.QLineEdit()
-        self._service_url_edit.setText(SETTINGS.embedding_service_url.value)
+        self._service_url_edit.setText(self._settings.embedding_service_url.value)
         self._service_url_edit.setPlaceholderText(
             "http://donnager.shore.mbari.org:5000/"
         )
         self._service_url_edit.textChanged.connect(self.settingsChanged.emit)
-        SETTINGS.embedding_service_url.valueChanged.connect(
+        self._settings.embedding_service_url.valueChanged.connect(
             self._service_url_edit.setText
         )
         self._service_url_edit.editingFinished.connect(self._refresh_image_models_async)
@@ -39,8 +43,8 @@ class EmbeddingsTab(AbstractSettingsTab):
         )
         self._model_name_combo.lineEdit().setPlaceholderText("dinov3_image")
         self._model_name_combo.lineEdit().textChanged.connect(self.settingsChanged.emit)
-        SETTINGS.embedding_model_name.valueChanged.connect(self._set_model_name)
-        self._set_model_name(SETTINGS.embedding_model_name.value)
+        self._settings.embedding_model_name.valueChanged.connect(self._set_model_name)
+        self._set_model_name(self._settings.embedding_model_name.value)
 
         self._refresh_models_button = QtWidgets.QPushButton("Refresh")
         self._refresh_models_button.clicked.connect(self._refresh_image_models_async)
@@ -69,33 +73,35 @@ class EmbeddingsTab(AbstractSettingsTab):
     def apply_settings(self):
         changed: set[str] = set()
 
-        if SETTINGS.embeddings_enabled.set_value(
+        if self._settings.embeddings_enabled.set_value(
             self._embeddings_enabled_toggle.isChecked()
         ):
-            changed.add(SETTINGS.embeddings_enabled.key)
+            changed.add(self._settings.embeddings_enabled.key)
 
-        if SETTINGS.embedding_service_url.set_value(
+        if self._settings.embedding_service_url.set_value(
             self._service_url_edit.text().strip()
         ):
-            changed.add(SETTINGS.embedding_service_url.key)
+            changed.add(self._settings.embedding_service_url.key)
 
-        if SETTINGS.embedding_model_name.set_value(
+        if self._settings.embedding_model_name.set_value(
             self._model_name_combo.currentText().strip()
         ):
-            changed.add(SETTINGS.embedding_model_name.key)
+            changed.add(self._settings.embedding_model_name.key)
 
         return changed
 
     def refresh_from_settings(self) -> None:
         prev_enabled = self._embeddings_enabled_toggle.blockSignals(True)
-        self._embeddings_enabled_toggle.setChecked(SETTINGS.embeddings_enabled.value)
+        self._embeddings_enabled_toggle.setChecked(
+            self._settings.embeddings_enabled.value
+        )
         self._embeddings_enabled_toggle.blockSignals(prev_enabled)
 
         prev_url = self._service_url_edit.blockSignals(True)
-        self._service_url_edit.setText(SETTINGS.embedding_service_url.value)
+        self._service_url_edit.setText(self._settings.embedding_service_url.value)
         self._service_url_edit.blockSignals(prev_url)
 
-        self._set_model_name(SETTINGS.embedding_model_name.value)
+        self._set_model_name(self._settings.embedding_model_name.value)
 
     def _set_model_name(self, model_name: str) -> None:
         self._model_name_combo.setCurrentText(model_name)

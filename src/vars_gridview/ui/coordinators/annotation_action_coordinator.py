@@ -6,7 +6,8 @@ from typing import Callable, TYPE_CHECKING
 
 from PyQt6 import QtWidgets
 
-from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.config.constants import get_settings
+from vars_gridview.lib.config.settings import AppSettings
 
 if TYPE_CHECKING:
     from vars_gridview.controllers.annotation_controller import AnnotationController
@@ -24,11 +25,13 @@ class AnnotationActionCoordinator:
         image_mosaic: ImageMosaic,
         annotation_controller_getter: Callable[[], AnnotationController | None],
         kb_service_getter: Callable[[], KnowledgeBaseService | None],
+        settings: AppSettings | None = None,
     ) -> None:
         self._parent = parent
         self._image_mosaic = image_mosaic
         self._annotation_controller_getter = annotation_controller_getter
         self._kb_service_getter = kb_service_getter
+        self._settings = settings or get_settings()
         self._pending_action: str | None = None
         self._pending_deleted_rects: list[RectWidget] = []
 
@@ -161,7 +164,7 @@ class AnnotationActionCoordinator:
                 associations,
                 concept,
                 part,
-                SETTINGS.username.value,
+                self._settings.username.value,
             ),
         )
 
@@ -184,7 +187,7 @@ class AnnotationActionCoordinator:
             run_action=lambda associations: controller.verify_selected(
                 associations,
                 state,
-                SETTINGS.username.value,
+                self._settings.username.value,
             ),
         )
 
@@ -207,7 +210,7 @@ class AnnotationActionCoordinator:
             run_action=lambda associations: controller.mark_training_selected(
                 associations,
                 state,
-                SETTINGS.username.value,
+                self._settings.username.value,
             ),
         )
 
@@ -269,7 +272,7 @@ class AnnotationActionCoordinator:
             [rect_widget.association],
             concept,
             rect_widget.association.part,
-            SETTINGS.username.value,
+            self._settings.username.value,
         )
         return concept
 
@@ -312,7 +315,7 @@ class AnnotationActionCoordinator:
             [rect_widget.association],
             rect_widget.association.concept,
             part,
-            SETTINGS.username.value,
+            self._settings.username.value,
         )
         return part
 
@@ -347,7 +350,7 @@ class AnnotationActionCoordinator:
             [rect_widget.association],
             concept,
             part,
-            SETTINGS.username.value,
+            self._settings.username.value,
         )
 
     def verify_single_from_tile(self, rect_widget: RectWidget) -> None:
@@ -361,7 +364,7 @@ class AnnotationActionCoordinator:
         controller.verify_selected(
             [rect_widget.association],
             True,
-            SETTINGS.username.value,
+            self._settings.username.value,
         )
 
     def mark_training_single_from_tile(self, rect_widget: RectWidget) -> None:
@@ -375,5 +378,5 @@ class AnnotationActionCoordinator:
         controller.mark_training_selected(
             [rect_widget.association],
             True,
-            SETTINGS.username.value,
+            self._settings.username.value,
         )

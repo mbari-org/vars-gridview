@@ -92,7 +92,11 @@ class DetailPaneCoordinator(QtCore.QObject):
         image = rect.get_image()
         if image is None:
             LOGGER.error(f"Could not load detail image from {rect.source_url}")
-            return generation, needs_autorange, None
+            return (
+                generation,
+                needs_autorange,
+                DetailPaneCoordinator._placeholder_image(),
+            )
 
         if not is_image and (scale_x != 1.0 or scale_y != 1.0):
             image = cv2.resize(
@@ -104,10 +108,30 @@ class DetailPaneCoordinator(QtCore.QObject):
             )
 
         if image is None:
-            return generation, needs_autorange, None
+            return (
+                generation,
+                needs_autorange,
+                DetailPaneCoordinator._placeholder_image(),
+            )
 
         rect_full_image = np.ascontiguousarray(np.rot90(image, 3, (0, 1)))
         return generation, needs_autorange, rect_full_image
+
+    @staticmethod
+    def _placeholder_image() -> np.ndarray:
+        """Return a visible fallback image for detail-pane load failures."""
+        placeholder = np.zeros((720, 1280, 3), dtype=np.uint8)
+        cv2.putText(
+            placeholder,
+            "Image unavailable",
+            (40, 120),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            2.0,
+            (220, 220, 220),
+            3,
+            cv2.LINE_AA,
+        )
+        return placeholder
 
     @QtCore.pyqtSlot(object)
     def _on_detail_worker_result(self, payload) -> None:
@@ -129,8 +153,11 @@ class DetailPaneCoordinator(QtCore.QObject):
             return
         if self._selected_rect_getter() is not rect:
             return
-        if rect_full_image is None:
-            return
+        # rect_full_image is rotated for display, so width/height are swapped
+        # relative to source image coordinates.
+        rect.set_source_image_dimensions(
+            rect_full_image.shape[0], rect_full_image.shape[1]
+        )
 
         box_handler = self._box_handler_getter()
         if box_handler is None:
