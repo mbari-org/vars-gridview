@@ -22,12 +22,12 @@ from uuid import UUID
 
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
 
-from vars_gridview.lib.runnables import Worker
+from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.services.annotation_service import AnnotationService
 from vars_gridview.services.knowledge_base_service import KnowledgeBaseService
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.association import BoundingBoxAssociation
+    from vars_gridview.lib.annotation.association import BoundingBoxAssociation
 
 _LOG = logging.getLogger(__name__)
 

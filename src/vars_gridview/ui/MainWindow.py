@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, List, Optional, Tuple, cast
 from PyQt6 import QtCore, QtGui, QtWidgets
 from sharktopoda_client.client import SharktopodaClient
 
-from vars_gridview.lib.constants import (
+from vars_gridview.lib.config.constants import (
     SETTINGS,
     APP_NAME,
     APP_VERSION,
@@ -14,38 +14,39 @@ from vars_gridview.lib.constants import (
     LOG_DIR,
     STYLE_DIR,
 )
-from vars_gridview.lib.box_handler import BoxHandler
-from vars_gridview.ui.ImageMosaic import ImageMosaic
-from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
+from vars_gridview.lib.annotation.box_handler import BoxHandler
+from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
+from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.m3.query import QueryConstraint
-from vars_gridview.lib.sort_methods import RecordedTimestampSort
-from vars_gridview.lib.utils import open_file_browser
+from vars_gridview.lib.sorting.sort_methods import RecordedTimestampSort
+from vars_gridview.lib.common.filesystem import open_file_browser
 from vars_gridview.controllers.annotation_controller import AnnotationController
 from vars_gridview.controllers.query_controller import QueryController
 from vars_gridview.controllers.session_controller import SessionController
-from vars_gridview.lib.runnables import Worker
-from vars_gridview.ui.RectWidget import RectWidget
-from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
-from vars_gridview.ui.LoginDialog import LoginDialog
-from vars_gridview.ui.QueryDialog import QueryDialog
-from vars_gridview.ui.refactor.AnnotationActionCoordinator import (
+from vars_gridview.lib.runtime.runnables import Worker
+from vars_gridview.ui.mosaic.rect_widget import RectWidget
+from vars_gridview.ui.dialogs.confirmation_dialog import ConfirmationDialog
+from vars_gridview.ui.dialogs.login_dialog import LoginDialog
+from vars_gridview.ui.dialogs.query_dialog import QueryDialog
+from vars_gridview.ui.coordinators.annotation_action_coordinator import (
     AnnotationActionCoordinator,
 )
-from vars_gridview.ui.refactor.MainWindowLayout import MainWindowLayout
-from vars_gridview.ui.refactor.MainWindowMenuCoordinator import (
+from vars_gridview.ui.layout.main_window_layout import MainWindowLayout
+from vars_gridview.ui.coordinators.main_window_menu_coordinator import (
     MainWindowMenuCoordinator,
 )
-from vars_gridview.ui.refactor.AnnotationOperationPresenter import (
+from vars_gridview.ui.coordinators.annotation_operation_presenter import (
     AnnotationOperationPresenter,
 )
-from vars_gridview.ui.refactor.DetailPaneCoordinator import DetailPaneCoordinator
-from vars_gridview.ui.refactor.VideoNavigationCoordinator import (
+from vars_gridview.ui.coordinators.detail_pane_coordinator import (
+    DetailPaneCoordinator,
+)
+from vars_gridview.ui.coordinators.video_navigation_coordinator import (
     VideoNavigationCoordinator,
 )
 from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
-from vars_gridview.ui.SortDialog import SortDialog
-from vars_gridview.ui.StatusInfoWidget import StatusInfoWidget
+from vars_gridview.ui.dialogs.sort_dialog import SortDialog
+from vars_gridview.ui.widgets.status_info_widget import StatusInfoWidget
 from vars_gridview.ui.settings.tabs.AppearanceTab import AppearanceTab
 from vars_gridview.ui.settings.tabs.CacheTab import CacheTab
 from vars_gridview.ui.settings.tabs.EmbeddingsTab import EmbeddingsTab
@@ -58,7 +59,7 @@ from vars_gridview.ui.style import (
 )
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.embedding import Embedding
+    from vars_gridview.lib.vision.embedding import Embedding
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -137,6 +138,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self.rect_clicked,
             dialog_parent=self,
             embedding_model=self._embedding_model,
+            concept_provider=lambda: list(self._kb_service.get_concepts().keys())
+            if self._kb_service is not None
+            else [],
+            part_provider=lambda: list(self._kb_service.get_parts())
+            if self._kb_service is not None
+            else [],
             label_action_callback=self._label_single_from_tile,
             verify_action_callback=self._verify_single_from_tile,
             mark_training_action_callback=self._mark_training_single_from_tile,
@@ -332,11 +339,24 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_session_logged_in(self, _context: object) -> None:
         self._kb_service = self._session_controller.knowledge_base
         self._annotation_service = self._session_controller.annotations
+        context = self._session_controller.context
 
-        if self._kb_service is None or self._annotation_service is None:
+        if (
+            self._kb_service is None
+            or self._annotation_service is None
+            or context is None
+        ):
             self._login_success = False
             self._login_error = "Session initialized without required services"
         else:
+            self._query_controller.set_annosaurus_client(context.annosaurus)
+            if self._session_controller.roi is None:
+                raise RuntimeError("Session initialized without ROI service")
+            self.image_mosaic.configure_services(
+                annosaurus_client=context.annosaurus,
+                vampire_squid_client=context.vampire_squid,
+                roi_service=self._session_controller.roi,
+            )
             self._annotation_controller = AnnotationController(
                 annotation_service=self._annotation_service,
                 knowledge_base_service=self._kb_service,
@@ -597,10 +617,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.image_mosaic.render_mosaic()
 
         try:
-            if self._kb_service is not None:
-                kb_concepts = list(self._kb_service.get_concepts().keys())
-            else:
-                kb_concepts = list(get_kb_concepts())
+            if self._kb_service is None:
+                raise RuntimeError("Knowledge base service is unavailable")
+            kb_concepts = list(self._kb_service.get_concepts().keys())
         except Exception as e:
             LOGGER.error(f"Could not get KB concepts: {e}")
             return
@@ -738,12 +757,10 @@ class MainWindow(QtWidgets.QMainWindow):
         pool.start(worker)
 
     def _fetch_label_box_items(self) -> tuple[list[str], list[str]]:
-        if self._kb_service is not None:
-            kb_concepts = list(self._kb_service.get_concepts().keys())
-            kb_parts = list(self._kb_service.get_parts())
-        else:
-            kb_concepts = list(get_kb_concepts().keys())
-            kb_parts = list(get_kb_parts())
+        if self._kb_service is None:
+            raise RuntimeError("Knowledge base service is unavailable")
+        kb_concepts = list(self._kb_service.get_concepts().keys())
+        kb_parts = list(self._kb_service.get_parts())
         return kb_concepts, kb_parts
 
     @QtCore.pyqtSlot(object)
@@ -789,9 +806,6 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._kb_service is not None:
             self._kb_service.get_concepts()
             self._kb_service.get_parts()
-        # Warm legacy operation caches used by dialogs that still call module wrappers.
-        get_kb_concepts()
-        get_kb_parts()
 
     def _restore_gui(self):
         """
@@ -954,7 +968,6 @@ class MainWindow(QtWidgets.QMainWindow):
             if self._loaded_embedding_config == current_config:
                 if self.image_mosaic is not None:
                     self.image_mosaic.update_embedding_model(self._embedding_model)
-                    self.image_mosaic.precompute_embeddings_async()
                 return
 
             # Config changed: force reinitialization of the embedding client.
@@ -995,7 +1008,7 @@ class MainWindow(QtWidgets.QMainWindow):
         pool.start(worker)
 
     def _create_embedding_model_worker(self):
-        from vars_gridview.lib.embedding import HttpEmbedding
+        from vars_gridview.lib.vision.embedding import HttpEmbedding
 
         model = HttpEmbedding(
             base_url=SETTINGS.embedding_service_url.value,
@@ -1117,11 +1130,13 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self.image_mosaic.select(rect, clear=not ctrl)
 
-    def _clear_last_detail_selection(self) -> None:
+    def _clear_last_detail_selection(
+        self, *, clear_detail_overlays: bool = True
+    ) -> None:
         """Remove highlight and detail overlays from the prior selected tile."""
         if self.last_selected_rect is None:
             return
-        if self.box_handler is not None:
+        if clear_detail_overlays and self.box_handler is not None:
             self.box_handler.clear()
         self.last_selected_rect.is_last_selected = False
         self.last_selected_rect.update()
@@ -1164,17 +1179,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
         ctrl, shift = self._selection_modifiers(event)
 
+        previous_rect = self.last_selected_rect
+        same_image = False
+        if previous_rect is not None:
+            same_image = self._detail_pane.rect_source_key(
+                rect
+            ) == self._detail_pane.rect_source_key(previous_rect)
+
         self._update_mosaic_selection(rect, ctrl, shift)
-        self._clear_last_detail_selection()
+        self._clear_last_detail_selection(clear_detail_overlays=not same_image)
 
         image_view_minimized = self._detail_view_minimized()
 
-        # Check if new rect source is different than last selected source
-        same_image = False
-        if self.last_selected_rect is not None:
-            same_image = self._detail_pane.rect_source_key(
-                rect
-            ) == self._detail_pane.rect_source_key(self.last_selected_rect)
         needs_autorange = not (same_image or image_view_minimized)
 
         # Update the last selection
@@ -1184,7 +1200,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Update the image and add the boxes asynchronously (only if the detail view isn't minimized)
         if not image_view_minimized:
-            self._detail_pane.show_rect_in_detail_async(rect, needs_autorange)
+            reused_overlays = False
+            if same_image:
+                reused_overlays = self._detail_pane.update_overlays_for_same_source(
+                    rect
+                )
+
+            if not reused_overlays:
+                if same_image and self.box_handler is not None:
+                    # Reuse failed (e.g. box count changed); force a clean redraw.
+                    self.box_handler.clear()
+                self._detail_pane.show_rect_in_detail_async(rect, needs_autorange)
 
         self._populate_detail_metadata(rect)
 
@@ -1289,6 +1315,20 @@ class MainWindow(QtWidgets.QMainWindow):
         Returns:
             Optional[Tuple[List[QueryConstraint], int, int]]: A tuple containing the constraints list, limit, and offset. None if the dialog was cancelled.
         """
-        dialog = QueryDialog(parent=self)
+        if self._kb_service is None or self._session_controller.context is None:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Not Ready",
+                "Knowledge base and user services are not initialized.",
+            )
+            return None
+
+        dialog = QueryDialog(
+            parent=self,
+            kb_concepts_getter=lambda: list(self._kb_service.get_concepts().keys()),
+            kb_descendants_getter=self._kb_service.get_descendants,
+            users_getter=lambda: self._session_controller.context.vars_user_server.get_all_users().json(),
+            video_sequence_names_getter=self._kb_service.get_video_sequence_names,
+        )
         ok = dialog.exec()
         return (dialog.constraints, dialog.limit, dialog.offset) if ok else None

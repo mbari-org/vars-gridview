@@ -1,4 +1,4 @@
-from vars_gridview.ui.ImageMosaic import Row
+from vars_gridview.ui.mosaic.image_mosaic import Row
 
 
 def test_row_parse_representative_tsv_data():

@@ -7,15 +7,13 @@ from typing import Callable, Optional, TYPE_CHECKING
 import cv2
 import numpy as np
 from PyQt6 import QtCore
-from requests import HTTPError
 
-from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.runnables import Worker
-from vars_gridview.lib.utils import fetch_image
+from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.lib.runtime.runnables import Worker
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.box_handler import BoxHandler
-    from vars_gridview.ui.RectWidget import RectWidget
+    from vars_gridview.lib.annotation.box_handler import BoxHandler
+    from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
 class DetailPaneCoordinator(QtCore.QObject):
@@ -53,11 +51,10 @@ class DetailPaneCoordinator(QtCore.QObject):
 
         worker = Worker(
             self._load_detail_image_worker,
+            rect,
             generation,
             needs_autorange,
-            rect.source_url,
             rect.is_image,
-            rect.elapsed_time_millis,
             rect.scale_x,
             rect.scale_y,
         )
@@ -76,27 +73,25 @@ class DetailPaneCoordinator(QtCore.QObject):
             return
         pool.start(worker)
 
+    def update_overlays_for_same_source(self, rect: RectWidget) -> bool:
+        """Update detail overlays for a same-source selection without image reload."""
+        box_handler = self._box_handler_getter()
+        if box_handler is None:
+            return False
+        return box_handler.retarget_annotations_for_same_source(rect)
+
     @staticmethod
     def _load_detail_image_worker(
+        rect: RectWidget,
         generation: int,
         needs_autorange: bool,
-        source_url: str,
         is_image: bool,
-        elapsed_time_millis: int | None,
         scale_x: float,
         scale_y: float,
     ):
-        try:
-            image = fetch_image(
-                source_url, elapsed_time_millis if not is_image else None
-            )
-        except HTTPError as exc:
-            LOGGER.error(f"Could not load detail image from {source_url}: {exc}")
-            return generation, needs_autorange, None
-        except Exception as exc:
-            LOGGER.error(
-                f"Unexpected error loading detail image from {source_url}: {exc}"
-            )
+        image = rect.get_image()
+        if image is None:
+            LOGGER.error(f"Could not load detail image from {rect.source_url}")
             return generation, needs_autorange, None
 
         if not is_image and (scale_x != 1.0 or scale_y != 1.0):

@@ -21,13 +21,14 @@ from uuid import UUID
 import pyqtgraph as pg
 from iso8601 import parse_date
 
-from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.m3 import operations
-from vars_gridview.lib.utils import get_timestamp
-from vars_gridview.ui.RectWidget import RectWidget
+from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.lib.common.time import get_timestamp
+from vars_gridview.lib.m3.clients import AnnosaurusClient, VampireSquidClient
+from vars_gridview.services.roi_service import RoiService
+from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.embedding import Embedding
+    from vars_gridview.lib.vision.embedding import Embedding
 
 
 @dataclass
@@ -46,6 +47,7 @@ class RoiLoader:
     def fetch_video_sequence_data(
         self,
         *,
+        vampire_squid_client: VampireSquidClient,
         moment_video_data: dict[UUID, dict],
         video_sequences_by_name: dict[str, dict | None],
     ) -> None:
@@ -64,7 +66,9 @@ class RoiLoader:
             ThreadPoolExecutor(max_workers=10) as executor,
         ):
             vs_futures = {
-                executor.submit(operations.get_video_sequence_by_name, name): name
+                executor.submit(
+                    vampire_squid_client.get_video_sequence_by_name, name
+                ): name
                 for name in video_sequence_names
             }
 
@@ -77,7 +81,9 @@ class RoiLoader:
 
                 sequence_name = vs_futures[vs_future]
                 try:
-                    video_sequence_data = vs_future.result()
+                    response = vs_future.result()
+                    response.raise_for_status()
+                    video_sequence_data = response.json()
                 except Exception as exc:  # noqa: BLE001
                     LOGGER.error(
                         f"Failed to get video sequence data for {sequence_name}: {exc}"
@@ -180,6 +186,8 @@ class RoiLoader:
     def create_rect_widgets(
         self,
         *,
+        annosaurus_client: AnnosaurusClient,
+        roi_service: RoiService | None,
         association_groups: dict[tuple[UUID, UUID | None], list],
         moment_video_data: dict[UUID, dict],
         moment_proxy_data: dict[UUID, dict | None],
@@ -213,6 +221,7 @@ class RoiLoader:
         ):
             for group_key, associations in association_groups.items():
                 group_context = self._build_group_context(
+                    annosaurus_client=annosaurus_client,
                     group_key=group_key,
                     moment_video_data=moment_video_data,
                     moment_proxy_data=moment_proxy_data,
@@ -250,6 +259,7 @@ class RoiLoader:
                             rect_mark_training_slot,
                             text_label=association.text_label,
                             embedding_model=embedding_model,
+                            roi_service=roi_service,
                             scale_x=group_context["scale_x"],
                             scale_y=group_context["scale_y"],
                             video_url=group_context["video_url"],
@@ -273,6 +283,7 @@ class RoiLoader:
     def _build_group_context(
         self,
         *,
+        annosaurus_client: AnnosaurusClient,
         group_key: tuple[UUID, UUID | None],
         moment_video_data: dict[UUID, dict],
         moment_proxy_data: dict[UUID, dict | None],
@@ -356,9 +367,11 @@ class RoiLoader:
             url = image_reference_urls.get(image_reference_uuid, None)
             if url is None:
                 try:
-                    image_reference = operations.get_image_reference(
+                    response = annosaurus_client.get_image_reference(
                         str(image_reference_uuid)
                     )
+                    response.raise_for_status()
+                    image_reference = response.json()
                 except Exception as exc:  # noqa: BLE001
                     LOGGER.error(
                         f"Error getting image reference {image_reference_uuid}: {exc}"

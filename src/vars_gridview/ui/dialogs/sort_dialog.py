@@ -1,6 +1,6 @@
 """Sort dialog for the image mosaic.
 
-Provides a reorderable list of :class:`~vars_gridview.lib.sort_methods.SortMethod`
+Provides a reorderable list of :class:`~vars_gridview.lib.sorting.sort_methods.SortMethod`
 criteria.  The user can add, remove, and drag-to-reorder methods; accepting the
 dialog exposes the resulting composite sort as :attr:`SortDialog.method`.
 """
@@ -20,11 +20,11 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-import vars_gridview.lib.sort_methods as sm
+import vars_gridview.lib.sorting.sort_methods as sm
 
 
 class SortDialogItem(QListWidgetItem):
-    """List item that carries a :class:`~vars_gridview.lib.sort_methods.SortMethod` reference."""
+    """List item that carries a :class:`~vars_gridview.lib.sorting.sort_methods.SortMethod` reference."""
 
     def __init__(self, method: type[sm.SortMethod], *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)

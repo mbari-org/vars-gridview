@@ -8,12 +8,12 @@ import numpy as np
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from vars_gridview.lib.association import BoundingBoxAssociation
-from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.annotation.association import BoundingBoxAssociation
+from vars_gridview.lib.runtime.log import LOGGER
 
 if TYPE_CHECKING:
-    from vars_gridview.ui.ImageMosaic import ImageMosaic
-    from vars_gridview.ui.RectWidget import RectWidget
+    from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
+    from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
 class BoundingBox(pg.RectROI):
@@ -51,10 +51,10 @@ class BoundingBox(pg.RectROI):
             view: The pyqtgraph ``ViewBox`` to which the box is added.
             pos: ``(x, y)`` position of the box origin.
             size: ``(width, height)`` of the box.
-            rect_widget: The :class:`~vars_gridview.ui.RectWidget.RectWidget`
+            rect_widget: The :class:`~vars_gridview.ui.mosaic.rect_widget.RectWidget`
                 backing this box in the mosaic.
-            association: Underlying :class:`~vars_gridview.lib.association.BoundingBoxAssociation`.
-            image_mosaic: The controlling :class:`~vars_gridview.ui.ImageMosaic.ImageMosaic`.
+            association: Underlying :class:`~vars_gridview.lib.annotation.association.BoundingBoxAssociation`.
+            image_mosaic: The controlling :class:`~vars_gridview.ui.mosaic.image_mosaic.ImageMosaic`.
             change_concept_callback: Optional callback for concept changes.
             change_part_callback: Optional callback for part changes.
             delete_callback: Optional callback for deletion.

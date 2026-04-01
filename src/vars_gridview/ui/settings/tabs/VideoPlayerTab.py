@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets
 
-from vars_gridview.lib.constants import SETTINGS
+from vars_gridview.lib.config.constants import SETTINGS
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
 
@@ -85,6 +85,29 @@ class VideoPlayerTab(AbstractSettingsTab):
 
         self.arrange()
 
+    def refresh_from_settings(self) -> None:
+        prev_auto = self.sharktopoda_autoconnect_checkbox.blockSignals(True)
+        self.sharktopoda_autoconnect_checkbox.setChecked(
+            SETTINGS.sharktopoda_autoconnect.value
+        )
+        self.sharktopoda_autoconnect_checkbox.blockSignals(prev_auto)
+
+        prev_host = self.sharktopoda_host_edit.blockSignals(True)
+        self.sharktopoda_host_edit.setText(SETTINGS.sharktopoda_host.value)
+        self.sharktopoda_host_edit.blockSignals(prev_host)
+
+        prev_out = self.sharktopoda_outgoing_port_edit.blockSignals(True)
+        self.sharktopoda_outgoing_port_edit.setValue(
+            SETTINGS.sharktopoda_outgoing_port.value
+        )
+        self.sharktopoda_outgoing_port_edit.blockSignals(prev_out)
+
+        prev_in = self.sharktopoda_incoming_port_edit.blockSignals(True)
+        self.sharktopoda_incoming_port_edit.setValue(
+            SETTINGS.sharktopoda_incoming_port.value
+        )
+        self.sharktopoda_incoming_port_edit.blockSignals(prev_in)
+
     def arrange(self):
         layout = QtWidgets.QGridLayout()
 
@@ -105,14 +128,22 @@ class VideoPlayerTab(AbstractSettingsTab):
 
         self.setLayout(layout)
 
-    def apply_settings(self):
-        SETTINGS.sharktopoda_host.value = self.sharktopoda_host_edit.text()
-        SETTINGS.sharktopoda_outgoing_port.value = (
+    def apply_settings(self) -> set[str]:
+        changed: set[str] = set()
+
+        if SETTINGS.sharktopoda_host.set_value(self.sharktopoda_host_edit.text()):
+            changed.add(SETTINGS.sharktopoda_host.key)
+        if SETTINGS.sharktopoda_outgoing_port.set_value(
             self.sharktopoda_outgoing_port_edit.value()
-        )
-        SETTINGS.sharktopoda_incoming_port.value = (
+        ):
+            changed.add(SETTINGS.sharktopoda_outgoing_port.key)
+        if SETTINGS.sharktopoda_incoming_port.set_value(
             self.sharktopoda_incoming_port_edit.value()
-        )
-        SETTINGS.sharktopoda_autoconnect.value = (
+        ):
+            changed.add(SETTINGS.sharktopoda_incoming_port.key)
+        if SETTINGS.sharktopoda_autoconnect.set_value(
             self.sharktopoda_autoconnect_checkbox.isChecked()
-        )
+        ):
+            changed.add(SETTINGS.sharktopoda_autoconnect.key)
+
+        return changed

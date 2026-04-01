@@ -1,8 +1,8 @@
 """Selection model for the mosaic grid.
 
-:class:`SelectionModel` tracks which :class:`~vars_gridview.ui.RectWidget.RectWidget`
+:class:`SelectionModel` tracks which :class:`~vars_gridview.ui.mosaic.rect_widget.RectWidget`
 objects are currently selected and emits typed signals on changes, decoupling
-selection state from the :class:`~vars_gridview.ui.ImageMosaic.ImageMosaic` widget.
+selection state from the :class:`~vars_gridview.ui.mosaic.image_mosaic.ImageMosaic` widget.
 """
 
 from __future__ import annotations
@@ -12,14 +12,14 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import QObject, pyqtSignal
 
 if TYPE_CHECKING:
-    from vars_gridview.ui.RectWidget import RectWidget
+    from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
 class SelectionModel(QObject):
     """Central store for the current tile selection.
 
     Maintains an ordered list of selected
-    :class:`~vars_gridview.ui.RectWidget.RectWidget` tiles.  Emits
+    :class:`~vars_gridview.ui.mosaic.rect_widget.RectWidget` tiles.  Emits
     :attr:`selection_changed` whenever the selection is modified.
 
     Signals:

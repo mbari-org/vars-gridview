@@ -13,15 +13,16 @@ from PyQt6.QtCore import QThreadPool
 from requests import HTTPError
 from scipy.spatial.distance import cosine
 
-from vars_gridview.lib.association import BoundingBoxAssociation
-from vars_gridview.lib.constants import ICONS_DIR, SETTINGS
-from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.m3 import operations
-from vars_gridview.lib.runnables import Worker
-from vars_gridview.lib.utils import color_for_concept, fetch_image, get_timestamp
+from vars_gridview.lib.annotation.association import BoundingBoxAssociation
+from vars_gridview.lib.config.constants import ICONS_DIR, SETTINGS
+from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.lib.runtime.runnables import Worker
+from vars_gridview.lib.common.time import get_timestamp
+from vars_gridview.lib.vision.image_utils import color_for_concept
+from vars_gridview.services.roi_service import RoiService
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.embedding import Embedding
+    from vars_gridview.lib.vision.embedding import Embedding
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
@@ -48,6 +49,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         verify_slot: callable,
         mark_training_slot: callable,
         embedding_model: Embedding | None = None,
+        roi_service: RoiService | None = None,
         parent=None,
         text_label: str = "rect widget",
         scale_x: float = 1.0,
@@ -83,6 +85,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.is_selected = False
 
         self._embedding_model = embedding_model
+        self._roi_service = roi_service
 
         self.roi = None
         self.pic = None
@@ -120,10 +123,16 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def get_image(self) -> np.ndarray | None:
         """Return the full source image for this ROI, or ``None`` on error."""
+        if self._roi_service is None:
+            LOGGER.error("ROI service is not configured")
+            return None
         try:
-            image = fetch_image(
-                self.source_url, self.elapsed_time_millis if not self.is_image else None
+            image = self._roi_service.fetch_full_image(
+                self.source_url,
+                self.elapsed_time_millis if not self.is_image else None,
             )
+            if image is None:
+                return None
         except HTTPError as e:
             LOGGER.error(f"Failed to load image from {self.source_url}: {e}")
             return None
@@ -273,30 +282,15 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """
         Get the region of interest for this rect widget.
         """
-        if self.is_image:
-            # If image, get ROI directly
-            response = operations.crop(
-                self.source_url,
-                round(self.association.x),
-                round(self.association.y),
-                round(self.association.xf),
-                round(self.association.yf),
-            )
-        else:
-            # Else, get ROI from video frame (scaling according to scale factors)
-            response = operations.crop(
-                self.source_url,
-                round(self.association.x / self._scale_x),
-                round(self.association.y / self._scale_y),
-                round(self.association.xf / self._scale_x),
-                round(self.association.yf / self._scale_y),
-                ms=self.elapsed_time_millis,
-            )
-
-        # Decode the image
-        image = cv2.imdecode(
-            np.frombuffer(response.content, np.uint8), cv2.IMREAD_COLOR
+        if self._roi_service is None:
+            raise RuntimeError("ROI service is not configured")
+        image = self._roi_service.fetch_roi(
+            self.association,
+            self.source_url,
+            None if self.is_image else self.elapsed_time_millis,
         )
+        if image is None:
+            raise RuntimeError("Failed to fetch ROI image")
         return image
 
     def update_roi_pic(self):

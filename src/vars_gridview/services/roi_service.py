@@ -2,9 +2,9 @@
 
 :class:`RoiService` provides a single method, :meth:`fetch_roi`, that
 retrieves a cropped bounding-box image for a given
-:class:`~vars_gridview.lib.association.BoundingBoxAssociation`.  All network
+:class:`~vars_gridview.lib.annotation.association.BoundingBoxAssociation`.  All network
 calls happen on the calling thread; callers are expected to dispatch via
-:class:`~vars_gridview.lib.runnables.Worker` or a ``QThread`` to keep the GUI
+:class:`~vars_gridview.lib.runtime.runnables.Worker` or a ``QThread`` to keep the GUI
 responsive.
 """
 
@@ -18,7 +18,7 @@ import numpy as np
 import requests
 from beholder_client import BeholderClient
 
-from vars_gridview.lib.association import BoundingBoxAssociation
+from vars_gridview.lib.annotation.association import BoundingBoxAssociation
 from vars_gridview.lib.m3.clients import SkimmerClient
 
 _log = logging.getLogger(__name__)

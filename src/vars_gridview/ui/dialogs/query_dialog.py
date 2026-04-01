@@ -1,4 +1,4 @@
-from typing import Any, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Iterable, List, Optional, Tuple
 from uuid import UUID
 
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, pyqtSlot, QTimer
@@ -25,12 +25,6 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
-from vars_gridview.lib.m3.operations import (
-    get_kb_concepts,
-    get_kb_descendants,
-    get_users,
-    get_video_sequence_names,
-)
 from vars_gridview.lib.m3.query import QueryConstraint
 
 # BASE CLASSES
@@ -363,9 +357,13 @@ class BulkConceptFilter(BaseFilter):
     A filter that allows the user to input multiple concepts at once.
     """
 
+    def __init__(self, parent, name: str, concepts_getter: Callable[[], list[str]]):
+        super().__init__(parent, name)
+        self._concepts_getter = concepts_getter
+
     def __call__(self) -> Optional[ConceptInConstraintResult]:
         concepts, ok = BulkConceptInputDialog.get_concepts(
-            "Select Concepts", self.parent
+            "Select Concepts", self.parent, concepts_getter=self._concepts_getter
         )
         if ok and concepts:
             return ConceptInConstraintResult("Concepts", concepts, "concept")
@@ -376,13 +374,29 @@ class ConceptDescFilter(BaseFilter):
     A filter that allows the user to select a concept and includes all its descendants.
     """
 
+    def __init__(
+        self,
+        parent,
+        name: str,
+        concepts_getter: Callable[[], list[str]],
+        descendants_getter: Callable[[str], list[str]],
+    ):
+        super().__init__(parent, name)
+        self._concepts_getter = concepts_getter
+        self._descendants_getter = descendants_getter
+
     def __call__(self) -> Optional[ConceptDescInConstraintResult]:
         concept, ok = QInputDialog.getItem(
-            self.parent, "Concept", "Concept", get_kb_concepts(), 0, True
+            self.parent,
+            "Concept",
+            "Concept",
+            self._concepts_getter(),
+            0,
+            True,
         )
         if ok:
             # Look up descendants
-            descendants = get_kb_descendants(concept)
+            descendants = self._descendants_getter(concept)
 
             # Remove the concept itself if present
             if concept in descendants:
@@ -617,7 +631,11 @@ class BulkConceptInputDialog(BulkInputDialog):
     Dialog that allows the user to input multiple concepts at once.
     """
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(
+        self,
+        parent: Optional[QWidget] = None,
+        concepts_getter: Callable[[], list[str]] | None = None,
+    ) -> None:
         super().__init__(
             parent,
             placeholder_text="Enter concept",
@@ -625,7 +643,8 @@ class BulkConceptInputDialog(BulkInputDialog):
         # Cache concepts list
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            self._concepts = get_kb_concepts()
+            getter = concepts_getter or (lambda: [])
+            self._concepts = getter()
         finally:
             QApplication.restoreOverrideCursor()
 
@@ -710,9 +729,12 @@ class BulkConceptInputDialog(BulkInputDialog):
 
     @classmethod
     def get_concepts(
-        cls, title: str = "Enter Concepts", parent: Optional[QWidget] = None
+        cls,
+        title: str = "Enter Concepts",
+        parent: Optional[QWidget] = None,
+        concepts_getter: Callable[[], list[str]] | None = None,
     ) -> Tuple[List[str], bool]:
-        dialog = cls(parent)
+        dialog = cls(parent, concepts_getter=concepts_getter)
         dialog.setWindowTitle(title)
         dialog.resize(450, 300)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -775,8 +797,22 @@ class QueryDialog(QDialog):
     Main query dialog that allows the user to add filters, view the resulting constraints, and set limit/offset.
     """
 
-    def __init__(self, parent, filters: Optional[List[BaseFilter]] = None):
+    def __init__(
+        self,
+        parent,
+        filters: Optional[List[BaseFilter]] = None,
+        *,
+        kb_concepts_getter: Callable[[], list[str]] | None = None,
+        kb_descendants_getter: Callable[[str], list[str]] | None = None,
+        users_getter: Callable[[], list[dict]] | None = None,
+        video_sequence_names_getter: Callable[[], list[str]] | None = None,
+    ):
         super().__init__(parent=parent)
+
+        self._kb_concepts_getter = kb_concepts_getter or (lambda: [])
+        self._kb_descendants_getter = kb_descendants_getter or (lambda _concept: [])
+        self._users_getter = users_getter or (lambda: [])
+        self._video_sequence_names_getter = video_sequence_names_getter or (lambda: [])
 
         self.setWindowTitle("Query")
         self.setLayout(QVBoxLayout())
@@ -847,14 +883,23 @@ class QueryDialog(QDialog):
         """
         return [
             ItemSelectFilter(
-                self, "Concept", get_kb_concepts, "concept", editable=True
+                self,
+                "Concept",
+                self._kb_concepts_getter,
+                "concept",
+                editable=True,
             ),
-            BulkConceptFilter(self, "Concepts"),
-            ConceptDescFilter(self, "Concept (+ descendants)"),
+            BulkConceptFilter(self, "Concepts", self._kb_concepts_getter),
+            ConceptDescFilter(
+                self,
+                "Concept (+ descendants)",
+                self._kb_concepts_getter,
+                self._kb_descendants_getter,
+            ),
             ItemSelectFilter(
                 self,
                 "Video sequence name",
-                get_video_sequence_names,
+                self._video_sequence_names_getter,
                 "video_sequence_name",
                 editable=True,
             ),
@@ -864,7 +909,7 @@ class QueryDialog(QDialog):
             ItemSelectFilter(
                 self,
                 "Observer",
-                lambda: sorted([u["username"] for u in get_users()]),
+                lambda: sorted([u.get("username", "") for u in self._users_getter()]),
                 "observer",
                 editable=True,
             ),

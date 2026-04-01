@@ -12,7 +12,7 @@ import json
 import logging
 from uuid import UUID
 
-from vars_gridview.lib.association import BoundingBoxAssociation
+from vars_gridview.lib.annotation.association import BoundingBoxAssociation
 from vars_gridview.lib.m3.clients import AnnosaurusClient
 
 _log = logging.getLogger(__name__)

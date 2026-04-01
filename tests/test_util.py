@@ -1,7 +1,8 @@
 import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
-from vars_gridview.lib.utils import get_timestamp, open_file_browser
+from vars_gridview.lib.common.filesystem import open_file_browser
+from vars_gridview.lib.common.time import get_timestamp
 import time
 
 

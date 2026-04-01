@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib.constants import SETTINGS
+from vars_gridview.lib.config.constants import SETTINGS
 from vars_gridview.ui.style import UiDimensions
 
 

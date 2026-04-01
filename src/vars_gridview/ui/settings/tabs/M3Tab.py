@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets
 
-from vars_gridview.lib.constants import SETTINGS
+from vars_gridview.lib.config.constants import SETTINGS
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
 
@@ -22,6 +22,11 @@ class M3Tab(AbstractSettingsTab):
 
         self.arrange()
 
+    def refresh_from_settings(self) -> None:
+        previous = self.raziel_url_edit.blockSignals(True)
+        self.raziel_url_edit.setText(SETTINGS.raz_url.value)
+        self.raziel_url_edit.blockSignals(previous)
+
     def arrange(self):
         layout = QtWidgets.QFormLayout()
         layout.setFieldGrowthPolicy(
@@ -32,5 +37,8 @@ class M3Tab(AbstractSettingsTab):
 
         self.setLayout(layout)
 
-    def apply_settings(self):
-        SETTINGS.raz_url.value = self.raziel_url_edit.text()
+    def apply_settings(self) -> set[str]:
+        changed: set[str] = set()
+        if SETTINGS.raz_url.set_value(self.raziel_url_edit.text()):
+            changed.add(SETTINGS.raz_url.key)
+        return changed

@@ -2,7 +2,7 @@ from uuid import UUID
 from datetime import datetime, timezone
 
 from vars_gridview.services.localization_store import LocalizationStore
-from vars_gridview.ui.ImageMosaic import Row
+from vars_gridview.ui.mosaic.image_mosaic import Row
 
 
 def _make_row(association_uuid: str, link_name: str = "bounding box") -> Row:

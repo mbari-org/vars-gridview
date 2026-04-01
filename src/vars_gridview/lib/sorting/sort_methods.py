@@ -1,14 +1,14 @@
 """Grid sort methods for the image mosaic.
 
 Each :class:`SortMethod` defines a ``key`` static method that derives a
-comparable value from a :class:`~vars_gridview.ui.RectWidget.RectWidget`.  The
+comparable value from a :class:`~vars_gridview.ui.mosaic.rect_widget.RectWidget`.  The
 base :meth:`SortMethod.sort` in-place-sorts a list using that key.
 
 :class:`SortMethodGroup` composes multiple methods into a stable multi-key sort.
 
 The :func:`association_data_sort` decorator factory creates sort classes that
 look up a value from a
-:attr:`~vars_gridview.lib.association.BoundingBoxAssociation.data` dict.
+:attr:`~vars_gridview.lib.annotation.association.BoundingBoxAssociation.data` dict.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import Any, TypeVar
 import cv2
 import numpy as np
 
-from vars_gridview.ui.RectWidget import RectWidget
+from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
 class SortMethod(ABC):
@@ -335,7 +335,7 @@ def association_data_sort(
 
     Args:
         data_key: Key to look up in
-            :attr:`~vars_gridview.lib.association.BoundingBoxAssociation.data`.
+            :attr:`~vars_gridview.lib.annotation.association.BoundingBoxAssociation.data`.
         default: Fallback value used when *data_key* is absent.
 
     Returns:

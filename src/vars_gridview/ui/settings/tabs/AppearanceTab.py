@@ -1,6 +1,6 @@
 from PyQt6 import QtWidgets
 
-from vars_gridview.lib.constants import SETTINGS
+from vars_gridview.lib.config.constants import SETTINGS
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 from vars_gridview.ui.style import THEME_DEFAULT, THEME_OPTIONS
 
@@ -27,7 +27,7 @@ class AppearanceTab(AbstractSettingsTab):
         self._selection_highlight_color = SETTINGS.selection_highlight_color.value
         self._update_selection_highlight_color_button()
         SETTINGS.selection_highlight_color.valueChanged.connect(
-            self._update_selection_highlight_color_button
+            self._on_setting_selection_color_changed
         )
 
         self.theme_combo_box = QtWidgets.QComboBox()
@@ -53,12 +53,17 @@ class AppearanceTab(AbstractSettingsTab):
         color = QtWidgets.QColorDialog.getColor()
         if color.isValid():
             self._selection_highlight_color = color.name()
-            SETTINGS.selection_highlight_color.value = self._selection_highlight_color
+            self._update_selection_highlight_color_button()
+            self.settingsChanged.emit()
 
     def _update_selection_highlight_color_button(self):
         self.selection_highlight_color_button.setStyleSheet(
             f"background-color: {self._selection_highlight_color};"
         )
+
+    def _on_setting_selection_color_changed(self, color: str) -> None:
+        self._selection_highlight_color = str(color)
+        self._update_selection_highlight_color_button()
 
     def _set_theme_combo_value(self, theme_name: str) -> None:
         theme_name = str(theme_name).lower()
@@ -68,6 +73,16 @@ class AppearanceTab(AbstractSettingsTab):
         prev = self.theme_combo_box.blockSignals(True)
         self.theme_combo_box.setCurrentIndex(idx)
         self.theme_combo_box.blockSignals(prev)
+
+    def refresh_from_settings(self) -> None:
+        prev_font = self.label_font_size_spinbox.blockSignals(True)
+        self.label_font_size_spinbox.setValue(SETTINGS.label_font_size.value)
+        self.label_font_size_spinbox.blockSignals(prev_font)
+
+        self._selection_highlight_color = SETTINGS.selection_highlight_color.value
+        self._update_selection_highlight_color_button()
+
+        self._set_theme_combo_value(SETTINGS.gui_style.value)
 
     def arrange(self):
         layout = QtWidgets.QFormLayout()
@@ -83,9 +98,19 @@ class AppearanceTab(AbstractSettingsTab):
 
         self.setLayout(layout)
 
-    def apply_settings(self):
-        SETTINGS.label_font_size.value = self.label_font_size_spinbox.value()
-        SETTINGS.selection_highlight_color.value = self._selection_highlight_color
+    def apply_settings(self) -> set[str]:
+        changed: set[str] = set()
+
+        if SETTINGS.label_font_size.set_value(self.label_font_size_spinbox.value()):
+            changed.add(SETTINGS.label_font_size.key)
+        if SETTINGS.selection_highlight_color.set_value(
+            self._selection_highlight_color
+        ):
+            changed.add(SETTINGS.selection_highlight_color.key)
+
         theme_name = self.theme_combo_box.currentData()
         if theme_name is not None:
-            SETTINGS.gui_style.value = str(theme_name)
+            if SETTINGS.gui_style.set_value(str(theme_name)):
+                changed.add(SETTINGS.gui_style.key)
+
+        return changed

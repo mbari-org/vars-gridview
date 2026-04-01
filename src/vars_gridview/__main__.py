@@ -9,13 +9,13 @@ import traceback
 
 from PyQt6 import QtWidgets, QtGui, QtCore
 
-from vars_gridview.lib.constants import (
+from vars_gridview.lib.config.constants import (
     APP_NAME,
     APP_ORGANIZATION,
     APP_VERSION,
     ICONS_DIR,
 )
-from vars_gridview.lib.log import LOGGER, AppLogger
+from vars_gridview.lib.runtime.log import LOGGER, AppLogger
 
 
 def parse_args() -> argparse.Namespace:

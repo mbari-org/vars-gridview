@@ -1,8 +1,8 @@
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib.constants import SETTINGS
-from vars_gridview.lib.embedding import HttpEmbedding
-from vars_gridview.lib.runnables import Worker
+from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.vision.embedding import HttpEmbedding
+from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
 
@@ -67,11 +67,35 @@ class EmbeddingsTab(AbstractSettingsTab):
         self.setLayout(layout)
 
     def apply_settings(self):
-        SETTINGS.embeddings_enabled.value = self._embeddings_enabled_toggle.isChecked()
-        SETTINGS.embedding_service_url.value = self._service_url_edit.text().strip()
-        SETTINGS.embedding_model_name.value = (
+        changed: set[str] = set()
+
+        if SETTINGS.embeddings_enabled.set_value(
+            self._embeddings_enabled_toggle.isChecked()
+        ):
+            changed.add(SETTINGS.embeddings_enabled.key)
+
+        if SETTINGS.embedding_service_url.set_value(
+            self._service_url_edit.text().strip()
+        ):
+            changed.add(SETTINGS.embedding_service_url.key)
+
+        if SETTINGS.embedding_model_name.set_value(
             self._model_name_combo.currentText().strip()
-        )
+        ):
+            changed.add(SETTINGS.embedding_model_name.key)
+
+        return changed
+
+    def refresh_from_settings(self) -> None:
+        prev_enabled = self._embeddings_enabled_toggle.blockSignals(True)
+        self._embeddings_enabled_toggle.setChecked(SETTINGS.embeddings_enabled.value)
+        self._embeddings_enabled_toggle.blockSignals(prev_enabled)
+
+        prev_url = self._service_url_edit.blockSignals(True)
+        self._service_url_edit.setText(SETTINGS.embedding_service_url.value)
+        self._service_url_edit.blockSignals(prev_url)
+
+        self._set_model_name(SETTINGS.embedding_model_name.value)
 
     def _set_model_name(self, model_name: str) -> None:
         self._model_name_combo.setCurrentText(model_name)

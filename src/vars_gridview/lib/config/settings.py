@@ -7,7 +7,7 @@ Each setting is exposed as an attribute of type :class:`SettingProxy`, which:
 
 Usage example::
 
-    from vars_gridview.lib.settings import AppSettings, build_settings
+    from vars_gridview.lib.config.settings import AppSettings, build_settings
     settings = build_settings()
     settings.label_font_size.value = 10
     settings.label_font_size.valueChanged.connect(my_slot)
@@ -27,8 +27,7 @@ T = TypeVar("T")
 class SettingProxy(QtCore.QObject, Generic[T]):
     """A typed proxy that wraps a single ``QSettings`` key.
 
-    Emits :attr:`valueChanged` whenever :attr:`value` is set, even if the value
-    did not change, so that dependent widgets can stay in sync on initialisation.
+    Emits :attr:`valueChanged` only when the persisted value actually changes.
 
     Args:
         qsettings: The underlying ``QSettings`` store.
@@ -65,9 +64,27 @@ class SettingProxy(QtCore.QObject, Generic[T]):
 
     @value.setter
     def value(self, new_value: T) -> None:
-        """Persist *new_value* and emit :attr:`valueChanged`."""
+        """Persist *new_value* and emit :attr:`valueChanged` when changed."""
+        self.set_value(new_value)
+
+    @property
+    def key(self) -> str:
+        """Underlying ``QSettings`` key for this proxy."""
+        return self._key
+
+    def set_value(self, new_value: T) -> bool:
+        """Persist *new_value* and return whether it changed.
+
+        Returns:
+            ``True`` when the stored value changed and ``valueChanged`` was
+            emitted, otherwise ``False``.
+        """
+        old_value = self.value
+        if old_value == new_value:
+            return False
         self._settings.setValue(self._key, new_value)
         self.valueChanged.emit(new_value)
+        return True
 
 
 class AppSettings:

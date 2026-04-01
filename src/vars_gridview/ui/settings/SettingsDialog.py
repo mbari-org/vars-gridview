@@ -11,10 +11,8 @@ class SettingsDialog(QtWidgets.QDialog):
     Contains settings for the application.
     """
 
-    applySettings = QtCore.pyqtSignal()
-    """
-    Signal emitted when the apply button is pressed.
-    """
+    settingsApplied = QtCore.pyqtSignal(list)
+    """Signal emitted with a list of changed setting keys after apply."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -24,6 +22,7 @@ class SettingsDialog(QtWidgets.QDialog):
 
         # Create tab widget to hold settings pages
         self._tab_widget = QtWidgets.QTabWidget()
+        self._tabs: list[AbstractSettingsTab] = []
 
         # Create button box (OK, Apply, Cancel)
         self._button_box = QtWidgets.QDialogButtonBox(
@@ -85,8 +84,15 @@ class SettingsDialog(QtWidgets.QDialog):
         """
         Apply settings if needed.
         """
-        if self._needs_apply:
-            self.applySettings.emit()
+        if not self._needs_apply:
+            return
+
+        changed_keys: set[str] = set()
+        for tab in self._tabs:
+            changed_keys.update(tab.apply_settings())
+
+        if changed_keys:
+            self.settingsApplied.emit(sorted(changed_keys))
 
     def register(self, *tabs: AbstractSettingsTab) -> None:
         """
@@ -96,9 +102,17 @@ class SettingsDialog(QtWidgets.QDialog):
             tabs (Tuple[AbstractSettingsTab]): The tab to register.
         """
         for tab in tabs:
+            self._tabs.append(tab)
             # Add tab to tab widget
             self._tab_widget.addTab(tab, tab.name)
 
             # Connect signals/slots
             tab.settingsChanged.connect(self._on_settings_changed)
-            self.applySettings.connect(tab.apply_settings)
+
+    def showEvent(self, event) -> None:  # type: ignore[override]
+        """Refresh tab widgets from persisted settings whenever dialog opens."""
+        for tab in self._tabs:
+            tab.refresh_from_settings()
+        self._needs_apply = False
+        self._update_apply_enabled()
+        super().showEvent(event)

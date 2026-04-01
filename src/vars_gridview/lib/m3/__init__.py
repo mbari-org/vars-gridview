@@ -4,13 +4,6 @@ This module provides :class:`M3Context`, an immutable container that holds
 one authenticated client for every M3 microservice used by the application.
 Use :meth:`M3Context.from_endpoint_data` to construct an instance from the
 list of endpoint dicts returned by Raziel.
-
-Backward-compatibility shim
----------------------------
-Module-level globals (``ANNOSAURUS_CLIENT``, etc.) and the old
-``setup_from_endpoint_data()`` function are retained so that existing callers
-continue to work.  New code should obtain clients via an :class:`M3Context`
-instance instead.
 """
 
 from __future__ import annotations
@@ -20,7 +13,7 @@ from typing import Optional
 
 from beholder_client import BeholderClient
 
-from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.m3.clients import (
     AnnosaurusClient,
     SkimmerClient,
@@ -57,7 +50,7 @@ class M3Context:
         Args:
             endpoints: List of endpoint dicts, each containing at least
                 ``"name"``, ``"url"``, and ``"secret"`` keys, as returned
-                by :func:`~vars_gridview.lib.raziel.authenticate`.
+                by :func:`~vars_gridview.lib.auth.raziel.authenticate`.
 
         Returns:
             A fully-initialised :class:`M3Context`.
@@ -90,6 +83,8 @@ class M3Context:
         LOGGER.debug(f"Configured VARS KB Server client at {kb_url}")
 
         beholder_url, beholder_key = _get("beholder")
+        if beholder_key is None:
+            raise ValueError('Endpoint "beholder" is missing required "secret"')
         beholder = BeholderClient(beholder_url, beholder_key)
         LOGGER.debug(f"Configured and authenticated Beholder client at {beholder_url}")
 
@@ -107,51 +102,6 @@ class M3Context:
         )
 
 
-# ── Backward-compatibility module-level singletons ────────────────────────────
-# These are populated by setup_from_endpoint_data() below and used by the
-# legacy operations.py module. New code should use M3Context directly.
-
-ANNOSAURUS_CLIENT: Optional[AnnosaurusClient] = None
-VAMPIRE_SQUID_CLIENT: Optional[VampireSquidClient] = None
-VARS_USER_SERVER_CLIENT: Optional[VARSUserServerClient] = None
-VARS_KB_SERVER_CLIENT: Optional[VARSKBServerClient] = None
-BEHOLDER_CLIENT: Optional[BeholderClient] = None
-SKIMMER_CLIENT: Optional[SkimmerClient] = None
-
-
-def setup_from_endpoint_data(endpoints: list[dict]) -> M3Context:
-    """Create an :class:`M3Context` and also populate the module-level globals.
-
-    This function exists for backward compatibility.  New code should call
-    :meth:`M3Context.from_endpoint_data` directly and pass the resulting
-    context via dependency injection.
-
-    Args:
-        endpoints: List of endpoint dicts from Raziel.
-
-    Returns:
-        The constructed :class:`M3Context`.
-    """
-    global ANNOSAURUS_CLIENT, VAMPIRE_SQUID_CLIENT, VARS_USER_SERVER_CLIENT
-    global VARS_KB_SERVER_CLIENT, BEHOLDER_CLIENT, SKIMMER_CLIENT
-
-    ctx = M3Context.from_endpoint_data(endpoints)
-    ANNOSAURUS_CLIENT = ctx.annosaurus
-    VAMPIRE_SQUID_CLIENT = ctx.vampire_squid
-    VARS_USER_SERVER_CLIENT = ctx.vars_user_server
-    VARS_KB_SERVER_CLIENT = ctx.vars_kb_server
-    BEHOLDER_CLIENT = ctx.beholder
-    SKIMMER_CLIENT = ctx.skimmer
-    return ctx
-
-
 __all__ = [
     "M3Context",
-    "setup_from_endpoint_data",
-    "ANNOSAURUS_CLIENT",
-    "VAMPIRE_SQUID_CLIENT",
-    "VARS_USER_SERVER_CLIENT",
-    "VARS_KB_SERVER_CLIENT",
-    "BEHOLDER_CLIENT",
-    "SKIMMER_CLIENT",
 ]

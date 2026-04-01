@@ -13,14 +13,14 @@ from uuid import uuid4
 from PyQt6 import QtCore, QtWidgets
 from sharktopoda_client.dto import Localization
 
-from vars_gridview.lib.constants import SHARKTOPODA_APP_NAME
-from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.runnables import Worker
-from vars_gridview.lib.utils import color_for_concept
+from vars_gridview.lib.config.constants import SHARKTOPODA_APP_NAME
+from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.lib.runtime.runnables import Worker
+from vars_gridview.lib.vision.image_utils import color_for_concept
 
 if TYPE_CHECKING:
     from sharktopoda_client.client import SharktopodaClient
-    from vars_gridview.ui.RectWidget import RectWidget
+    from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
 class VideoNavigationCoordinator:

@@ -10,14 +10,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import wraps
-from typing import Concatenate, Optional, ParamSpec, TypeVar
+from typing import Any, Optional, TypeVar
 
 import requests
 import requests.auth
 
 from vars_gridview.lib.m3.query import QueryRequest
 
-P = ParamSpec("P")
 R = TypeVar("R")
 
 
@@ -32,6 +31,8 @@ class JWTAuth(requests.auth.AuthBase):
         self._token = token
 
     def __call__(self, r: requests.PreparedRequest) -> requests.PreparedRequest:
+        if r.headers is None:
+            r.headers = {}
         r.headers["Authorization"] = f"BEARER {self._token}"
         return r
 
@@ -41,8 +42,8 @@ class NotAuthenticated(Exception):
 
 
 def needs_auth(
-    f: Callable[Concatenate["M3Client", P], R],
-) -> Callable[Concatenate["M3Client", P], R]:
+    f: Callable[..., R],
+) -> Callable[..., R]:
     """Decorator — raise :exc:`NotAuthenticated` if the client has no session auth.
 
     Args:
@@ -53,7 +54,7 @@ def needs_auth(
     """
 
     @wraps(f)
-    def wrapper(self: M3Client, *args: P.args, **kwargs: P.kwargs) -> R:
+    def wrapper(self: M3Client, *args: Any, **kwargs: Any) -> R:
         if not self.authenticated:
             raise NotAuthenticated
         return f(self, *args, **kwargs)
@@ -62,8 +63,8 @@ def needs_auth(
 
 
 def reauth(
-    f: Callable[Concatenate["M3Client", P], R],
-) -> Callable[Concatenate["M3Client", P], R]:
+    f: Callable[..., R],
+) -> Callable[..., R]:
     """Decorator — re-authenticate and retry once on auth failures.
 
     Handles :exc:`NotAuthenticated` and HTTP 401/403 responses by calling
@@ -77,7 +78,7 @@ def reauth(
     """
 
     @wraps(f)
-    def wrapper(self: M3Client, *args: P.args, **kwargs: P.kwargs) -> R:
+    def wrapper(self: M3Client, *args: Any, **kwargs: Any) -> R:
         try:
             return f(self, *args, **kwargs)
         except NotAuthenticated:

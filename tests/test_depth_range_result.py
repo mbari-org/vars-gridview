@@ -1,5 +1,5 @@
 import unittest
-from vars_gridview.ui.QueryDialog import DepthRangeConstraintResult
+from vars_gridview.ui.dialogs.query_dialog import DepthRangeConstraintResult
 
 
 class TestDepthRangeConstraintResult(unittest.TestCase):

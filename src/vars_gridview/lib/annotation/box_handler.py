@@ -1,15 +1,15 @@
-"""Handler for multiple :class:`~vars_gridview.ui.BoundingBox.BoundingBox` overlays."""
+"""Handler for multiple :class:`~vars_gridview.ui.mosaic.bounding_box.BoundingBox` overlays."""
 
 from __future__ import annotations
 
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui
 
-from vars_gridview.lib.constants import SETTINGS
-from vars_gridview.lib.log import LOGGER
-from vars_gridview.ui.BoundingBox import BoundingBox
-from vars_gridview.ui.ImageMosaic import ImageMosaic
-from vars_gridview.ui.RectWidget import RectWidget
+from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.ui.mosaic.bounding_box import BoundingBox
+from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
+from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
 class BoxHandler:
@@ -37,7 +37,7 @@ class BoxHandler:
         Args:
             graphics_view: The detail view in which bounding-box overlays are
                 rendered.
-            image_mosaic: The :class:`~vars_gridview.ui.ImageMosaic.ImageMosaic`
+            image_mosaic: The :class:`~vars_gridview.ui.mosaic.image_mosaic.ImageMosaic`
                 instance managing the mosaic grid.
             all_labels: Optional list of known concept labels used for
                 drop-downs inside individual boxes.
@@ -134,6 +134,44 @@ class BoxHandler:
                 # Add it to the list
                 self.boxes.append(bb)
 
+    def retarget_annotations_for_same_source(self, rect_widget: RectWidget) -> bool:
+        """Retarget current overlays to *rect_widget* without reloading the image.
+
+        Returns:
+            ``True`` when existing overlays were safely reused, otherwise ``False``.
+        """
+        active_assocs = [
+            assoc for assoc in rect_widget.associations if not assoc.deleted
+        ]
+        if not self.boxes or len(self.boxes) != len(active_assocs):
+            return False
+
+        active_by_uuid = {str(assoc.uuid): assoc for assoc in active_assocs}
+        selected_assoc_uuid = str(rect_widget.association.uuid)
+
+        q_color = QtGui.QColor.fromString(SETTINGS.selection_highlight_color.value)
+        selected_color = q_color.getRgb()
+        selected_style = QtCore.Qt.PenStyle.DashLine
+
+        for box in self.boxes:
+            assoc = active_by_uuid.get(str(box.association.uuid))
+            if assoc is None:
+                return False
+
+            box.association = assoc
+            box.rect_widget = rect_widget
+
+            color = selected_color
+            if str(assoc.uuid) != selected_assoc_uuid:
+                avg = int(sum(color) / len(color))
+                color = (avg, avg, avg)
+
+            box.color = color
+            box.setPen(pg.mkPen(color, width=3, style=selected_style))
+            box.update_label()
+
+        return True
+
     def save_all(self) -> None:
         """
         Save all changes to the bounding boxes.
@@ -143,7 +181,10 @@ class BoxHandler:
                 if self._push_changes_callback is not None:
                     self._push_changes_callback(box.association)
                 else:
-                    box.association.push_changes()
+                    LOGGER.error(
+                        "Cannot persist dirty association without push callback; "
+                        "configure BoxHandler with an AnnotationService-backed callback"
+                    )
 
     def map_pos_to_item(self, pos: QtCore.QPointF) -> QtCore.QPointF:
         """

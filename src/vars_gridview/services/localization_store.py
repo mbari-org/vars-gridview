@@ -9,9 +9,9 @@ from __future__ import annotations
 from json import loads
 from uuid import UUID
 
-from vars_gridview.lib.association import BoundingBoxAssociation
-from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.observation import Observation
+from vars_gridview.lib.annotation.association import BoundingBoxAssociation
+from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.lib.annotation.observation import Observation
 
 
 class LocalizationStore:

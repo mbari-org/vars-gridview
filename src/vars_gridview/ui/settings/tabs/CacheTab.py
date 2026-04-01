@@ -1,7 +1,7 @@
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib.constants import SETTINGS
-from vars_gridview.ui.FileSelectionLineEdit import DirectorySelectionLineEdit
+from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.ui.widgets.file_selection_line_edit import DirectorySelectionLineEdit
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
 
@@ -34,6 +34,11 @@ class CacheTab(AbstractSettingsTab):
 
         self.arrange()
 
+    def refresh_from_settings(self) -> None:
+        previous = self.cache_dir_lineedit.blockSignals(True)
+        self.cache_dir_lineedit.setText(SETTINGS.cache_dir.value)
+        self.cache_dir_lineedit.blockSignals(previous)
+
     def arrange(self):
         root_layout = QtWidgets.QVBoxLayout()
 
@@ -49,5 +54,8 @@ class CacheTab(AbstractSettingsTab):
 
         self.setLayout(root_layout)
 
-    def apply_settings(self):
-        SETTINGS.cache_dir.value = self.cache_dir_lineedit.text()
+    def apply_settings(self) -> set[str]:
+        changed: set[str] = set()
+        if SETTINGS.cache_dir.set_value(self.cache_dir_lineedit.text()):
+            changed.add(SETTINGS.cache_dir.key)
+        return changed

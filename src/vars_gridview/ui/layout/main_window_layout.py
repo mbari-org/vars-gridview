@@ -5,7 +5,7 @@ from __future__ import annotations
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from vars_gridview.ui.JSONTree import JSONTree
+from vars_gridview.ui.widgets.json_tree import JSONTree
 from vars_gridview.ui.style import UiGeometry, UiTypography, control_font
 
 

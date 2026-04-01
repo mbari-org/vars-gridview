@@ -1,6 +1,6 @@
 import unittest
 from unittest.mock import Mock
-from vars_gridview.lib.sort_methods import AspectRatioSort
+from vars_gridview.lib.sorting.sort_methods import AspectRatioSort
 
 
 class TestAspectRatioSort(unittest.TestCase):

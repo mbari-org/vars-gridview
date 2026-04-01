@@ -1,7 +1,7 @@
 """Query controller — runs VARS queries and manages paging.
 
 :class:`QueryController` owns query lifecycle: it wraps the blocking
-``query_count`` / ``query_download`` calls in a :class:`~vars_gridview.lib.runnables.Worker`
+``query_count`` / ``query_download`` calls in a :class:`~vars_gridview.lib.runtime.runnables.Worker`
 (thread-pool) and emits typed Qt signals so the UI layer never blocks.
 
 Typical usage::
@@ -19,14 +19,14 @@ from typing import Sequence
 
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
 
-from vars_gridview.lib.m3.operations import query_count, query_download
+from vars_gridview.lib.m3.clients import AnnosaurusClient
 from vars_gridview.lib.m3.query import (
     QueryConstraint,
     QueryRequest,
     merge_constraints,
 )
-from vars_gridview.lib.runnables import Worker
-from vars_gridview.lib.utils import parse_tsv
+from vars_gridview.lib.runtime.runnables import Worker
+from vars_gridview.lib.common.tsv import parse_tsv
 
 _LOG = logging.getLogger(__name__)
 
@@ -56,6 +56,11 @@ class QueryController(QObject):
         self._last_request: QueryRequest | None = None
         self._total_rows: int = 0
         self._request_generation: int = 0
+        self._annosaurus_client: AnnosaurusClient | None = None
+
+    def set_annosaurus_client(self, client: AnnosaurusClient) -> None:
+        """Attach the authenticated Annosaurus client for future queries."""
+        self._annosaurus_client = client
 
     # ── Queries ────────────────────────────────────────────────────────────────
 
@@ -189,19 +194,24 @@ class QueryController(QObject):
         Args:
             request: The query to run.
         """
+        if self._annosaurus_client is None:
+            self.query_failed.emit("Query service is unavailable: no Annosaurus client")
+            return
+
         self._request_generation += 1
         generation = self._request_generation
 
         self.query_started.emit()
         self.query_progress.emit("Counting matching rows...", 1, 6)
 
-        worker = Worker(self._fetch_count, request, generation)
+        worker = Worker(self._fetch_count, self._annosaurus_client, request, generation)
         worker.signals.result.connect(self._on_count_result)
         worker.signals.error.connect(self._on_error)
         QThreadPool.globalInstance().start(worker)
 
     @staticmethod
     def _fetch_count(
+        client: AnnosaurusClient,
         request: QueryRequest,
         generation: int,
     ) -> tuple[QueryRequest, int, int]:
@@ -217,11 +227,14 @@ class QueryController(QObject):
         Raises:
             Exception: Any network error.
         """
-        total = query_count(request)
+        response = client.query_count(request)
+        response.raise_for_status()
+        total = response.json()["count"]
         return request, total, generation
 
     @staticmethod
     def _fetch_download(
+        client: AnnosaurusClient,
         request: QueryRequest,
         total_rows: int,
         generation: int,
@@ -239,7 +252,9 @@ class QueryController(QObject):
         Raises:
             Exception: Any network error.
         """
-        raw = query_download(request)
+        response = client.query_download(request)
+        response.raise_for_status()
+        raw = response.text
         return request, total_rows, generation, raw
 
     @staticmethod
@@ -272,7 +287,16 @@ class QueryController(QObject):
             return
 
         self.query_progress.emit("Downloading result rows...", 2, 6)
-        worker = Worker(self._fetch_download, request, total_rows, generation)
+        if self._annosaurus_client is None:
+            self.query_failed.emit("Query service is unavailable: no Annosaurus client")
+            return
+        worker = Worker(
+            self._fetch_download,
+            self._annosaurus_client,
+            request,
+            total_rows,
+            generation,
+        )
         worker.signals.result.connect(self._on_download_result)
         worker.signals.error.connect(self._on_error)
         QThreadPool.globalInstance().start(worker)

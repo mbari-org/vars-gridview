@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Optional
 from uuid import UUID
 
-from vars_gridview.lib.observation import Observation
+from vars_gridview.lib.annotation.observation import Observation
 
 
 class BoundingBoxAssociation:
@@ -48,7 +48,7 @@ class BoundingBoxAssociation:
             uuid: UUID of the association record in Annosaurus.
             data: Parsed ``link_value`` JSON dict.  Must contain integer keys
                 ``x``, ``y``, ``width`` (>0), and ``height`` (>0).
-            observation: Parent :class:`~vars_gridview.lib.observation.Observation`.
+            observation: Parent :class:`~vars_gridview.lib.annotation.observation.Observation`.
             to_concept: Value of the association's ``to_concept`` field
                 (``"self"`` when the box covers the whole observed concept).
 
@@ -145,7 +145,7 @@ class BoundingBoxAssociation:
         Returns:
             int: The x-coordinate of the top-left corner.
         """
-        return self._data.get("x")
+        return self._data["x"]
 
     @property
     def y(self) -> int:
@@ -155,7 +155,7 @@ class BoundingBoxAssociation:
         Returns:
             int: The y-coordinate of the top-left corner.
         """
-        return self._data.get("y")
+        return self._data["y"]
 
     @property
     def width(self) -> int:
@@ -165,7 +165,7 @@ class BoundingBoxAssociation:
         Returns:
             int: The width of the bounding box.
         """
-        return self._data.get("width")
+        return self._data["width"]
 
     @property
     def height(self) -> int:
@@ -175,7 +175,7 @@ class BoundingBoxAssociation:
         Returns:
             int: The height of the bounding box.
         """
-        return self._data.get("height")
+        return self._data["height"]
 
     @property
     def verifier(self) -> Optional[str]:
@@ -392,38 +392,11 @@ class BoundingBoxAssociation:
                 observation concept is updated.  Falls back to the global
                 settings value when ``None``.
         """
-        from vars_gridview.lib.m3.operations import (
-            update_bounding_box_data,
-            update_bounding_box_part,
-            update_observation_concept,
+        raise RuntimeError(
+            "BoundingBoxAssociation.push_changes() no longer supports legacy "
+            "module-level M3 clients. Use AnnotationService.push_changes() "
+            "with an injected Annosaurus client instead."
         )
-
-        if self._deleted:
-            return
-
-        if observer is None:
-            from vars_gridview.lib.constants import get_settings
-
-            observer = get_settings().username.value
-
-        do_modify_box = False
-
-        if self._dirty_concept:
-            update_observation_concept(self._observation.uuid, self.concept, observer)
-            self._dirty_concept = False
-            do_modify_box = True
-
-        if self._dirty_part:
-            update_bounding_box_part(self._uuid, self.part)
-            self._dirty_part = False
-            do_modify_box = True
-
-        if self._dirty_box:
-            self._dirty_box = False
-            do_modify_box = True
-
-        if do_modify_box:
-            update_bounding_box_data(self._uuid, self.data)
 
 
 __all__ = ["BoundingBoxAssociation"]

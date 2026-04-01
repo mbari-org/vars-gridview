@@ -6,14 +6,13 @@ from typing import Callable, TYPE_CHECKING
 
 from PyQt6 import QtWidgets
 
-from vars_gridview.lib.constants import SETTINGS
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
+from vars_gridview.lib.config.constants import SETTINGS
 
 if TYPE_CHECKING:
     from vars_gridview.controllers.annotation_controller import AnnotationController
     from vars_gridview.services.knowledge_base_service import KnowledgeBaseService
-    from vars_gridview.ui.ImageMosaic import ImageMosaic
-    from vars_gridview.ui.RectWidget import RectWidget
+    from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
+    from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
 class AnnotationActionCoordinator:
@@ -241,10 +240,14 @@ class AnnotationActionCoordinator:
             return None
 
         kb_service = self._kb_service()
-        if kb_service is not None:
-            kb_concepts = list(kb_service.get_concepts().keys())
-        else:
-            kb_concepts = list(get_kb_concepts())
+        if kb_service is None:
+            QtWidgets.QMessageBox.critical(
+                self._parent,
+                "Not Ready",
+                "Knowledge base service is not initialized.",
+            )
+            return None
+        kb_concepts = list(kb_service.get_concepts().keys())
 
         concept, ok = QtWidgets.QInputDialog.getItem(
             self._parent,
@@ -280,10 +283,14 @@ class AnnotationActionCoordinator:
             return None
 
         kb_service = self._kb_service()
-        if kb_service is not None:
-            kb_parts = list(kb_service.get_parts())
-        else:
-            kb_parts = list(get_kb_parts())
+        if kb_service is None:
+            QtWidgets.QMessageBox.critical(
+                self._parent,
+                "Not Ready",
+                "Knowledge base service is not initialized.",
+            )
+            return None
+        kb_parts = list(kb_service.get_parts())
 
         part, ok = QtWidgets.QInputDialog.getItem(
             self._parent,

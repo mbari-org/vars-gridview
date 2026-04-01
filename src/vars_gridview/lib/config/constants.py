@@ -15,7 +15,7 @@ from platformdirs import user_log_dir
 from vars_gridview import __version__
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.settings import AppSettings
+    from vars_gridview.lib.config.settings import AppSettings
 
 # ── Application identity ───────────────────────────────────────────────────────
 APP_NAME: str = "VARS GridView"
@@ -23,8 +23,9 @@ APP_ORGANIZATION: str = "MBARI"
 APP_VERSION: str = __version__
 
 # ── Asset paths ────────────────────────────────────────────────────────────────
-ROOT_DIR: Path = Path(__file__).parent.parent
-if not ROOT_DIR.exists():  # PyInstaller frozen bundle
+# constants.py lives under ``lib/config``; package root is three levels up.
+ROOT_DIR: Path = Path(__file__).resolve().parents[2]
+if not ROOT_DIR.exists():  # PyInstaller frozen bundle fallback
     ROOT_DIR = ROOT_DIR.parent
 
 ASSETS_DIR: Path = ROOT_DIR / "assets"
@@ -43,11 +44,11 @@ def get_settings() -> AppSettings:  # type: ignore[name-defined]
     """Return the global :class:`AppSettings` singleton, constructing it once.
 
     Returns:
-        The application-wide :class:`~vars_gridview.lib.settings.AppSettings`.
+        The application-wide :class:`~vars_gridview.lib.config.settings.AppSettings`.
     """
     global _SETTINGS
     if _SETTINGS is None:
-        from vars_gridview.lib.settings import build_settings
+        from vars_gridview.lib.config.settings import build_settings
 
         _SETTINGS = build_settings()
     return _SETTINGS

@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
-from vars_gridview.lib.log import LOGGER
+from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.ui.style import UiDimensions
 
 
@@ -19,6 +18,8 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
         parent: QtWidgets.QWidget | None = None,
         title: str = "Select Concept",
         include_part: bool = False,
+        concepts: list[str] | None = None,
+        parts: list[str] | None = None,
     ) -> None:
         super().__init__(parent=parent)
 
@@ -30,23 +31,10 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
         self.selected_concept = None
         self.selected_part = None
 
-        # Get available concepts and parts
-        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
-        try:
-            self.concepts = list(get_kb_concepts().keys())
-            if include_part:
-                self.parts = get_kb_parts()
-        except Exception as e:
-            LOGGER.error(f"Failed to load concepts/parts: {e}")
-            self.concepts = []
-            self.parts = [] if include_part else None
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Connection Error",
-                f"Failed to load concepts/parts from server:\n{str(e)}\n\nPlease check your connection and try again.",
-            )
-        finally:
-            QtWidgets.QApplication.restoreOverrideCursor()
+        self.concepts = list(concepts or [])
+        self.parts = list(parts or []) if include_part else None
+        if not self.concepts:
+            LOGGER.warning("Concept selection opened with no concept options")
 
         self._setup_ui()
         self._setup_connections()
@@ -137,7 +125,11 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
         self.accept()
 
     @classmethod
-    def pick_concept(cls, parent: QtWidgets.QWidget | None = None) -> str | None:
+    def pick_concept(
+        cls,
+        parent: QtWidgets.QWidget | None = None,
+        concepts: list[str] | None = None,
+    ) -> str | None:
         """Show a dialog to pick a concept.
 
         Args:
@@ -146,14 +138,22 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
         Returns:
             The selected concept name, or ``None`` if cancelled.
         """
-        dialog = cls(parent, "Select Concept", include_part=False)
+        dialog = cls(
+            parent,
+            "Select Concept",
+            include_part=False,
+            concepts=concepts,
+        )
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             return dialog.selected_concept
         return None
 
     @classmethod
     def pick_concept_and_part(
-        cls, parent: QtWidgets.QWidget | None = None
+        cls,
+        parent: QtWidgets.QWidget | None = None,
+        concepts: list[str] | None = None,
+        parts: list[str] | None = None,
     ) -> tuple[str, str | None] | None:
         """Show a dialog to pick a concept and optionally a part.
 
@@ -164,7 +164,13 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
             A ``(concept, part)`` tuple where *part* may be ``None``, or
             ``None`` if the dialog was cancelled.
         """
-        dialog = cls(parent, "Select Concept and Part", include_part=True)
+        dialog = cls(
+            parent,
+            "Select Concept and Part",
+            include_part=True,
+            concepts=concepts,
+            parts=parts,
+        )
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             return (dialog.selected_concept, dialog.selected_part)
         return None

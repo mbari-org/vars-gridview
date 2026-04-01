@@ -17,9 +17,9 @@ import logging
 
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
 
-from vars_gridview.lib.m3 import M3Context, setup_from_endpoint_data
-from vars_gridview.lib.raziel import authenticate
-from vars_gridview.lib.runnables import Worker
+from vars_gridview.lib.m3 import M3Context
+from vars_gridview.lib.auth.raziel import authenticate
+from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.services.annotation_service import AnnotationService
 from vars_gridview.services.knowledge_base_service import KnowledgeBaseService
 from vars_gridview.services.roi_service import RoiService
@@ -129,7 +129,7 @@ class SessionController(QObject):
             Exception: Any network or authentication error.
         """
         endpoints = authenticate(raziel_url, username, password)
-        return setup_from_endpoint_data(endpoints)
+        return M3Context.from_endpoint_data(endpoints)
 
     def _on_auth_result(self, context: M3Context) -> None:
         """Handle a successful authentication.

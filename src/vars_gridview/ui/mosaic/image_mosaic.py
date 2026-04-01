@@ -1,8 +1,8 @@
 """Image mosaic widget manager.
 
-Manages a grid of :class:`~vars_gridview.ui.RectWidget.RectWidget` tiles,
-l handles metadata loading, ROI creation, sorting, selection, and CRUD
-operations on bounding-box annotations.
+Manages a grid of :class:`~vars_gridview.ui.mosaic.rect_widget.RectWidget`
+tiles, and handles metadata loading, ROI creation, sorting, selection, and
+CRUD operations on bounding-box annotations.
 """
 
 from __future__ import annotations
@@ -17,20 +17,22 @@ from iso8601 import parse_date
 from PyQt6 import QtCore, QtGui, QtWidgets
 from pydantic import BaseModel
 
-from vars_gridview.lib.association import BoundingBoxAssociation
-from vars_gridview.lib.constants import SETTINGS
-from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.sort_methods import SortMethod, SortMethodGroup
-from vars_gridview.lib.runnables import Worker
+from vars_gridview.lib.annotation.association import BoundingBoxAssociation
+from vars_gridview.lib.config.constants import SETTINGS
+from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.lib.sorting.sort_methods import SortMethod, SortMethodGroup
+from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.controllers.selection_model import SelectionModel
 from vars_gridview.services.localization_store import LocalizationStore
 from vars_gridview.services.roi_loader import RoiLoader
-from vars_gridview.ui.ConceptSelectionDialog import ConceptSelectionDialog
-from vars_gridview.ui.MosaicView import MosaicView
-from vars_gridview.ui.RectWidget import RectWidget
+from vars_gridview.ui.dialogs.concept_selection_dialog import ConceptSelectionDialog
+from vars_gridview.ui.mosaic.mosaic_view import MosaicView
+from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.embedding import Embedding
+    from vars_gridview.lib.vision.embedding import Embedding
+    from vars_gridview.lib.m3.clients import AnnosaurusClient, VampireSquidClient
+    from vars_gridview.services.roi_service import RoiService
 
 
 class Row(BaseModel):
@@ -131,7 +133,7 @@ class ImageMosaic(QtCore.QObject):
     """Manager for the image-mosaic grid view.
 
     Populates a :class:`PyQt6.QtWidgets.QGraphicsView` with a grid of
-    :class:`~vars_gridview.ui.RectWidget.RectWidget` tiles sourced from VARS
+    :class:`~vars_gridview.ui.mosaic.rect_widget.RectWidget` tiles sourced from VARS
     annotation query results.  Handles video-sequence metadata prefetching,
     ROI image loading, selection state, and bulk annotation operations.
     """
@@ -146,6 +148,11 @@ class ImageMosaic(QtCore.QObject):
         rect_clicked_slot: Callable[..., None],
         dialog_parent: QtWidgets.QWidget | None = None,
         embedding_model: Embedding | None = None,
+        annosaurus_client: AnnosaurusClient | None = None,
+        vampire_squid_client: VampireSquidClient | None = None,
+        roi_service: RoiService | None = None,
+        concept_provider: Callable[[], list[str]] | None = None,
+        part_provider: Callable[[], list[str]] | None = None,
         label_action_callback=None,
         verify_action_callback=None,
         mark_training_action_callback=None,
@@ -163,6 +170,11 @@ class ImageMosaic(QtCore.QObject):
         self._verify_action_callback = verify_action_callback
         self._mark_training_action_callback = mark_training_action_callback
         self._embedding_model = embedding_model
+        self._annosaurus_client = annosaurus_client
+        self._vampire_squid_client = vampire_squid_client
+        self._roi_service = roi_service
+        self._concept_provider = concept_provider
+        self._part_provider = part_provider
 
         self._rect_widgets: List[RectWidget] = []
         self._n_columns = 0
@@ -202,6 +214,18 @@ class ImageMosaic(QtCore.QObject):
             self._on_embedding_precompute_progress
         )
 
+    def configure_services(
+        self,
+        *,
+        annosaurus_client: AnnosaurusClient,
+        vampire_squid_client: VampireSquidClient,
+        roi_service: RoiService,
+    ) -> None:
+        """Attach service/client dependencies required for ROI loading."""
+        self._annosaurus_client = annosaurus_client
+        self._vampire_squid_client = vampire_squid_client
+        self._roi_service = roi_service
+
     @property
     def image_reference_urls(self) -> dict[UUID | None, str | None]:
         return self.store.image_reference_urls
@@ -240,7 +264,7 @@ class ImageMosaic(QtCore.QObject):
         """Populate the mosaic from raw VARS query output.
 
         Clears any previous state, parses the rows, fetches ancillary
-        metadata from M3, and creates a :class:`~vars_gridview.ui.RectWidget.RectWidget`
+        metadata from M3, and creates a :class:`~vars_gridview.ui.mosaic.rect_widget.RectWidget`
         for every bounding-box association found.
 
         Args:
@@ -291,8 +315,13 @@ class ImageMosaic(QtCore.QObject):
         self.store.extract_associations(list(rows))
 
     def _fetch_video_sequence_data(self) -> None:
+        if self._vampire_squid_client is None:
+            raise RuntimeError(
+                "ImageMosaic is missing VampireSquid client; call configure_services() after login"
+            )
         try:
             self._roi_loader.fetch_video_sequence_data(
+                vampire_squid_client=self._vampire_squid_client,
                 moment_video_data=self.moment_video_data,
                 video_sequences_by_name=self.video_sequences_by_name,
             )
@@ -311,8 +340,14 @@ class ImageMosaic(QtCore.QObject):
         )
 
     def _create_rois(self) -> None:
+        if self._annosaurus_client is None or self._roi_service is None:
+            raise RuntimeError(
+                "ImageMosaic is missing Annosaurus/ROI services; call configure_services() after login"
+            )
         try:
             load_result = self._roi_loader.create_rect_widgets(
+                annosaurus_client=self._annosaurus_client,
+                roi_service=self._roi_service,
                 association_groups=self.association_groups,
                 moment_video_data=self.moment_video_data,
                 moment_proxy_data=self.moment_proxy_data,
@@ -383,7 +418,15 @@ class ImageMosaic(QtCore.QObject):
         pool.start(worker)
 
     def _rect_label_slot(self, rect: RectWidget):
-        opt = ConceptSelectionDialog.pick_concept_and_part(parent=self._dialog_parent)
+        concepts = (
+            self._concept_provider() if self._concept_provider is not None else []
+        )
+        parts = self._part_provider() if self._part_provider is not None else []
+        opt = ConceptSelectionDialog.pick_concept_and_part(
+            parent=self._dialog_parent,
+            concepts=concepts,
+            parts=parts,
+        )
         if opt is None:
             return
         concept, part = opt
@@ -687,8 +730,8 @@ class ImageMosaic(QtCore.QObject):
         """Sort the mosaic tiles in-place.
 
         Args:
-            sort_method: A :class:`~vars_gridview.lib.sort_methods.SortMethod`
-                class or a :class:`~vars_gridview.lib.sort_methods.SortMethodGroup`
+            sort_method: A :class:`~vars_gridview.lib.sorting.sort_methods.SortMethod`
+                class or a :class:`~vars_gridview.lib.sorting.sort_methods.SortMethodGroup`
                 instance to apply.
         """
         sort_method.sort(self._rect_widgets)
