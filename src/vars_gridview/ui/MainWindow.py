@@ -1,67 +1,67 @@
-import os
-import subprocess
 import sys
-import traceback
-import webbrowser
 from pathlib import Path
 from shutil import rmtree
-from time import sleep
-from typing import TYPE_CHECKING, List, Optional, Tuple
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, cast
 
-import cv2
-import pyqtgraph as pg
-import qdarkstyle
 from PyQt6 import QtCore, QtGui, QtWidgets
 from sharktopoda_client.client import SharktopodaClient
-from sharktopoda_client.dto import Localization
 
-from vars_gridview.lib import m3, raziel
 from vars_gridview.lib.constants import (
     SETTINGS,
-    UI_FILE,
     APP_NAME,
     APP_VERSION,
     ICONS_DIR,
     LOG_DIR,
-    SHARKTOPODA_APP_NAME,
     STYLE_DIR,
 )
 from vars_gridview.lib.box_handler import BoxHandler
 from vars_gridview.ui.ImageMosaic import ImageMosaic
 from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.m3.operations import (
-    get_kb_concepts,
-    get_kb_name,
-    get_kb_parts,
-    query_count,
-    query_download,
-)
-from vars_gridview.lib.m3.query import QueryConstraint, QueryRequest, merge_constraints
+from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
+from vars_gridview.lib.m3.query import QueryConstraint
 from vars_gridview.lib.sort_methods import RecordedTimestampSort
-from vars_gridview.lib.utils import color_for_concept, open_file_browser, parse_tsv
+from vars_gridview.lib.utils import open_file_browser
+from vars_gridview.controllers.annotation_controller import AnnotationController
+from vars_gridview.controllers.query_controller import QueryController
+from vars_gridview.controllers.session_controller import SessionController
+from vars_gridview.lib.runnables import Worker
 from vars_gridview.ui.RectWidget import RectWidget
 from vars_gridview.ui.ConfirmationDialog import ConfirmationDialog
-from vars_gridview.ui.JSONTree import JSONTree
 from vars_gridview.ui.LoginDialog import LoginDialog
 from vars_gridview.ui.QueryDialog import QueryDialog
+from vars_gridview.ui.refactor.AnnotationActionCoordinator import (
+    AnnotationActionCoordinator,
+)
+from vars_gridview.ui.refactor.MainWindowLayout import MainWindowLayout
+from vars_gridview.ui.refactor.MainWindowMenuCoordinator import (
+    MainWindowMenuCoordinator,
+)
+from vars_gridview.ui.refactor.AnnotationOperationPresenter import (
+    AnnotationOperationPresenter,
+)
+from vars_gridview.ui.refactor.DetailPaneCoordinator import DetailPaneCoordinator
+from vars_gridview.ui.refactor.VideoNavigationCoordinator import (
+    VideoNavigationCoordinator,
+)
 from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
 from vars_gridview.ui.SortDialog import SortDialog
+from vars_gridview.ui.StatusInfoWidget import StatusInfoWidget
 from vars_gridview.ui.settings.tabs.AppearanceTab import AppearanceTab
 from vars_gridview.ui.settings.tabs.CacheTab import CacheTab
 from vars_gridview.ui.settings.tabs.EmbeddingsTab import EmbeddingsTab
 from vars_gridview.ui.settings.tabs.M3Tab import M3Tab
 from vars_gridview.ui.settings.tabs.VideoPlayerTab import VideoPlayerTab
+from vars_gridview.ui.style import (
+    ACTION_BUTTON_PALETTE,
+    action_button_style,
+    apply_app_theme,
+)
 
 if TYPE_CHECKING:
     from vars_gridview.lib.embedding import Embedding
 
 
-# Define main window class from template
-WindowTemplate, TemplateBaseClass = pg.Qt.loadUiType(UI_FILE)
-
-
-class MainWindow(TemplateBaseClass):
+class MainWindow(QtWidgets.QMainWindow):
     """
     Main application window.
     """
@@ -69,25 +69,12 @@ class MainWindow(TemplateBaseClass):
     sharktopodaConnected = QtCore.pyqtSignal()
 
     def __init__(self, app):
-        super(QtWidgets.QMainWindow, self).__init__()
-        super(TemplateBaseClass, self).__init__()
+        super().__init__()
         self._app = app
 
         # Create the main window
-        self.ui = WindowTemplate()
+        self.ui: Any = cast(Any, MainWindowLayout())
         self.ui.setupUi(self)
-
-        # Patch UI
-        bb_info_tree: QtWidgets.QWidget = self.ui.boundingBoxInfoTree
-        bb_info_tree.setLayout(QtWidgets.QVBoxLayout())
-        bb_json_tree = JSONTree()
-        bb_info_tree.layout().addWidget(bb_json_tree)
-        self.ui.boundingBoxInfoTree = bb_json_tree
-        ancillary_info_tree: QtWidgets.QWidget = self.ui.imageInfoTree
-        ancillary_info_tree.setLayout(QtWidgets.QVBoxLayout())
-        ancillary_json_tree = JSONTree()
-        ancillary_info_tree.layout().addWidget(ancillary_json_tree)
-        self.ui.imageInfoTree = ancillary_json_tree
 
         # Set the window title
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
@@ -101,29 +88,88 @@ class MainWindow(TemplateBaseClass):
         # Restore and style GUI
         self._restore_gui()
         self._style_gui()
-
-        self.endpoints = None  # The list of endpoint data from Raziel
+        SETTINGS.gui_style.valueChanged.connect(self._on_gui_style_changed)
 
         self.last_selected_rect = None  # Last selected ROI
 
         # Embedding model
         self._embedding_model: Optional[Embedding] = None
+        self._embedding_load_in_progress = False
+        self._embedding_load_dialog: Optional[QtWidgets.QProgressDialog] = None
+        self._pending_embedding_reload = False
+        self._loaded_embedding_config: Optional[tuple[str, str]] = None
+        self._embedding_config_reload_timer = QtCore.QTimer(self)
+        self._embedding_config_reload_timer.setSingleShot(True)
+        self._embedding_config_reload_timer.setInterval(150)
+        self._embedding_config_reload_timer.timeout.connect(
+            self._apply_embedding_config_reload
+        )
 
         # Last query request and total row count
-        self._last_query_request: Optional[QueryRequest] = None
-        self._last_query_total_rows: Optional[int] = None
+        self._query_running = False
+        self._kb_warmup_started = False
+        self._label_box_load_dialog: Optional[QtWidgets.QProgressDialog] = None
+        self._shutdown_save_in_progress = False
+        self._shutdown_after_save = False
+        self._shutdown_save_dialog: Optional[QtWidgets.QProgressDialog] = None
+
+        # Services/controllers (initialized after login)
+        self._annotation_service = None
+        self._kb_service = None
+        self._annotation_controller: Optional[AnnotationController] = None
+        self._session_controller = SessionController(parent=self)
+        self._session_controller.logged_in.connect(self._on_session_logged_in)
+        self._session_controller.login_failed.connect(self._on_session_login_failed)
+        self._login_event_loop: Optional[QtCore.QEventLoop] = None
+        self._login_success = False
+        self._login_error: Optional[str] = None
+
+        self._query_controller = QueryController(parent=self)
+        self._query_controller.query_started.connect(self._on_query_started)
+        self._query_controller.query_progress.connect(self._on_query_progress)
+        self._query_controller.query_failed.connect(self._on_query_failed)
+        self._query_controller.results_ready.connect(self._on_query_results)
+        self._query_progress_dialog: Optional[QtWidgets.QProgressDialog] = None
 
         # Image mosaic (holds the thumbnails as a grid of RectWidgets)
         self.image_mosaic = ImageMosaic(
             self.ui.roiGraphicsView,
             self.rect_clicked,
+            dialog_parent=self,
             embedding_model=self._embedding_model,
+            label_action_callback=self._label_single_from_tile,
+            verify_action_callback=self._verify_single_from_tile,
+            mark_training_action_callback=self._mark_training_single_from_tile,
         )
+        self._annotation_actions = AnnotationActionCoordinator(
+            parent=self,
+            image_mosaic=self.image_mosaic,
+            annotation_controller_getter=lambda: self._annotation_controller,
+            kb_service_getter=lambda: self._kb_service,
+        )
+        self._annotation_presenter = AnnotationOperationPresenter(
+            parent=self,
+            image_mosaic=self.image_mosaic,
+            roi_graphics_view=self.ui.roiGraphicsView,
+            clear_detail_panels_callback=self._clear_detail_panels,
+            status_update_callback=self._update_status_info,
+            box_handler_getter=lambda: self.box_handler,
+            action_state=self._annotation_actions,
+        )
+        self._detail_pane = DetailPaneCoordinator(
+            box_handler_getter=lambda: self.box_handler,
+            selected_rect_getter=lambda: self.last_selected_rect,
+        )
+        self._video_navigation = VideoNavigationCoordinator()
+        self.image_mosaic.stats_changed.connect(self._on_mosaic_stats_changed)
+
+        self.status_info_widget = StatusInfoWidget(
+            {"Status": "Ready"}, parent=self.ui.statusInfoContainer
+        )
+        self.ui.statusInfoLayout.addWidget(self.status_info_widget)
 
         # Box handler (handles the ROIs and annotations)
         self.box_handler: Optional[BoxHandler] = None
-
-        self.cached_moment_concepts = {}  # Cache for imaged moment -> set of observed concepts
 
         self.sharktopoda_client = None  # Sharktopoda client
         self.sharktopoda_connected = (
@@ -147,12 +193,17 @@ class MainWindow(TemplateBaseClass):
         self.ui.hideUnlabeled.stateChanged.connect(self.update_layout)
         self.ui.hideTraining.stateChanged.connect(self.update_layout)
         self.ui.hideNontraining.stateChanged.connect(self.update_layout)
-        self.ui.styleComboBox.currentTextChanged.connect(self._style_gui)
         self.ui.openVideo.clicked.connect(self.open_video)
         self.ui.sortButton.clicked.connect(self._sort_widgets)
 
         SETTINGS.label_font_size.valueChanged.connect(self.update_layout)
         SETTINGS.embeddings_enabled.valueChanged.connect(self.update_embeddings_enabled)
+        SETTINGS.embedding_service_url.valueChanged.connect(
+            self._on_embedding_config_changed
+        )
+        SETTINGS.embedding_model_name.valueChanged.connect(
+            self._on_embedding_config_changed
+        )
 
         # Create the settings dialog and register tabs
         self.settings_dialog = SettingsDialog(parent=self)
@@ -192,8 +243,8 @@ class MainWindow(TemplateBaseClass):
             LOGGER.error("Login failed")
             sys.exit(1)
 
-        # Set up the label combo boxes
-        self._setup_label_boxes()
+        # Set up the label combo boxes asynchronously.
+        self._setup_label_boxes_async()
 
         # Set up the menu bar
         self._setup_menu_bar()
@@ -215,7 +266,7 @@ class MainWindow(TemplateBaseClass):
         Prompt a login dialog and return the username, password, and Raziel URL. If failed, returns None.
         """
         login_dialog = LoginDialog(parent=self)
-        login_dialog._login_form._username_line_edit.setFocus()
+        login_dialog.focus_username()
         ok = login_dialog.exec()
 
         if not ok:
@@ -238,105 +289,95 @@ class MainWindow(TemplateBaseClass):
             LOGGER.debug(f"Updating Raziel URL setting to {raziel_url}")
             SETTINGS.raz_url.value = raziel_url
 
-        # Authenticate Raziel + get endpoint data
-        endpoints = self._auth_raziel(raziel_url, username, password)
-        if endpoints is None:  # Authentication failed
-            return False
-
-        # Authenticate M3 modules
-        ok = self._setup_m3(endpoints)
+        # Authenticate and build session services through the session controller
+        ok = self._authenticate_session(raziel_url, username, password)
         if not ok:
             return False
 
-        # Set the username setting and endpoint data
+        # Set the username setting
         SETTINGS.username.value = username
-        self.endpoints = endpoints
+        if self._annotation_service is not None:
+            self._annotation_service.observer = username
 
         return True
 
-    def _auth_raziel(self, raziel_url, username, password) -> Optional[list]:
+    def _authenticate_session(
+        self, raziel_url: str, username: str, password: str
+    ) -> bool:
         """
-        Authenticate with Raziel. Return endpoints list on success, None on fail.
+        Authenticate using SessionController and block until completion.
         """
-        try:
-            endpoints = raziel.authenticate(raziel_url, username, password)
-            LOGGER.info(f"Authenticated user {username} at {raziel_url}")
-            return endpoints
-        except Exception as e:
-            LOGGER.error(f"Raziel authentication failed: {e}")
-            QtWidgets.QMessageBox.critical(
-                self,
-                "Authentication failed",
-                f"Failed to authenticate with the configuration server. Check your username and password.\n\n{e}",
-            )
+        self._login_success = False
+        self._login_error = None
+        self._login_event_loop = QtCore.QEventLoop(self)
 
-    def _setup_m3(self, endpoints: list) -> bool:
-        """
-        Setup the M3 modules from a list of authenticated Raziel endpoint dicts. Return True on success, False on fail.
-        """
-        try:
-            m3.setup_from_endpoint_data(endpoints)
-            LOGGER.info("M3 setup successful")
+        self._session_controller.login(raziel_url, username, password)
+        self._login_event_loop.exec()
+        self._login_event_loop = None
+
+        if self._login_success:
+            LOGGER.info(f"Authenticated user {username} at {raziel_url}")
             return True
-        except ValueError as e:
-            LOGGER.error(f"M3 setup failed: {e}")
-            QtWidgets.QMessageBox.critical(
-                self, "M3 setup failed", f"M3 setup failed: {e}"
+
+        error = self._login_error or "Unknown authentication error"
+        LOGGER.error(f"Login failed: {error}")
+        QtWidgets.QMessageBox.critical(
+            self,
+            "Authentication failed",
+            f"Failed to authenticate with the configuration server. Check your username and password.\n\n{error}",
+        )
+        return False
+
+    @QtCore.pyqtSlot(object)
+    def _on_session_logged_in(self, _context: object) -> None:
+        self._kb_service = self._session_controller.knowledge_base
+        self._annotation_service = self._session_controller.annotations
+
+        if self._kb_service is None or self._annotation_service is None:
+            self._login_success = False
+            self._login_error = "Session initialized without required services"
+        else:
+            self._annotation_controller = AnnotationController(
+                annotation_service=self._annotation_service,
+                knowledge_base_service=self._kb_service,
+                parent=self,
             )
-            return False
+            self._annotation_controller.operation_started.connect(
+                self._on_annotation_operation_started
+            )
+            self._annotation_controller.operation_finished.connect(
+                self._on_annotation_operation_finished
+            )
+            self._annotation_controller.operation_failed.connect(
+                self._on_annotation_operation_failed
+            )
+            self._annotation_controller.concept_remapped.connect(
+                self._on_concept_remapped
+            )
+            self._login_success = True
+            self._login_error = None
+            self._warm_kb_cache_async()
+
+        if self._login_event_loop is not None and self._login_event_loop.isRunning():
+            self._login_event_loop.quit()
+
+    @QtCore.pyqtSlot(str)
+    def _on_session_login_failed(self, message: str) -> None:
+        self._login_success = False
+        self._login_error = message
+        if self._login_event_loop is not None and self._login_event_loop.isRunning():
+            self._login_event_loop.quit()
 
     def _setup_menu_bar(self):
-        """
-        Populate the menu bar with menus and actions.
-        """
-        menu_bar = self.ui.menuBar
-
-        file_menu = menu_bar.addMenu("&File")
-
-        settings_action = QtGui.QAction("&Settings", self)
-        settings_icon = QtGui.QIcon(str(ICONS_DIR / "gear-solid.svg"))
-        settings_action.setIcon(settings_icon)
-        settings_action.setShortcut("Ctrl+,")
-        settings_action.triggered.connect(self._open_settings)
-        file_menu.addAction(settings_action)
-
-        open_log_dir_action = QtGui.QAction("&Open Log Directory", self)
-        open_log_dir_icon = QtGui.QIcon(str(ICONS_DIR / "folder-open-solid.svg"))
-        open_log_dir_action.setIcon(open_log_dir_icon)
-        open_log_dir_action.triggered.connect(self._open_log_dir)
-        file_menu.addAction(open_log_dir_action)
-
-        query_menu = menu_bar.addMenu("&Query")
-
-        query_action = QtGui.QAction("&Query", self)
-        query_icon = QtGui.QIcon(str(ICONS_DIR / "magnifying-glass-solid.svg"))
-        query_action.setIcon(query_icon)
-        query_action.setShortcut("Ctrl+Q")
-        query_action.triggered.connect(self._do_query)
-        query_menu.addAction(query_action)
-
-        next_page_action = QtGui.QAction("&Next Page", self)
-        next_page_icon = QtGui.QIcon(str(ICONS_DIR / "right-long-solid.svg"))
-        next_page_action.setIcon(next_page_icon)
-        next_page_action.triggered.connect(self.next_page)
-        query_menu.addAction(next_page_action)
-
-        previous_page_action = QtGui.QAction("&Previous Page", self)
-        previous_page_icon = QtGui.QIcon(str(ICONS_DIR / "left-long-solid.svg"))
-        previous_page_action.setIcon(previous_page_icon)
-        previous_page_action.triggered.connect(self.previous_page)
-        query_menu.addAction(previous_page_action)
-
-        # Create a menu with icons on the left-side of the main window
-        toolbar = QtWidgets.QToolBar()
-        toolbar.setObjectName("toolbar")
-        toolbar.addAction(settings_action)
-        toolbar.addAction(query_action)
-        toolbar.addAction(next_page_action)
-        toolbar.addAction(previous_page_action)
-        toolbar.addAction(open_log_dir_action)
-        toolbar.setIconSize(QtCore.QSize(16, 16))
-        self.addToolBar(QtCore.Qt.ToolBarArea.LeftToolBarArea, toolbar)
+        """Populate the menu bar and left toolbar."""
+        MainWindowMenuCoordinator(self, self.ui.menuBar).build(
+            icons_dir=ICONS_DIR,
+            on_open_settings=self._open_settings,
+            on_open_log_dir=self._open_log_dir,
+            on_query=self._do_query,
+            on_next_page=self.next_page,
+            on_previous_page=self.previous_page,
+        )
 
     def _setup_sharktopoda_client(self):
         """
@@ -359,8 +400,6 @@ class MainWindow(TemplateBaseClass):
 
         for handler in LOGGER.handlers:
             self.sharktopoda_client.logger.addHandler(handler)
-            self.sharktopoda_client._udp_client.logger.addHandler(handler)
-            self.sharktopoda_client._udp_server.logger.addHandler(handler)
 
         ok = self.sharktopoda_client.connect()
         self.sharktopoda_connected = ok
@@ -413,16 +452,22 @@ class MainWindow(TemplateBaseClass):
         """
         open_file_browser(LOG_DIR)
 
+    def _require_loaded(self, operation: str) -> bool:
+        """Return True when results are loaded, otherwise show a standard warning."""
+        if self.loaded:
+            return True
+        QtWidgets.QMessageBox.warning(
+            self,
+            "Not Loaded",
+            f"No results are loaded, so {operation} cannot be performed.",
+        )
+        return False
+
     def _sort_widgets(self):
         """
         Open the sort dialog and apply a sort method to the rect widgets.
         """
-        if not self.loaded:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Not Loaded",
-                "No results are loaded, so sorting cannot be performed.",
-            )
+        if not self._require_loaded("sorting"):
             return
 
         # Show the sort dialog
@@ -438,72 +483,6 @@ class MainWindow(TemplateBaseClass):
 
         self.image_mosaic.render_mosaic()
 
-    def _generate_query_request(
-        self, constraints: List[QueryConstraint], limit: int, offset: int
-    ) -> QueryRequest:
-        """
-        Generate a QueryRequest from a constraint dict, limit, and offset.
-
-        Args:
-            constraint_dict (dict): A dictionary of constraints.
-            limit (int): The maximum number of results to return.
-            offset (int): The number of results to skip.
-
-        Returns:
-            QueryRequest: The generated QueryRequest object.
-        """
-        merged_constraints = merge_constraints(constraints)
-
-        query_request = QueryRequest(
-            select=[
-                "video_reference_uuid",
-                "imaged_moment_uuid",
-                "observation_uuid",
-                "association_uuid",
-                "image_reference_uuid",
-                "video_sequence_name",
-                "chief_scientist",
-                "camera_platform",
-                "dive_number",
-                "video_start_timestamp",
-                "video_container",
-                "video_uri",
-                "video_width",
-                "video_height",
-                "index_elapsed_time_millis",
-                "index_recorded_timestamp",
-                "index_timecode",
-                "image_url",
-                "image_format",
-                "observer",
-                "concept",
-                "link_name",
-                "to_concept",
-                "link_value",
-                "depth_meters",
-                "latitude",
-                "longitude",
-                "oxygen_ml_per_l",
-                "pressure_dbar",
-                "salinity",
-                "temperature_celsius",
-                "light_transmission",
-                "observation_group",
-            ],
-            where=[
-                QueryConstraint("link_name", equals="bounding box"),
-            ],
-            order_by=[
-                "index_recorded_timestamp",
-            ],
-        )
-
-        query_request.limit = limit
-        query_request.offset = offset
-        query_request.where.extend(merged_constraints)
-
-        return query_request
-
     def _do_query(self):
         """
         Perform a query based on the filter string.
@@ -513,194 +492,204 @@ class MainWindow(TemplateBaseClass):
 
         if query_spec is None:  # User cancelled, do nothing
             return
-        else:  # Unload
-            if self.last_selected_rect is not None:
-                self.image_mosaic.deselect(self.last_selected_rect)
-            self.last_selected_rect = None
-
-            if self.image_mosaic:
-                self.image_mosaic.clear_view()
-
-            self.box_handler = None
-            self.clear_selected()
-            self.ui.boundingBoxInfoTree.clear()
-            self.ui.imageInfoTree.clear()
-
-        # Generate the query request
         constraints, limit, offset = query_spec
-        query_request = self._generate_query_request(constraints, limit, offset)
-
-        # Run the query
-        self._last_query_request = query_request
-        try:
-            self._last_query_total_rows = query_count(query_request)
-            query_data_raw = query_download(query_request)
-            query_headers, query_rows = parse_tsv(query_data_raw)
-            page_number = 1 + offset // limit
-            total_pages = self._last_query_total_rows // limit + (
-                1 if self._last_query_total_rows % limit > 0 else 0
-            )
-            self.image_mosaic._status_info_widget.update(
-                {"Page": f"{page_number} of {total_pages}"}
-            )
-        except Exception as e:
-            LOGGER.error(f"Query failed: {e}")
-            LOGGER.debug(f"Failed query request: {query_request}")
-            LOGGER.debug(f"Query {traceback.format_exc()}")
-            QtWidgets.QMessageBox.critical(self, "Query Failed", f"Query failed: {e}")
-            return
-
-        # Set the display flags
-        self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
-        self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
-        self.image_mosaic.hide_training = self.ui.hideTraining.isChecked()
-        self.image_mosaic.hide_nontraining = self.ui.hideNontraining.isChecked()
-
-        # Populate the image mosaic
-        self.image_mosaic.populate(query_headers, query_rows)
-
-        # Reset sort dialog and default sort method
-        self.sort_dialog.clear()
-        self._sort_method = RecordedTimestampSort
-
-        self.image_mosaic.sort_rect_widgets(self._sort_method)
-        self.image_mosaic.render_mosaic()
-
-        # Create the box handler
-        try:
-            kb_concepts = get_kb_concepts()
-        except Exception as e:
-            LOGGER.error(f"Could not get KB concepts: {e}")
-            return
-        self.box_handler = BoxHandler(
-            self.ui.roiDetailGraphicsView,
-            self.image_mosaic,
-            all_labels=kb_concepts,
-        )
+        self._prepare_for_new_results()
+        self._query_controller.execute(constraints, limit, offset)
 
     def next_page(self) -> None:
-        self._page(True)
+        if not self._require_loaded("paging"):
+            return
+        self._prepare_for_new_results()
+        self._query_controller.next_page()
 
     def previous_page(self) -> None:
-        self._page(False)
-
-    def _page(self, right: bool) -> None:
-        """
-        Go to the next or previous page of the query results.
-        """
-        if not self.loaded:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Not Loaded",
-                "No results are loaded, so paging cannot be performed.",
-            )
+        if not self._require_loaded("paging"):
             return
+        self._prepare_for_new_results()
+        self._query_controller.previous_page()
 
-        if self._last_query_request is None:
-            return
-
-        # Get the current offset
-        offset = self._last_query_request.offset
-        limit = self._last_query_request.limit
-
-        # If offset is 0 and we are going back, do nothing
-        if offset == 0 and not right:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "No Previous Page",
-                "Already at the first page.",
-            )
-            return
-
-        # If offset is at or beyond the last page and we are going forward, do nothing
-        if offset >= self._last_query_total_rows - limit and right:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "No Next Page",
-                "Already at the last page.",
-            )
-            return
-
-        # Update the offset
-        if right:
-            offset += limit
-        else:
-            offset -= limit
-        offset = max(0, offset)
-
-        # Run the query again with the new offset
-        self._last_query_request.offset = offset
-
+    def _prepare_for_new_results(self) -> None:
+        """Reset active selection/detail panes before a new query page loads."""
         if self.last_selected_rect is not None:
             self.image_mosaic.deselect(self.last_selected_rect)
         self.last_selected_rect = None
 
-        # Property clear the graphics view first
-        if self.image_mosaic:
-            self.image_mosaic.clear_view()
-
+        self.image_mosaic.clear_view()
         self.box_handler = None
         self.clear_selected()
+        self._clear_detail_panels()
+
+    def _clear_detail_panels(self) -> None:
+        """Clear both detail metadata panels."""
         self.ui.boundingBoxInfoTree.clear()
         self.ui.imageInfoTree.clear()
 
-        try:
-            query_data_raw = query_download(self._last_query_request)
-            query_headers, query_rows = parse_tsv(query_data_raw)
-            page_number = 1 + offset // limit
-            total_pages = self._last_query_total_rows // limit + (
-                1 if self._last_query_total_rows % limit > 0 else 0
-            )
-            self.image_mosaic._status_info_widget.update(
-                {"Page": f"{page_number} of {total_pages}"}
-            )
-        except Exception as e:
-            LOGGER.error(f"Query failed: {e}")
-            LOGGER.debug(f"Failed query request: {self._last_query_request}")
-            LOGGER.debug(f"Query {traceback.format_exc()}")
-            QtWidgets.QMessageBox.critical(self, "Query Failed", f"Query failed: {e}")
-            return
-
-        # Set the display flags
+    def _sync_display_flags(self) -> None:
         self.image_mosaic.hide_labeled = self.ui.hideLabeled.isChecked()
         self.image_mosaic.hide_unlabeled = self.ui.hideUnlabeled.isChecked()
         self.image_mosaic.hide_training = self.ui.hideTraining.isChecked()
         self.image_mosaic.hide_nontraining = self.ui.hideNontraining.isChecked()
 
-        # Populate the image mosaic
+    @QtCore.pyqtSlot()
+    def _on_query_started(self) -> None:
+        self._query_running = True
+        if self._query_progress_dialog is None:
+            self._query_progress_dialog = QtWidgets.QProgressDialog(
+                "Starting query...",
+                None,
+                0,
+                6,
+                self,
+            )
+            self._query_progress_dialog.setWindowTitle("Loading Query")
+            self._query_progress_dialog.setWindowModality(
+                QtCore.Qt.WindowModality.WindowModal
+            )
+            self._query_progress_dialog.setMinimumDuration(0)
+            self._query_progress_dialog.setValue(0)
+            self._query_progress_dialog.show()
+
+    @QtCore.pyqtSlot(str, int, int)
+    def _on_query_progress(self, message: str, step: int, total_steps: int) -> None:
+        if self._query_progress_dialog is None:
+            return
+        if self._query_progress_dialog.maximum() != total_steps:
+            self._query_progress_dialog.setMaximum(total_steps)
+        self._query_progress_dialog.setLabelText(message)
+        self._query_progress_dialog.setValue(max(0, min(step, total_steps)))
+
+    @QtCore.pyqtSlot(str)
+    def _on_query_failed(self, message: str) -> None:
+        self._query_running = False
+        if self._query_progress_dialog is not None:
+            self._query_progress_dialog.close()
+            self._query_progress_dialog = None
+        self._update_status_info({"Status": "Query failed"})
+        QtWidgets.QMessageBox.critical(self, "Query Failed", message)
+
+    @QtCore.pyqtSlot(list, list, int, int, int)
+    def _on_query_results(
+        self,
+        query_headers: list[str],
+        query_rows: list[list[str]],
+        page_number: int,
+        total_pages: int,
+        total_rows: int,
+    ) -> None:
+        self._query_running = False
+        if self._query_progress_dialog is not None:
+            self._query_progress_dialog.setLabelText("Rendering mosaic...")
+            self._query_progress_dialog.setValue(5)
+        self._update_status_info(
+            {
+                "Page": f"{page_number} of {total_pages}",
+                "Rows": str(total_rows),
+                "Status": "Ready",
+            }
+        )
+
+        self._sync_display_flags()
         self.image_mosaic.populate(query_headers, query_rows)
 
-        # Reset sort dialog and default sort method
         self.sort_dialog.clear()
         self._sort_method = RecordedTimestampSort
-
         self.image_mosaic.sort_rect_widgets(self._sort_method)
         self.image_mosaic.render_mosaic()
 
-        # Create the box handler
         try:
-            kb_concepts = get_kb_concepts()
+            if self._kb_service is not None:
+                kb_concepts = list(self._kb_service.get_concepts().keys())
+            else:
+                kb_concepts = list(get_kb_concepts())
         except Exception as e:
             LOGGER.error(f"Could not get KB concepts: {e}")
             return
+
         self.box_handler = BoxHandler(
             self.ui.roiDetailGraphicsView,
             self.image_mosaic,
             all_labels=kb_concepts,
+            push_changes_callback=(
+                self._annotation_service.push_changes
+                if self._annotation_service is not None
+                else None
+            ),
+            change_concept_callback=self._change_concept_from_box,
+            change_part_callback=self._change_part_from_box,
+            delete_callback=self._delete_from_box,
+        )
+        if self._query_progress_dialog is not None:
+            self._query_progress_dialog.setLabelText("Done")
+            self._query_progress_dialog.setValue(6)
+            self._query_progress_dialog.close()
+            self._query_progress_dialog = None
+
+    def _change_concept_from_box(
+        self,
+        rect_widget: RectWidget,
+        current_concept: str,
+    ) -> Optional[str]:
+        return self._annotation_actions.change_concept_from_box(
+            rect_widget,
+            current_concept,
         )
 
-    def _setup_label_boxes(self):
-        """
-        Populate the label combo boxes
-        """
-        try:
-            kb_concepts = get_kb_concepts()
-            kb_parts = get_kb_parts()
-        except Exception as e:
-            LOGGER.error(f"Could not get KB concepts or parts: {e}")
-            return
+    def _change_part_from_box(
+        self,
+        rect_widget: RectWidget,
+        current_part: str,
+    ) -> Optional[str]:
+        return self._annotation_actions.change_part_from_box(
+            rect_widget,
+            current_part,
+        )
 
-        # Set up the combo boxes
+    def _delete_from_box(self, rect_widget: RectWidget) -> None:
+        self._annotation_actions.delete_from_box(rect_widget)
+
+    def _label_single_from_tile(
+        self,
+        rect_widget: RectWidget,
+        concept: str,
+        part: str,
+    ) -> None:
+        self._annotation_actions.label_single_from_tile(rect_widget, concept, part)
+
+    def _verify_single_from_tile(self, rect_widget: RectWidget) -> None:
+        self._annotation_actions.verify_single_from_tile(rect_widget)
+
+    def _mark_training_single_from_tile(self, rect_widget: RectWidget) -> None:
+        self._annotation_actions.mark_training_single_from_tile(rect_widget)
+
+    @QtCore.pyqtSlot(str)
+    def _on_annotation_operation_started(self, description: str) -> None:
+        self._annotation_presenter.on_started(description)
+
+    @QtCore.pyqtSlot(str)
+    def _on_annotation_operation_finished(self, _description: str) -> None:
+        self._annotation_presenter.on_finished()
+
+    @QtCore.pyqtSlot(str)
+    def _on_annotation_operation_failed(self, message: str) -> None:
+        self._annotation_presenter.on_failed(message)
+
+    @QtCore.pyqtSlot(dict)
+    def _on_mosaic_stats_changed(self, stats: dict[str, str]) -> None:
+        self._update_status_info(stats)
+
+    def _update_status_info(self, state: dict[str, str]) -> None:
+        self.status_info_widget.update(state)
+
+    @QtCore.pyqtSlot(str, str)
+    def _on_concept_remapped(self, original: str, canonical: str) -> None:
+        QtWidgets.QMessageBox.information(
+            self,
+            "Remapped Name",
+            f"Remapped concept from '{original}' to '{canonical}'.",
+        )
+
+    def _setup_label_boxes(self, kb_concepts: list[str], kb_parts: list[str]) -> None:
+        """Populate label combo boxes from already-fetched KB values."""
         self.ui.labelComboBox.clear()
         concepts = sorted([c for c in kb_concepts if c != ""])
         self.ui.labelComboBox.addItems(concepts)
@@ -719,6 +708,91 @@ class MainWindow(TemplateBaseClass):
         self.ui.partComboBox.setCurrentIndex(-1)
         self.ui.partComboBox.lineEdit().setPlaceholderText("Part")
 
+    def _setup_label_boxes_async(self) -> None:
+        """Fetch label-box options in the background with a loading indicator."""
+        self._label_box_load_dialog = QtWidgets.QProgressDialog(
+            "Loading concepts and parts...",
+            None,
+            0,
+            0,
+            self,
+        )
+        self._label_box_load_dialog.setWindowTitle("Loading")
+        self._label_box_load_dialog.setWindowModality(
+            QtCore.Qt.WindowModality.WindowModal
+        )
+        self._label_box_load_dialog.setMinimumDuration(0)
+        self._label_box_load_dialog.show()
+
+        worker = Worker(self._fetch_label_box_items)
+        worker.signals.result.connect(self._on_label_box_items_ready)
+        worker.signals.error.connect(self._on_label_box_items_failed)
+        worker.signals.finished.connect(self._on_label_box_items_finished)
+        pool = QtCore.QThreadPool.globalInstance()
+        if pool is None:
+            self._on_label_box_items_failed(
+                (RuntimeError, RuntimeError("No thread pool"), "")
+            )
+            self._on_label_box_items_finished()
+            return
+        pool.start(worker)
+
+    def _fetch_label_box_items(self) -> tuple[list[str], list[str]]:
+        if self._kb_service is not None:
+            kb_concepts = list(self._kb_service.get_concepts().keys())
+            kb_parts = list(self._kb_service.get_parts())
+        else:
+            kb_concepts = list(get_kb_concepts().keys())
+            kb_parts = list(get_kb_parts())
+        return kb_concepts, kb_parts
+
+    @QtCore.pyqtSlot(object)
+    def _on_label_box_items_ready(self, payload: tuple[list[str], list[str]]) -> None:
+        concepts, parts = payload
+        self._setup_label_boxes(concepts, parts)
+
+    @QtCore.pyqtSlot(tuple)
+    def _on_label_box_items_failed(self, err: tuple) -> None:
+        message = str(err[1]) if len(err) > 1 else "Unknown error"
+        LOGGER.error(f"Could not get KB concepts or parts: {message}")
+        QtWidgets.QMessageBox.warning(
+            self,
+            "Knowledge Base",
+            f"Failed to load concepts/parts: {message}",
+        )
+
+    @QtCore.pyqtSlot()
+    def _on_label_box_items_finished(self) -> None:
+        if self._label_box_load_dialog is not None:
+            self._label_box_load_dialog.close()
+            self._label_box_load_dialog = None
+
+    def _warm_kb_cache_async(self) -> None:
+        """Warm KB caches once per session so later dialogs remain responsive."""
+        if self._kb_warmup_started:
+            return
+        self._kb_warmup_started = True
+
+        worker = Worker(self._warm_kb_cache_worker)
+        worker.signals.error.connect(
+            lambda err: LOGGER.warning(f"KB warmup failed: {err[1]}")
+        )
+        pool = QtCore.QThreadPool.globalInstance()
+        if pool is None:
+            LOGGER.warning(
+                "Skipping KB warmup because no global thread pool is available"
+            )
+            return
+        pool.start(worker)
+
+    def _warm_kb_cache_worker(self) -> None:
+        if self._kb_service is not None:
+            self._kb_service.get_concepts()
+            self._kb_service.get_parts()
+        # Warm legacy operation caches used by dialogs that still call module wrappers.
+        get_kb_concepts()
+        get_kb_parts()
+
     def _restore_gui(self):
         """
         Restore window size and splitter states
@@ -732,20 +806,24 @@ class MainWindow(TemplateBaseClass):
         if SETTINGS.gui_splitter2_state.value is not None:
             self.ui.splitter2.restoreState(SETTINGS.gui_splitter2_state.value)
         self.ui.zoomSpinBox.setValue(int(SETTINGS.gui_zoom.value * 100))
-        self.ui.styleComboBox.setCurrentText(SETTINGS.gui_style.value)
 
     def _save_gui(self):
         SETTINGS.gui_geometry.value = self.saveGeometry()
         SETTINGS.gui_window_state.value = self.saveState()
         SETTINGS.gui_splitter1_state.value = self.ui.splitter1.saveState()
         SETTINGS.gui_splitter2_state.value = self.ui.splitter2.saveState()
-        SETTINGS.gui_style.value = self.ui.styleComboBox.currentText()
+
+    @QtCore.pyqtSlot(object)
+    def _on_gui_style_changed(self, _value: object) -> None:
+        self._style_gui()
 
     def _style_buttons(self):
         """
         Style the main window buttons.
         """
         style = self.style()
+        if style is None:
+            return
 
         self.ui.verifySelectedButton.setIcon(
             style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DialogYesButton)
@@ -763,31 +841,30 @@ class MainWindow(TemplateBaseClass):
             style.standardIcon(QtWidgets.QStyle.StandardPixmap.SP_TrashIcon)
         )
 
-        self.ui.labelSelectedButton.setStyleSheet("background-color: #085d8e;")
+        self.ui.labelSelectedButton.setStyleSheet(
+            action_button_style(ACTION_BUTTON_PALETTE.label)
+        )
         self.ui.verifySelectedButton.setStyleSheet(
-            "background-color: #088e0d;"
-        )  # green
+            action_button_style(ACTION_BUTTON_PALETTE.verify)
+        )
         self.ui.unverifySelectedButton.setStyleSheet(
-            "background-color: #8e4708;"
-        )  # orange
+            action_button_style(ACTION_BUTTON_PALETTE.unverify)
+        )
         self.ui.markTrainingSelectedButton.setStyleSheet(
-            "background-color: #088e8e;"
-        )  # cyan variant
+            action_button_style(ACTION_BUTTON_PALETTE.mark_training)
+        )
         self.ui.unmarkTrainingSelectedButton.setStyleSheet(
-            "background-color: #8e8e08;"
-        )  # yellow variant
-        self.ui.discardButton.setStyleSheet("background-color: #8f0808;")
+            action_button_style(ACTION_BUTTON_PALETTE.unmark_training)
+        )
+        self.ui.discardButton.setStyleSheet(
+            action_button_style(ACTION_BUTTON_PALETTE.delete)
+        )
 
     def label_selected(self):
         """
         Label selected localizations. Uses the concept & part from the respective combo boxes. If the part is empty, "self" is used.
         """
-        if not self.loaded:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Not Loaded",
-                "No results are loaded, so labels cannot be applied.",
-            )
+        if not self._require_loaded("labeling"):
             return
 
         # Get the concept and part from the combo boxes
@@ -803,159 +880,40 @@ class MainWindow(TemplateBaseClass):
             )
             return
 
-        if concept not in get_kb_concepts():
-            QtWidgets.QMessageBox.critical(
-                self, "Bad Concept", f'Bad concept "{concept}".'
-            )
-            return
-        if part not in get_kb_parts() and part != "self":
-            QtWidgets.QMessageBox.critical(self, "Bad Part", f'Bad part "{part}".')
-            return
-
-        # Remap concept name
-        try:
-            remapped_concept = get_kb_name(concept)
-        except Exception as e:
-            QtWidgets.QMessageBox.critical(
-                self, "Error", f'Could not get KB name for concept "{concept}": {e}'
-            )
-            return
-
-        if remapped_concept != concept:  # show dialog if remapped
-            QtWidgets.QMessageBox.information(
-                self,
-                "Remapped name",
-                f"Remapped concept from '{concept}' to '{remapped_concept}'.",
-            )
-
-        to_label = self.image_mosaic.get_selected()
-        if len(to_label) > 1:
-            opt = QtWidgets.QMessageBox.question(
-                self,
-                "Confirm Label",
-                "Label {} localizations as {}?".format(
-                    len(to_label),
-                    f"'{remapped_concept}'"
-                    + (f" with part '{part}'" if part != "self" else ""),
-                ),
-                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
-            )
-        else:
-            opt = QtWidgets.QMessageBox.StandardButton.Yes
-
-        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            # Apply labels to all selected localizations, push to VARS
-            self.image_mosaic.label_selected(remapped_concept, part)
-
-            # Update the label of the selected localization in the image view (if necessary)
-            self.box_handler.update_labels()
-
-            # Render the mosaic
-            self.image_mosaic.render_mosaic()
+        self._annotation_actions.label_selected(concept, part)
 
     def verify_selected(self):
         """
         Verify the selected localizations.
         """
-        to_verify = self.image_mosaic.get_selected()
-        if len(to_verify) > 1:
-            opt = QtWidgets.QMessageBox.question(
-                self,
-                "Confirm Verification",
-                "Verify {} localizations?".format(len(to_verify)),
-                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
-            )
-        else:
-            opt = QtWidgets.QMessageBox.StandardButton.Yes
-
-        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.verify_selected(True)
-
-            self.image_mosaic.render_mosaic()
+        self._annotation_actions.verify_selected(True)
 
     def unverify_selected(self):
         """
         Unverify the selected localizations.
         """
-        to_unverify = self.image_mosaic.get_selected()
-        if len(to_unverify) > 1:
-            opt = QtWidgets.QMessageBox.question(
-                self,
-                "Confirm Unverification",
-                "Unverify {} localizations?".format(len(to_unverify)),
-                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
-            )
-        else:
-            opt = QtWidgets.QMessageBox.StandardButton.Yes
-
-        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.verify_selected(False)
+        self._annotation_actions.verify_selected(False)
 
     @QtCore.pyqtSlot()
     def mark_training_selected(self) -> None:
         """
         Mark the selected localizations for training.
         """
-        to_mark = self.image_mosaic.get_selected()
-        if len(to_mark) > 1:
-            opt = QtWidgets.QMessageBox.question(
-                self,
-                "Confirm Mark Training",
-                "Mark {} localizations for training?".format(len(to_mark)),
-                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
-            )
-        else:
-            opt = QtWidgets.QMessageBox.StandardButton.Yes
-
-        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.mark_training_selected(True)
+        self._annotation_actions.mark_training_selected(True)
 
     @QtCore.pyqtSlot()
     def unmark_training_selected(self) -> None:
         """
         Unmark the selected localizations for training.
         """
-        to_unmark = self.image_mosaic.get_selected()
-        if len(to_unmark) > 1:
-            opt = QtWidgets.QMessageBox.question(
-                self,
-                "Confirm Unmark Training",
-                "Unmark {} localizations for training?".format(len(to_unmark)),
-                defaultButton=QtWidgets.QMessageBox.StandardButton.No,
-            )
-        else:
-            opt = QtWidgets.QMessageBox.StandardButton.Yes
-
-        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.mark_training_selected(False)
+        self._annotation_actions.mark_training_selected(False)
 
     @QtCore.pyqtSlot()
     def delete(self):
-        if not self.loaded:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Not Loaded",
-                "No results are loaded, so deletions cannot be performed.",
-            )
+        if not self._require_loaded("deletions"):
             return
 
-        to_delete = self.image_mosaic.get_selected()
-        opt = QtWidgets.QMessageBox.question(
-            self,
-            "Confirm Deletion",
-            "Delete {} localizations?\nThis operation cannot be undone.".format(
-                len(to_delete)
-            ),
-            defaultButton=QtWidgets.QMessageBox.StandardButton.No,
-        )
-        if opt == QtWidgets.QMessageBox.StandardButton.Yes:
-            self.image_mosaic.delete_selected()
-            self.box_handler.roi_detail.clear()
-            self.box_handler.clear()
-            self.ui.boundingBoxInfoTree.clear()
-            self.ui.imageInfoTree.clear()
-
-            self.image_mosaic.render_mosaic()
+        self._annotation_actions.delete_selected()
 
     @QtCore.pyqtSlot()
     def clear_selected(self):
@@ -982,95 +940,203 @@ class MainWindow(TemplateBaseClass):
 
     @QtCore.pyqtSlot(object)
     def update_embeddings_enabled(self, embeddings_enabled: bool):
-        if embeddings_enabled:
-            from vars_gridview.lib.embedding import DreamSimEmbedding
-
-            if self._embedding_model is None:
-                try:
-                    self._embedding_model = DreamSimEmbedding()
-                except Exception as e:
-                    LOGGER.error(f"Could not create embedding model: {e}")
-                    QtWidgets.QMessageBox.critical(
-                        self,
-                        "Error",
-                        f"Could not create embedding model: {e}",
-                    )
-                    return
+        if not embeddings_enabled:
+            self._embedding_model = None
+            self._loaded_embedding_config = None
+            self._pending_embedding_reload = False
             if self.image_mosaic is not None:
-                self.image_mosaic.update_embedding_model(self._embedding_model)
-
-    @QtCore.pyqtSlot(object, object)
-    def rect_clicked(self, rect: RectWidget, event: Optional[QtGui.QMouseEvent]):
-        if not self.loaded:
+                self.image_mosaic.update_embedding_model(None)
             return
 
-        # Get modifier (ctrl, shift) states
-        if event is not None:
-            ctrl = event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier
-            shift = event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
-        else:
-            ctrl = False
-            shift = False
+        current_config = self._current_embedding_config()
 
-        # Save information to VARS for any moved/resized boxes
-        try:
-            self.box_handler.save_all()
-        except Exception as e:
-            LOGGER.error(f"Could not save localizations: {e}")
-            QtWidgets.QMessageBox.critical(
-                self, "Error", f"An error occurred while saving localizations: {e}"
+        if self._embedding_model is not None:
+            if self._loaded_embedding_config == current_config:
+                if self.image_mosaic is not None:
+                    self.image_mosaic.update_embedding_model(self._embedding_model)
+                    self.image_mosaic.precompute_embeddings_async()
+                return
+
+            # Config changed: force reinitialization of the embedding client.
+            self._embedding_model = None
+            if self.image_mosaic is not None:
+                self.image_mosaic.update_embedding_model(None)
+
+        if self._embedding_load_in_progress:
+            self._pending_embedding_reload = True
+            return
+
+        self._embedding_load_in_progress = True
+        self._embedding_load_dialog = QtWidgets.QProgressDialog(
+            "Connecting to embedding service...",
+            None,
+            0,
+            0,
+            self,
+        )
+        self._embedding_load_dialog.setWindowTitle("Embeddings")
+        self._embedding_load_dialog.setWindowModality(
+            QtCore.Qt.WindowModality.WindowModal
+        )
+        self._embedding_load_dialog.setMinimumDuration(0)
+        self._embedding_load_dialog.show()
+
+        worker = Worker(self._create_embedding_model_worker)
+        worker.signals.result.connect(self._on_embedding_model_ready)
+        worker.signals.error.connect(self._on_embedding_model_error)
+        worker.signals.finished.connect(self._on_embedding_model_finished)
+        pool = QtCore.QThreadPool.globalInstance()
+        if pool is None:
+            self._on_embedding_model_error(
+                (RuntimeError, RuntimeError("No thread pool"), "")
             )
+            self._on_embedding_model_finished()
+            return
+        pool.start(worker)
+
+    def _create_embedding_model_worker(self):
+        from vars_gridview.lib.embedding import HttpEmbedding
+
+        model = HttpEmbedding(
+            base_url=SETTINGS.embedding_service_url.value,
+            model_name=SETTINGS.embedding_model_name.value,
+        )
+        model.health_check()
+        return model
+
+    @QtCore.pyqtSlot(object)
+    def _on_embedding_model_ready(self, model) -> None:
+        self._embedding_model = model
+        self._loaded_embedding_config = (
+            SETTINGS.embedding_service_url.value.strip().rstrip("/"),
+            SETTINGS.embedding_model_name.value.strip(),
+        )
+        if self.image_mosaic is not None:
+            self.image_mosaic.update_embedding_model(model)
+            self.image_mosaic.precompute_embeddings_async()
+
+    @QtCore.pyqtSlot(tuple)
+    def _on_embedding_model_error(self, err: tuple) -> None:
+        message = str(err[1]) if len(err) > 1 else "Unknown error"
+        LOGGER.error(f"Could not initialize embedding service: {message}")
+        QtWidgets.QMessageBox.critical(
+            self,
+            "Error",
+            f"Could not initialize embedding service: {message}",
+        )
+
+    @QtCore.pyqtSlot()
+    def _on_embedding_model_finished(self) -> None:
+        self._embedding_load_in_progress = False
+        if self._embedding_load_dialog is not None:
+            self._embedding_load_dialog.close()
+            self._embedding_load_dialog = None
+        if self._pending_embedding_reload and SETTINGS.embeddings_enabled.value:
+            self._pending_embedding_reload = False
+            self._apply_embedding_config_reload()
+
+    def _current_embedding_config(self) -> tuple[str, str]:
+        """Return normalized embedding service/model settings tuple."""
+        return (
+            SETTINGS.embedding_service_url.value.strip().rstrip("/"),
+            SETTINGS.embedding_model_name.value.strip(),
+        )
+
+    def _apply_embedding_config_reload(self) -> None:
+        """Apply a settings-driven embedding reload only when config actually changed."""
+        if not SETTINGS.embeddings_enabled.value:
             return
 
-        # Select the widget
-        if shift:
+        desired_config = self._current_embedding_config()
+        if (
+            self._embedding_model is not None
+            and self._loaded_embedding_config == desired_config
+        ):
+            return
+
+        if self._embedding_load_in_progress:
+            self._pending_embedding_reload = True
+            return
+
+        self._embedding_model = None
+        if self.image_mosaic is not None:
+            self.image_mosaic.update_embedding_model(None)
+        self.update_embeddings_enabled(True)
+
+    @QtCore.pyqtSlot(object)
+    def _on_embedding_config_changed(self, _value: object) -> None:
+        """Reload embedding client when service URL/model settings change."""
+        if not SETTINGS.embeddings_enabled.value:
+            return
+        # Coalesce paired settings updates (URL + model) into one reload.
+        self._embedding_config_reload_timer.start()
+
+    @staticmethod
+    def _selection_modifiers(
+        event: Optional[QtGui.QMouseEvent],
+    ) -> tuple[bool, bool]:
+        """Return ``(ctrl, shift)`` modifier state for a click event."""
+        if event is None:
+            return False, False
+        ctrl = bool(event.modifiers() & QtCore.Qt.KeyboardModifier.ControlModifier)
+        shift = bool(event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier)
+        return ctrl, shift
+
+    def _save_dirty_boxes_then_handle_click(
+        self,
+        rect: RectWidget,
+        event: Optional[QtGui.QMouseEvent],
+    ) -> None:
+        """Save dirty detail boxes synchronously, then handle the click."""
+        if self.box_handler is not None:
+            try:
+                self.box_handler.save_all()
+            except Exception as exc:
+                self._on_pre_click_save_error((type(exc), exc, ""))
+                return
+        self._apply_rect_click(rect, event)
+
+    @QtCore.pyqtSlot(tuple)
+    def _on_pre_click_save_error(self, err: tuple) -> None:
+        message = str(err[1]) if len(err) > 1 else "Unknown error"
+        LOGGER.error(f"Could not save localizations: {message}")
+        QtWidgets.QMessageBox.critical(
+            self,
+            "Error",
+            f"An error occurred while saving localizations: {message}",
+        )
+
+    def _update_mosaic_selection(
+        self, rect: RectWidget, ctrl: bool, shift: bool
+    ) -> None:
+        """Apply ctrl/shift selection behavior in the mosaic view."""
+        if shift and self.last_selected_rect is not None:
             self.image_mosaic.select_range(self.last_selected_rect, rect)
         elif ctrl and rect.is_selected:
             self.image_mosaic.deselect(rect)
         else:
             self.image_mosaic.select(rect, clear=not ctrl)
 
-        # Remove highlight from the last selected ROI
-        if self.last_selected_rect is not None:
+    def _clear_last_detail_selection(self) -> None:
+        """Remove highlight and detail overlays from the prior selected tile."""
+        if self.last_selected_rect is None:
+            return
+        if self.box_handler is not None:
             self.box_handler.clear()
-            self.last_selected_rect.is_last_selected = False
-            self.last_selected_rect.update()
+        self.last_selected_rect.is_last_selected = False
+        self.last_selected_rect.update()
 
-        # Check if the roiGraphicsView is minimized
-        image_view_minimized = (
+    def _detail_view_minimized(self) -> bool:
+        """Return True when the detail view cannot render content visibly."""
+        return (
             self.ui.roiDetailGraphicsView.width() == 0
             or self.ui.roiDetailGraphicsView.height() == 0
         )
 
-        # Check if new rect image is different than last rect image
-        rect_image = rect.get_image()
-        last_rect_image = (
-            self.last_selected_rect.get_image() if self.last_selected_rect else None
-        )
-        same_image = rect_image is last_rect_image
-        needs_autorange = not (same_image or image_view_minimized)
-
-        # Update the last selection
-        rect.is_last_selected = True
-        rect.update()
-        self.last_selected_rect = rect
-
-        # Update the image and add the boxes (only if the roiGraphicsView isn't minimized by the splitter)
-        if not image_view_minimized:
-            rect_full_image = rect.get_full_image()
-            if rect_full_image is None:
-                return
-            self.box_handler.roi_detail.setImage(
-                cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB)
-            )
-            if needs_autorange:
-                self.box_handler.view_box.autoRange()
-            self.box_handler.add_annotation(rect.localization_index, rect)
-
-        # Add localization data to the panel
+    def _populate_detail_metadata(self, rect: RectWidget) -> None:
+        """Refresh detail info panels for the selected localization."""
         self.ui.boundingBoxInfoTree.set_data(rect.association.data)
 
-        # Add ancillary data to the image info list
         ancillary_data = rect.ancillary_data.copy()
         annotation_datetime = rect.annotation_datetime()
         if annotation_datetime is not None:
@@ -1090,168 +1156,131 @@ class MainWindow(TemplateBaseClass):
 
         self.ui.imageInfoTree.set_data(ancillary_data)
 
+    def _apply_rect_click(
+        self, rect: RectWidget, event: Optional[QtGui.QMouseEvent]
+    ) -> None:
+        if not self.loaded:
+            return
+
+        ctrl, shift = self._selection_modifiers(event)
+
+        self._update_mosaic_selection(rect, ctrl, shift)
+        self._clear_last_detail_selection()
+
+        image_view_minimized = self._detail_view_minimized()
+
+        # Check if new rect source is different than last selected source
+        same_image = False
+        if self.last_selected_rect is not None:
+            same_image = self._detail_pane.rect_source_key(
+                rect
+            ) == self._detail_pane.rect_source_key(self.last_selected_rect)
+        needs_autorange = not (same_image or image_view_minimized)
+
+        # Update the last selection
+        rect.is_last_selected = True
+        rect.update()
+        self.last_selected_rect = rect
+
+        # Update the image and add the boxes asynchronously (only if the detail view isn't minimized)
+        if not image_view_minimized:
+            self._detail_pane.show_rect_in_detail_async(rect, needs_autorange)
+
+        self._populate_detail_metadata(rect)
+
+    @QtCore.pyqtSlot(object, object)
+    def rect_clicked(self, rect: RectWidget, event: Optional[QtGui.QMouseEvent]):
+        if not self.loaded:
+            return
+        self._save_dirty_boxes_then_handle_click(rect, event)
+
     @QtCore.pyqtSlot()
     def open_video(self):
         """
         Open the video of the last selected ROI, if available
         """
-        if not self.last_selected_rect:
-            QtWidgets.QMessageBox.warning(self, "No ROI Selected", "No ROI selected.")
-            return
-
-        rect = self.last_selected_rect
-
-        # Guard if we don't have the necessary video data
-        if rect.video_url is None or rect.elapsed_time_millis is None:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "No Video Data",
-                "The selected ROI does not have the required video data.",
-            )
-            return
-
-        if not self.sharktopoda_connected:  # try VLC, then fall back to web browser
-            elapsed_time_seconds = rect.elapsed_time_millis / 1000.0
-
-            # Try to open with VLC if available
-            vlc_opened = False
-            vlc_commands = []
-
-            if sys.platform == "darwin":  # macOS
-                vlc_commands = [
-                    "/Applications/VLC.app/Contents/MacOS/VLC",
-                    "vlc",
-                ]
-            elif sys.platform == "win32":  # Windows
-                vlc_commands = [
-                    r"C:\Program Files\VideoLAN\VLC\vlc.exe",
-                    r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe",
-                    "vlc",
-                ]
-            else:  # Linux and others
-                vlc_commands = ["vlc"]
-
-            for vlc_cmd in vlc_commands:
-                try:
-                    # Create a clean environment without Qt-related variables to avoid conflicts
-                    env = os.environ.copy()
-                    env.pop("QT_PLUGIN_PATH", None)
-                    env.pop("QT_QPA_PLATFORM_PLUGIN_PATH", None)
-
-                    subprocess.Popen(
-                        [
-                            vlc_cmd,
-                            rect.video_url,
-                            f"--start-time={elapsed_time_seconds}",
-                            "--start-paused",
-                        ],
-                        env=env,
-                    )
-                    vlc_opened = True
-                    LOGGER.info(f"Opened video in VLC: {rect.video_url}")
-                    break
-                except (FileNotFoundError, OSError):
-                    continue
-
-            if not vlc_opened:
-                # Fall back to web browser
-                url = rect.video_url + "#t={},{}".format(
-                    elapsed_time_seconds - 1e-3, elapsed_time_seconds
-                )  # "pause" at the annotation
-                webbrowser.open(url)
-                LOGGER.info(f"Opened video in web browser: {url}")
-
-        else:  # use Sharktopoda 2
-            # Get video reference UUID
-            video_reference_uuid = rect.video_data["video_reference_uuid"]
-
-            # Show warning if rescale dimensions are different
-            if abs(rect.scale_x / rect.scale_y - 1) > 0.01:  # 1% tolerance
-                QtWidgets.QMessageBox.warning(
-                    self,
-                    "Different MP4 Aspect Ratio",
-                    "MP4 video has different aspect ratio than ROI source image. The bounding box may not be displayed correctly.",
-                )
-
-            # Collect localizations for all rects that are on the same video
-            localizations = []
-            for rect_q in self.image_mosaic._rect_widgets:
-                if rect_q.video_url != rect.video_url:
-                    continue
-
-                localization = Localization(
-                    uuid=uuid4(),
-                    concept=rect_q.association.concept,
-                    elapsed_time_millis=rect_q.elapsed_time_millis,
-                    x=rect_q.scale_x * rect_q.association.x,
-                    y=rect_q.scale_y * rect_q.association.y,
-                    width=rect_q.scale_x * rect_q.association.width,
-                    height=rect_q.scale_y * rect_q.association.height,
-                    duration_millis=1000,
-                    color=color_for_concept(rect_q.association.concept).name(),
-                )
-
-                localizations.append(localization)
-
-            def show_localizations():
-                sleep(
-                    0.5
-                )  # A hack, since Sharktopoda 2 crashes if you send it a command too soon
-                self.sharktopoda_client.seek_elapsed_time(
-                    video_reference_uuid, rect.elapsed_time_millis
-                )
-                self.sharktopoda_client.clear_localizations(video_reference_uuid)
-
-                # Add localizations in chunks
-                chunk_size = 20
-                for i in range(0, len(localizations), chunk_size):
-                    chunk = localizations[i : i + chunk_size]
-
-                    self.sharktopoda_client.add_localizations(
-                        video_reference_uuid, chunk
-                    )
-
-                self.sharktopoda_client.show(video_reference_uuid)
-
-                # If on macOS, call the open command to bring Sharktopoda to the front
-                if sys.platform == "darwin":
-                    try:
-                        os.system(f"open -a {SHARKTOPODA_APP_NAME}")
-                    except Exception as e:
-                        LOGGER.warning(f"Could not open Sharktopoda: {e}")
-
-            self.sharktopoda_client.open(
-                video_reference_uuid, rect.video_url, callback=show_localizations
-            )
+        self._video_navigation.open_video(
+            parent=self,
+            selected_rect=self.last_selected_rect,
+            all_rect_widgets=self.image_mosaic.get_all_rect_widgets(),
+            sharktopoda_connected=self.sharktopoda_connected,
+            sharktopoda_client=self.sharktopoda_client,
+        )
 
     @QtCore.pyqtSlot()
     def _style_gui(self):
         """
-        Set the GUI stylesheet.
+        Set the GUI stylesheet from persisted settings.
         """
-        # setup stylesheet
-        # set the environment variable to use a specific wrapper
-        # it can be set to PyQt, PyQt5, PyQt6 PySide or PySide2 (not implemented yet)
-        if self.ui.styleComboBox.currentText().lower() == "darkstyle":
-            os.environ["PYQTGRAPH_QT_LIB"] = "PyQt6"
-            self._app.setStyleSheet(
-                qdarkstyle.load_stylesheet(qt_api=os.environ["PYQTGRAPH_QT_LIB"])
-            )
-        elif self.ui.styleComboBox.currentText().lower() == "darkbreeze":
-            file = QtCore.QFile(str(STYLE_DIR / "dark.qss"))
-            file.open(
-                QtCore.QFile.OpenModeFlag.ReadOnly | QtCore.QFile.OpenModeFlag.Text
-            )
-            stream = QtCore.QTextStream(file)
-            self._app.setStyleSheet(stream.readAll())
-        elif self.ui.styleComboBox.currentText().lower() == "default":
-            self._app.setStyleSheet("")
+        apply_app_theme(self._app, SETTINGS.gui_style.value, STYLE_DIR)
 
-    def closeEvent(self, event):
+    def closeEvent(self, event) -> None:  # type: ignore[override]
         self._save_gui()
-        if self.loaded:
-            self.box_handler.save_all()
+        if self._shutdown_after_save:
+            QtWidgets.QMainWindow.closeEvent(self, event)
+            return
+
+        if self.loaded and self.box_handler is not None:
+            event.ignore()
+            if self._shutdown_save_in_progress:
+                return
+            self._shutdown_save_in_progress = True
+
+            self._shutdown_save_dialog = QtWidgets.QProgressDialog(
+                "Saving localizations before exit...",
+                None,
+                0,
+                0,
+                self,
+            )
+            self._shutdown_save_dialog.setWindowTitle("Saving")
+            self._shutdown_save_dialog.setWindowModality(
+                QtCore.Qt.WindowModality.WindowModal
+            )
+            self._shutdown_save_dialog.setMinimumDuration(0)
+            self._shutdown_save_dialog.show()
+
+            worker = Worker(self.box_handler.save_all)
+            worker.signals.result.connect(self._on_close_save_ready_from_worker)
+            worker.signals.error.connect(self._on_close_save_failed)
+            worker.signals.finished.connect(self._on_close_save_finished)
+            pool = QtCore.QThreadPool.globalInstance()
+            if pool is None:
+                self._on_close_save_failed(
+                    (RuntimeError, RuntimeError("No thread pool"), "")
+                )
+                self._on_close_save_finished()
+                return
+            pool.start(worker)
+            return
+
         QtWidgets.QMainWindow.closeEvent(self, event)
+
+    @QtCore.pyqtSlot()
+    def _on_close_save_ready(self) -> None:
+        self._shutdown_after_save = True
+        self.close()
+
+    @QtCore.pyqtSlot(object)
+    def _on_close_save_ready_from_worker(self, _unused) -> None:
+        self._on_close_save_ready()
+
+    @QtCore.pyqtSlot(tuple)
+    def _on_close_save_failed(self, err: tuple) -> None:
+        message = str(err[1]) if len(err) > 1 else "Unknown error"
+        LOGGER.error(f"Could not save localizations during shutdown: {message}")
+        QtWidgets.QMessageBox.critical(
+            self,
+            "Error",
+            f"An error occurred while saving localizations: {message}",
+        )
+
+    @QtCore.pyqtSlot()
+    def _on_close_save_finished(self) -> None:
+        self._shutdown_save_in_progress = False
+        if self._shutdown_save_dialog is not None:
+            self._shutdown_save_dialog.close()
+            self._shutdown_save_dialog = None
 
     def get_query_params(self) -> Optional[Tuple[List[QueryConstraint], int, int]]:
         """

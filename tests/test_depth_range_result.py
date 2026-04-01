@@ -8,10 +8,10 @@ class TestDepthRangeConstraintResult(unittest.TestCase):
     def test_both_min_and_max(self):
         """Test depth range with both min and max values."""
         result = DepthRangeConstraintResult(100.0, 2500.0)
-        
+
         # Check string representation
         self.assertEqual(str(result), "Depth: 100.0m - 2500.0m")
-        
+
         # Check constraints
         constraints = list(result.constraints)
         self.assertEqual(len(constraints), 1)
@@ -21,10 +21,10 @@ class TestDepthRangeConstraintResult(unittest.TestCase):
     def test_min_only(self):
         """Test depth range with only minimum value (>= 100m)."""
         result = DepthRangeConstraintResult(100.0, None)
-        
+
         # Check string representation
         self.assertEqual(str(result), "Depth: >= 100.0m")
-        
+
         # Check constraints
         constraints = list(result.constraints)
         self.assertEqual(len(constraints), 1)
@@ -36,10 +36,10 @@ class TestDepthRangeConstraintResult(unittest.TestCase):
     def test_max_only(self):
         """Test depth range with only maximum value (<= 2500m)."""
         result = DepthRangeConstraintResult(None, 2500.0)
-        
+
         # Check string representation
         self.assertEqual(str(result), "Depth: <= 2500.0m")
-        
+
         # Check constraints
         constraints = list(result.constraints)
         self.assertEqual(len(constraints), 1)
@@ -51,10 +51,10 @@ class TestDepthRangeConstraintResult(unittest.TestCase):
     def test_neither_min_nor_max(self):
         """Test depth range with neither min nor max (edge case)."""
         result = DepthRangeConstraintResult(None, None)
-        
+
         # Check string representation
         self.assertEqual(str(result), "Depth: (no constraint)")
-        
+
         # Check that no constraints are yielded
         constraints = list(result.constraints)
         self.assertEqual(len(constraints), 0)

@@ -1,7 +1,7 @@
-from typing import Tuple
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
+from vars_gridview.ui.style import UiDimensions
 
 
 class SettingsDialog(QtWidgets.QDialog):
@@ -20,7 +20,7 @@ class SettingsDialog(QtWidgets.QDialog):
         super().__init__(parent)
 
         self.setWindowTitle("Settings")
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(UiDimensions.DIALOG_MIN_WIDTH)
 
         # Create tab widget to hold settings pages
         self._tab_widget = QtWidgets.QTabWidget()
@@ -88,7 +88,7 @@ class SettingsDialog(QtWidgets.QDialog):
         if self._needs_apply:
             self.applySettings.emit()
 
-    def register(self, *tabs: Tuple[AbstractSettingsTab]) -> None:
+    def register(self, *tabs: AbstractSettingsTab) -> None:
         """
         Register tabs with the dialog.
 

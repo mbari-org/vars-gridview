@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
 
 from vars_gridview.ui.StatusInfoItem import StatusInfoItem
+from vars_gridview.ui.style import UiDimensions
 
 
 class StatusInfoWidget(QWidget):
@@ -17,8 +18,8 @@ class StatusInfoWidget(QWidget):
         # and clear/add child widgets as the state changes so we don't call
         # setLayout repeatedly.
         self._layout_obj = QHBoxLayout()
-        self._layout_obj.setContentsMargins(2, 0, 2, 0)
-        self._layout_obj.setSpacing(6)
+        self._layout_obj.setContentsMargins(*UiDimensions.STATUS_WIDGET_MARGINS)
+        self._layout_obj.setSpacing(UiDimensions.STATUS_WIDGET_SPACING)
         self.setLayout(self._layout_obj)
 
         # Compact size policy so it fits in a horizontal status bar

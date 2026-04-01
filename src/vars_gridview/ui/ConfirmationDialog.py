@@ -1,17 +1,24 @@
+"""Simple yes/no confirmation dialog."""
+
+from __future__ import annotations
+
 from PyQt6 import QtWidgets
+
+from vars_gridview.ui.style import UiDimensions
 
 
 class ConfirmationDialog(QtWidgets.QDialog):
-    """
-    Confirmation dialog.
+    """Modal confirmation dialog with Yes and No buttons.
+
+    Prefer the :meth:`confirm` class-method for one-shot confirmation.
     """
 
-    def __init__(self, parent, title: str, text: str):
+    def __init__(self, parent: QtWidgets.QWidget | None, title: str, text: str) -> None:
         super().__init__(parent=parent)
 
         self.setWindowTitle(title)
         self.setModal(True)
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(UiDimensions.DIALOG_MIN_WIDTH)
 
         self._text = QtWidgets.QLabel(text)
 
@@ -37,17 +44,21 @@ class ConfirmationDialog(QtWidgets.QDialog):
         self.setLayout(layout)
 
     @classmethod
-    def confirm(cls, parent, title: str, text: str) -> bool:
-        """
-        Show a confirmation dialog.
+    def confirm(
+        cls,
+        parent: QtWidgets.QWidget | None,
+        title: str,
+        text: str,
+    ) -> bool:
+        """Show a confirmation dialog and return the user's choice.
 
         Args:
-            parent: The parent widget.
-            title: The title of the dialog.
-            text: The text to display.
+            parent: Parent widget (may be ``None``).
+            title: Dialog window title.
+            text: Message displayed inside the dialog.
 
         Returns:
-            True if the user confirmed, False otherwise.
+            ``True`` if the user clicked *Yes*, ``False`` otherwise.
         """
         dialog = cls(parent, title, text)
         return dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted

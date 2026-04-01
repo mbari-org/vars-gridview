@@ -1,6 +1,8 @@
 from PyQt6.QtWidgets import QWidget, QHBoxLayout, QLabel, QSizePolicy
 from PyQt6.QtCore import Qt
 
+from vars_gridview.ui.style import UiDimensions, status_info_item_stylesheet
+
 
 class StatusInfoItem(QWidget):
     """
@@ -41,31 +43,12 @@ class StatusInfoItem(QWidget):
         self._layout()
 
         # Style the widget using object names for scoping
-        self.setStyleSheet(
-            """
-            QWidget#StatusInfoItem {
-              border: 1px solid rgba(255,255,255,0.08);
-              background: rgba(255,255,255,0.01);
-              border-radius: 6px;
-              padding-left: 6px;
-              padding-right: 6px;
-            }
-            QLabel#StatusInfoKey {
-              color: rgba(255,255,255,0.85);
-              font-weight: 600;
-              padding-right: 6px;
-            }
-            QLabel#StatusInfoValue {
-              color: rgba(255,255,255,0.9);
-              font-weight: 400;
-            }
-            """
-        )
+        self.setStyleSheet(status_info_item_stylesheet())
 
     def _layout(self) -> None:
         layout = QHBoxLayout()
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(2)
+        layout.setContentsMargins(*UiDimensions.STATUS_ITEM_MARGINS)
+        layout.setSpacing(UiDimensions.STATUS_ITEM_SPACING)
         layout.addWidget(self._label)
         layout.addWidget(self._value)
         self.setLayout(layout)

@@ -1,6 +1,11 @@
+"""Login dialog for VARS GridView authentication."""
+
+from __future__ import annotations
+
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.constants import SETTINGS
+from vars_gridview.ui.style import UiDimensions
 
 
 class LoginDialog(QtWidgets.QDialog):
@@ -13,7 +18,11 @@ class LoginDialog(QtWidgets.QDialog):
         Login form widget.
         """
 
-        def __init__(self, parent=None, completer=None):
+        def __init__(
+            self,
+            parent: QtWidgets.QWidget | None = None,
+            completer: QtWidgets.QCompleter | None = None,
+        ) -> None:
             super().__init__(parent)
 
             self._username_line_edit = QtWidgets.QLineEdit()
@@ -48,7 +57,7 @@ class LoginDialog(QtWidgets.QDialog):
 
             self._arrange()
 
-        def _arrange(self):
+        def _arrange(self) -> None:
             layout = QtWidgets.QFormLayout()
             layout.setFieldGrowthPolicy(
                 QtWidgets.QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow
@@ -65,19 +74,29 @@ class LoginDialog(QtWidgets.QDialog):
             SETTINGS.raz_url.value = text
 
         @property
-        def credentials(self):
+        def credentials(self) -> tuple[str, str]:
+            """Return ``(username, password)``."""
             return self._username_line_edit.text(), self._password_line_edit.text()
 
         @property
-        def raziel_url(self):
+        def raziel_url(self) -> str:
+            """Return the Raziel config-server URL entered by the user."""
             return self._raziel_url_line_edit.text()
 
-    def __init__(self, parent=None, completer=None):
+        def focus_username(self) -> None:
+            """Focus the username input field."""
+            self._username_line_edit.setFocus()
+
+    def __init__(
+        self,
+        parent: QtWidgets.QWidget | None = None,
+        completer: QtWidgets.QCompleter | None = None,
+    ) -> None:
         super().__init__(parent)
 
         self.setWindowTitle("Login")
 
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(UiDimensions.DIALOG_MIN_WIDTH)
 
         self._login_form = LoginDialog.LoginForm(self, completer)
 
@@ -93,7 +112,7 @@ class LoginDialog(QtWidgets.QDialog):
 
         self._arrange()
 
-    def _arrange(self):
+    def _arrange(self) -> None:
         layout = QtWidgets.QVBoxLayout()
 
         layout.addWidget(self._login_form)
@@ -102,9 +121,15 @@ class LoginDialog(QtWidgets.QDialog):
         self.setLayout(layout)
 
     @property
-    def credentials(self):
+    def credentials(self) -> tuple[str, str]:
+        """Return ``(username, password)`` from the embedded form."""
         return self._login_form.credentials
 
     @property
-    def raziel_url(self):
+    def raziel_url(self) -> str:
+        """Return the Raziel URL entered in the embedded form."""
         return self._login_form.raziel_url
+
+    def focus_username(self) -> None:
+        """Focus the username field in the embedded login form."""
+        self._login_form.focus_username()

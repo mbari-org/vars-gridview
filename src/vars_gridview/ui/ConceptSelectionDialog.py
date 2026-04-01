@@ -1,9 +1,12 @@
-from typing import Optional, Tuple
+"""Dialog for selecting VARS concepts and parts with auto-complete support."""
+
+from __future__ import annotations
 
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
 from vars_gridview.lib.log import LOGGER
+from vars_gridview.ui.style import UiDimensions
 
 
 class ConceptSelectionDialog(QtWidgets.QDialog):
@@ -12,19 +15,23 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
     """
 
     def __init__(
-        self, parent=None, title: str = "Select Concept", include_part: bool = False
-    ):
+        self,
+        parent: QtWidgets.QWidget | None = None,
+        title: str = "Select Concept",
+        include_part: bool = False,
+    ) -> None:
         super().__init__(parent=parent)
 
         self.setWindowTitle(title)
         self.setModal(True)
-        self.setMinimumWidth(400)
+        self.setMinimumWidth(UiDimensions.DIALOG_MIN_WIDTH)
 
         self.include_part = include_part
         self.selected_concept = None
         self.selected_part = None
 
         # Get available concepts and parts
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
         try:
             self.concepts = list(get_kb_concepts().keys())
             if include_part:
@@ -38,11 +45,13 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
                 "Connection Error",
                 f"Failed to load concepts/parts from server:\n{str(e)}\n\nPlease check your connection and try again.",
             )
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
 
         self._setup_ui()
         self._setup_connections()
 
-    def _setup_ui(self):
+    def _setup_ui(self) -> None:
         """Set up the user interface."""
         layout = QtWidgets.QVBoxLayout()
 
@@ -88,12 +97,12 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
         layout.addWidget(self.button_box)
         self.setLayout(layout)
 
-    def _setup_connections(self):
+    def _setup_connections(self) -> None:
         """Set up signal connections."""
         self.button_box.accepted.connect(self._on_accept)
         self.button_box.rejected.connect(self.reject)
 
-    def _on_accept(self):
+    def _on_accept(self) -> None:
         """Handle OK button click."""
         concept_text = self.concept_line_edit.text().strip()
 
@@ -128,15 +137,14 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
         self.accept()
 
     @classmethod
-    def pick_concept(cls, parent=None) -> Optional[str]:
-        """
-        Show a dialog to pick a concept.
+    def pick_concept(cls, parent: QtWidgets.QWidget | None = None) -> str | None:
+        """Show a dialog to pick a concept.
 
         Args:
-            parent: The parent widget.
+            parent: Optional parent widget.
 
         Returns:
-            The selected concept name, or None if cancelled.
+            The selected concept name, or ``None`` if cancelled.
         """
         dialog = cls(parent, "Select Concept", include_part=False)
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
@@ -144,15 +152,17 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
         return None
 
     @classmethod
-    def pick_concept_and_part(cls, parent=None) -> Optional[Tuple[str, Optional[str]]]:
-        """
-        Show a dialog to pick a concept and optionally a part.
+    def pick_concept_and_part(
+        cls, parent: QtWidgets.QWidget | None = None
+    ) -> tuple[str, str | None] | None:
+        """Show a dialog to pick a concept and optionally a part.
 
         Args:
-            parent: The parent widget.
+            parent: Optional parent widget.
 
         Returns:
-            A tuple of (concept, part) where part can be None, or None if cancelled.
+            A ``(concept, part)`` tuple where *part* may be ``None``, or
+            ``None`` if the dialog was cancelled.
         """
         dialog = cls(parent, "Select Concept and Part", include_part=True)
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:

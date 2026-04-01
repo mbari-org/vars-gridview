@@ -3,6 +3,7 @@ from uuid import UUID
 
 from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, pyqtSlot, QTimer
 from PyQt6.QtWidgets import (
+    QApplication,
     QAbstractItemView,
     QDialog,
     QDialogButtonBox,
@@ -551,6 +552,10 @@ class BulkInputDialog(QDialog):
         for item in selected_items:
             self._list.takeItem(self._list.row(item))
 
+    def items(self) -> List[str]:
+        """Return all currently entered items from the list widget."""
+        return [self._list.item(i).text() for i in range(self._list.count())]
+
     @classmethod
     def get_items(
         cls,
@@ -562,9 +567,7 @@ class BulkInputDialog(QDialog):
         dialog.setWindowTitle(title)
         dialog.resize(450, 300)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            return [
-                dialog._list.item(i).text() for i in range(dialog._list.count())
-            ], True
+            return dialog.items(), True
         return [], False
 
 
@@ -593,7 +596,7 @@ class BulkUUIDInputDialog(BulkInputDialog):
         dialog.setWindowTitle(title)
         dialog.resize(450, 300)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            items = [dialog._list.item(i).text() for i in range(dialog._list.count())]
+            items = dialog.items()
 
             # Validate all the UUIDs
             for item in items:
@@ -620,7 +623,11 @@ class BulkConceptInputDialog(BulkInputDialog):
             placeholder_text="Enter concept",
         )
         # Cache concepts list
-        self._concepts = get_kb_concepts()
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            self._concepts = get_kb_concepts()
+        finally:
+            QApplication.restoreOverrideCursor()
 
         # Configure the input field with autocomplete
         self._completer = QCompleter(self._concepts)
@@ -709,9 +716,7 @@ class BulkConceptInputDialog(BulkInputDialog):
         dialog.setWindowTitle(title)
         dialog.resize(450, 300)
         if dialog.exec() == QDialog.DialogCode.Accepted:
-            return [
-                dialog._list.item(i).text() for i in range(dialog._list.count())
-            ], True
+            return dialog.items(), True
         return [], False
 
 
@@ -893,7 +898,9 @@ class QueryDialog(QDialog):
             GeneratorFilter(self, "Generator", "generator", prompt="Generator"),
             VerifierFilter(self, "Verifier", "verifier", prompt="Verifier"),
             FunctionalFilter(self, "Verified", lambda: VerifiedConstraintResult()),
-            FunctionalFilter(self, "Not Verified", lambda: NotVerifiedConstraintResult()),
+            FunctionalFilter(
+                self, "Not Verified", lambda: NotVerifiedConstraintResult()
+            ),
         ]
 
     @pyqtSlot()

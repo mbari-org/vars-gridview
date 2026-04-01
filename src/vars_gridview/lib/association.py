@@ -1,25 +1,38 @@
-"""
-VARS bounding box association.
+"""VARS bounding box association domain model.
+
+This module contains :class:`BoundingBoxAssociation`, a pure data model that
+represents a single bounding-box association record in Annosaurus.  It tracks
+local mutations via dirty flags so the service layer knows what to persist.
+
+Design note:
+    This class intentionally contains **no** network I/O.  Use
+    ``AnnotationService.push_changes()`` (in ``vars_gridview.services``) to
+    flush dirty state back to Annosaurus.  The legacy :meth:`push_changes`
+    method is retained for backward compatibility but delegates to the
+    ``lib.m3.operations`` functions; new code should prefer the service layer.
 """
 
-from typing import TYPE_CHECKING, Optional, Tuple
+from __future__ import annotations
+
+from typing import Optional
 from uuid import UUID
 
-from vars_gridview.lib.constants import SETTINGS
-from vars_gridview.lib.m3.operations import (
-    update_bounding_box_data,
-    update_bounding_box_part,
-    update_observation_concept,
-)
 from vars_gridview.lib.observation import Observation
-
-if TYPE_CHECKING:
-    from vars_gridview.ui.RectWidget import RectWidget
 
 
 class BoundingBoxAssociation:
-    """
-    VARS bounding box association.
+    """A VARS bounding-box association with local mutation tracking.
+
+    Represents the ``bounding box`` association type in Annosaurus.  The
+    ``link_value`` field stores a JSON object with at minimum ``x``, ``y``,
+    ``width``, and ``height`` integer keys.  Additional metadata keys (e.g.
+    ``verifier``, ``confidence``, ``tags``) may also be present.
+
+    Dirty flags (``_dirty_concept``, ``_dirty_part``, ``_dirty_box``) track
+    which fields have been modified locally and need to be flushed to
+    Annosaurus.
+
+    This model intentionally has no view references.
     """
 
     def __init__(
@@ -28,19 +41,21 @@ class BoundingBoxAssociation:
         data: dict,
         observation: Observation,
         to_concept: str,
-    ):
-        """
-        Initialize the bounding box association.
+    ) -> None:
+        """Initialise a :class:`BoundingBoxAssociation`.
 
         Args:
-            uuid (UUID): The UUID of the bounding box association.
-            data (dict): The bounding box data.
-            observation (Observation): The observation associated with the bounding box.
-            to_concept (str): The to_concept field of the bounding box association.
+            uuid: UUID of the association record in Annosaurus.
+            data: Parsed ``link_value`` JSON dict.  Must contain integer keys
+                ``x``, ``y``, ``width`` (>0), and ``height`` (>0).
+            observation: Parent :class:`~vars_gridview.lib.observation.Observation`.
+            to_concept: Value of the association's ``to_concept`` field
+                (``"self"`` when the box covers the whole observed concept).
 
         Raises:
-            KeyError: If required keys are missing in the data.
-            ValueError: If values are not integers or if width/height are not positive.
+            KeyError: If any of ``x``, ``y``, ``width``, ``height`` is absent.
+            ValueError: If coordinates contain non-integer values, width/height
+                are not positive, or x/y are negative.
         """
         self._uuid = uuid
         BoundingBoxAssociation.validate_data(data)
@@ -56,20 +71,17 @@ class BoundingBoxAssociation:
         # Deleted flag
         self._deleted = False
 
-        # Back-reference
-        self.rect_widget: Optional["RectWidget"] = None
-
     @staticmethod
     def validate_data(data: dict) -> None:
-        """
-        Validate the bounding box data.
+        """Validate bounding-box coordinate data.
 
         Args:
-            data (dict): The bounding box data to validate.
+            data: Dict that must contain integer keys ``x``, ``y``, ``width``,
+                and ``height``.
 
         Raises:
-            KeyError: If required keys are missing.
-            ValueError: If values are not integers or if width/height are not positive.
+            KeyError: One or more required keys are absent.
+            ValueError: A value is not an integer, width/height ≤ 0, or x/y < 0.
         """
         required_keys = {"x", "y", "width", "height"}
         keys = set(data.keys())
@@ -251,13 +263,8 @@ class BoundingBoxAssociation:
         return self.y + self.height
 
     @property
-    def box(self) -> Tuple[int, int, int, int]:
-        """
-        Get the bounding box coordinates as a tuple.
-
-        Returns:
-            Tuple[int, int, int, int]: The bounding box coordinates: (x, y, xf, yf).
-        """
+    def box(self) -> tuple[int, int, int, int]:
+        """Bounding-box corners as ``(x, y, xf, yf)``."""
         return self.x, self.y, self.xf, self.yf
 
     @property
@@ -373,37 +380,50 @@ class BoundingBoxAssociation:
         """
         return "tags" in self._data and "training" in self._data["tags"]
 
-    def push_changes(self) -> None:
+    def push_changes(self, observer: Optional[str] = None) -> None:
+        """Flush dirty local state back to Annosaurus.
+
+        Deprecated:
+            New code should use ``AnnotationService.push_changes()`` instead,
+            which provides proper error handling and off-thread execution.
+
+        Args:
+            observer: VARS username to record as the observer when the
+                observation concept is updated.  Falls back to the global
+                settings value when ``None``.
         """
-        Push any needed changes to VARS. Uses dirty flags to determine what to update.
-        """
-        # Guard against pushing changes to deleted bounding boxes
+        from vars_gridview.lib.m3.operations import (
+            update_bounding_box_data,
+            update_bounding_box_part,
+            update_observation_concept,
+        )
+
         if self._deleted:
             return
 
+        if observer is None:
+            from vars_gridview.lib.constants import get_settings
+
+            observer = get_settings().username.value
+
         do_modify_box = False
 
-        username = SETTINGS.username.value
-
-        # Updae the observation concept
         if self._dirty_concept:
-            update_observation_concept(self._observation.uuid, self.concept, username)
+            update_observation_concept(self._observation.uuid, self.concept, observer)
             self._dirty_concept = False
             do_modify_box = True
 
-        # Update the bounding box association part
         if self._dirty_part:
             update_bounding_box_part(self._uuid, self.part)
             self._dirty_part = False
             do_modify_box = True
 
-        # Update the bounding box metadata if the box is dirty
         if self._dirty_box:
-            # self._data["generator"] = "gridview"  # Only changes when box moved/resized
-            # self._data["observer"] = username
             self._dirty_box = False
             do_modify_box = True
 
-        # Update the bounding box if needed
         if do_modify_box:
             update_bounding_box_data(self._uuid, self.data)
+
+
+__all__ = ["BoundingBoxAssociation"]

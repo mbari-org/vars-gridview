@@ -1,8 +1,8 @@
-"""
-Bounding box widget in the image view.
-"""
+"""Bounding-box overlay widget rendered on top of a pyqtgraph ``ViewBox``."""
 
-from typing import List, Tuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pyqtgraph as pg
@@ -10,9 +10,10 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib.association import BoundingBoxAssociation
 from vars_gridview.lib.log import LOGGER
-from vars_gridview.lib.m3.operations import get_kb_concepts, get_kb_parts
-from vars_gridview.ui.ImageMosaic import ImageMosaic
-from vars_gridview.ui.RectWidget import RectWidget
+
+if TYPE_CHECKING:
+    from vars_gridview.ui.ImageMosaic import ImageMosaic
+    from vars_gridview.ui.RectWidget import RectWidget
 
 
 class BoundingBox(pg.RectROI):
@@ -33,26 +34,32 @@ class BoundingBox(pg.RectROI):
     def __init__(
         self,
         view: pg.ViewBox,
-        pos: Tuple[float, float],
-        size: Tuple[float, float],
+        pos: tuple[float, float],
+        size: tuple[float, float],
         rect_widget: RectWidget,
         association: BoundingBoxAssociation,
         image_mosaic: ImageMosaic,
-        color: Tuple[int, int, int] = (255, 0, 0),
+        change_concept_callback=None,
+        change_part_callback=None,
+        delete_callback=None,
+        color: tuple[int, int, int] = (255, 0, 0),
         label: str = "ROI",
     ) -> None:
-        """
-        Constructs all the necessary attributes for the bounding box object.
+        """Construct a bounding-box overlay.
 
         Args:
-            view (pg.ViewBox): The view box to which the bounding box is added.
-            pos (tuple): The position of the bounding box.
-            size (tuple): The size of the bounding box.
-            rect (RectWidget): The ROI widget tied to this bounding box.
-            association (BoundingBoxAssociation): The bounding box association tied to this bounding box.
-            image_mosaic (ImageMosaic): The image mosaic widget.
-            color (tuple, optional): The color of the bounding box. Default is red.
-            label (str, optional): The label of the bounding box. Default is "ROI".
+            view: The pyqtgraph ``ViewBox`` to which the box is added.
+            pos: ``(x, y)`` position of the box origin.
+            size: ``(width, height)`` of the box.
+            rect_widget: The :class:`~vars_gridview.ui.RectWidget.RectWidget`
+                backing this box in the mosaic.
+            association: Underlying :class:`~vars_gridview.lib.association.BoundingBoxAssociation`.
+            image_mosaic: The controlling :class:`~vars_gridview.ui.ImageMosaic.ImageMosaic`.
+            change_concept_callback: Optional callback for concept changes.
+            change_part_callback: Optional callback for part changes.
+            delete_callback: Optional callback for deletion.
+            color: RGB fill colour for the box pen. Defaults to red.
+            label: Display label. Defaults to ``"ROI"``.
         """
         pg.RectROI.__init__(
             self,
@@ -67,6 +74,9 @@ class BoundingBox(pg.RectROI):
         self.association = association
         self.rect_widget = rect_widget
         self.image_mosaic = image_mosaic
+        self._change_concept_callback = change_concept_callback
+        self._change_part_callback = change_part_callback
+        self._delete_callback = delete_callback
 
         # GUI things
         self.addScaleHandle([1, 0], [0, 1])
@@ -125,48 +135,42 @@ class BoundingBox(pg.RectROI):
         """
         Delete the bounding box (clicked from context menu).
         """
-        self.image_mosaic.select(self.rect_widget)
-        self.image_mosaic.delete_selected()
+        if self._delete_callback is not None:
+            self._delete_callback(self.rect_widget)
+            return
+        LOGGER.error("Delete callback is not configured for BoundingBox context action")
 
     def _do_change_concept(self) -> None:
         """
         Change the concept of the bounding box (clicked from context menu).
         """
-        try:
-            kb_concepts = get_kb_concepts()
-        except Exception as e:
-            LOGGER.error(f"Could not get KB concepts: {e}")
+        if self._change_concept_callback is not None:
+            concept = self._change_concept_callback(
+                self.rect_widget,
+                self.association.concept,
+            )
+            if concept:
+                self.image_mosaic.select(self.rect_widget)
             return
-
-        concept, ok = QtWidgets.QInputDialog.getItem(
-            self.image_mosaic._graphics_view, "Change concept", "Concept:", kb_concepts
+        LOGGER.error(
+            "Concept-change callback is not configured for BoundingBox context action"
         )
-
-        if not ok:
-            return
-
-        self.image_mosaic.select(self.rect_widget)
-        self.image_mosaic.label_selected(concept, None)
 
     def _do_change_part(self) -> None:
         """
         Change the part of the bounding box (clicked from context menu).
         """
-        try:
-            kb_parts = get_kb_parts()
-        except Exception as e:
-            LOGGER.error(f"Could not get KB parts: {e}")
+        if self._change_part_callback is not None:
+            part = self._change_part_callback(
+                self.rect_widget,
+                self.association.part,
+            )
+            if part:
+                self.image_mosaic.select(self.rect_widget)
             return
-
-        part, ok = QtWidgets.QInputDialog.getItem(
-            self.image_mosaic._graphics_view, "Change part", "Part:", kb_parts
+        LOGGER.error(
+            "Part-change callback is not configured for BoundingBox context action"
         )
-
-        if not ok:
-            return
-
-        self.image_mosaic.select(self.rect_widget)
-        self.image_mosaic.label_selected(None, part)
 
     def check_bounds(self) -> None:
         """
@@ -215,7 +219,7 @@ class BoundingBox(pg.RectROI):
         x, y, w, h = self.get_box()
         y = self.rect_widget.image_height - y
         self.association.update_data(x=x, y=y, width=w, height=h)
-        self.association.rect_widget.update_roi_pic()
+        self.rect_widget.request_roi_refresh()
 
     def update_label(self) -> None:
         """
@@ -231,13 +235,8 @@ class BoundingBox(pg.RectROI):
         self.view.removeItem(self.textItem)
         self.view.removeItem(self)
 
-    def get_box(self) -> List[float]:
-        """
-        Get the coordinates of the bounding box.
-
-        Returns:
-            list: A list containing the x, y, width, and height of the bounding box.
-        """
+    def get_box(self) -> list[float]:
+        """Return ``[x, y, width, height]`` coordinates of the bounding box."""
         x, y = self.pos()
         w, h = self.size()
 

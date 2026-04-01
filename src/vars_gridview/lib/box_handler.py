@@ -1,4 +1,6 @@
-from typing import List
+"""Handler for multiple :class:`~vars_gridview.ui.BoundingBox.BoundingBox` overlays."""
+
+from __future__ import annotations
 
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui
@@ -24,17 +26,30 @@ class BoxHandler:
         self,
         graphics_view: pg.GraphicsView,
         image_mosaic: ImageMosaic,
-        all_labels: List[str] = [],
+        all_labels: list[str] | None = None,
+        push_changes_callback=None,
+        change_concept_callback=None,
+        change_part_callback=None,
+        delete_callback=None,
     ) -> None:
-        """
-        Constructs all the necessary attributes for the box handler object.
+        """Construct a :class:`BoxHandler`.
 
         Args:
-            graphics_view (pg.GraphicsView): The graphics view to which the bounding boxes are added.
-            image_mosaic (object): The image mosaic object associated with the bounding boxes.
-            all_labels (list, optional): A list of all labels for the bounding boxes.
+            graphics_view: The detail view in which bounding-box overlays are
+                rendered.
+            image_mosaic: The :class:`~vars_gridview.ui.ImageMosaic.ImageMosaic`
+                instance managing the mosaic grid.
+            all_labels: Optional list of known concept labels used for
+                drop-downs inside individual boxes.
+            push_changes_callback: Optional callable accepting a
+                ``BoundingBoxAssociation`` used to persist dirty box changes.
+            change_concept_callback: Optional callable invoked as
+                ``(rect_widget, current_concept) -> concept|None``.
+            change_part_callback: Optional callable invoked as
+                ``(rect_widget, current_part) -> part|None``.
+            delete_callback: Optional callable invoked as ``(rect_widget)``.
         """
-        self.boxes: List[BoundingBox] = []
+        self.boxes: list[BoundingBox] = []
         self.dragging = False
 
         self.view_box = pg.ViewBox()
@@ -43,7 +58,11 @@ class BoxHandler:
         self.view_box.setAspectLocked()
         self.roi_detail = pg.ImageItem()
         self.view_box.addItem(self.roi_detail)
-        self.all_labels = all_labels
+        self.all_labels = all_labels or []
+        self._push_changes_callback = push_changes_callback
+        self._change_concept_callback = change_concept_callback
+        self._change_part_callback = change_part_callback
+        self._delete_callback = delete_callback
 
         self.image_mosaic = image_mosaic
 
@@ -55,13 +74,20 @@ class BoxHandler:
             if box.is_selected:
                 box.update_label()
 
-    def add_annotation(self, obj_idx: int, rect_widget: RectWidget) -> None:
+    def add_annotation(
+        self,
+        obj_idx: int,
+        rect_widget: RectWidget,
+        image_height: int | None = None,
+    ) -> None:
         """
         Add an annotation to the image.
 
         Args:
             obj_idx (int): The index of the object to annotate.
             rect_widget: ROI widget.
+            image_height: Optional known image height to avoid re-fetching image
+                metadata from the rect widget.
         """
         q_color = QtGui.QColor.fromString(SETTINGS.selection_highlight_color.value)
         for idx, association in enumerate(rect_widget.associations):
@@ -81,7 +107,11 @@ class BoxHandler:
                 LOGGER.warning("Bad box bounds, not adding to the view")
             else:
                 label = association.text_label
-                height = rect_widget.image_height
+                height = (
+                    image_height
+                    if image_height is not None
+                    else rect_widget.image_height
+                )
                 if height is None:
                     LOGGER.error("No height for the image, not adding to the view")
                     return
@@ -91,9 +121,12 @@ class BoxHandler:
                     self.view_box,
                     [xmin, height - ymin],
                     [xmax - xmin, -1 * (ymax - ymin)],
-                    association.rect_widget,
+                    rect_widget,
                     association,
                     self.image_mosaic,
+                    change_concept_callback=self._change_concept_callback,
+                    change_part_callback=self._change_part_callback,
+                    delete_callback=self._delete_callback,
                     color=color,
                     label=label,
                 )
@@ -107,7 +140,10 @@ class BoxHandler:
         """
         for box in self.boxes:
             if box.dirty:
-                box.association.push_changes()
+                if self._push_changes_callback is not None:
+                    self._push_changes_callback(box.association)
+                else:
+                    box.association.push_changes()
 
     def map_pos_to_item(self, pos: QtCore.QPointF) -> QtCore.QPointF:
         """

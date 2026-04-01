@@ -2,6 +2,7 @@ from PyQt6 import QtWidgets
 
 from vars_gridview.lib.constants import SETTINGS
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
+from vars_gridview.ui.style import THEME_DEFAULT, THEME_OPTIONS
 
 
 class AppearanceTab(AbstractSettingsTab):
@@ -29,10 +30,20 @@ class AppearanceTab(AbstractSettingsTab):
             self._update_selection_highlight_color_button
         )
 
+        self.theme_combo_box = QtWidgets.QComboBox()
+        for label, value in THEME_OPTIONS:
+            self.theme_combo_box.addItem(label, value)
+        self._set_theme_combo_value(SETTINGS.gui_style.value)
+        self.theme_combo_box.currentIndexChanged.connect(self.settingsChanged.emit)
+        SETTINGS.gui_style.valueChanged.connect(self._set_theme_combo_value)
+
         self.label_font_size_spinbox.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
         )
         self.selection_highlight_color_button.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.theme_combo_box.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
         )
 
@@ -49,6 +60,15 @@ class AppearanceTab(AbstractSettingsTab):
             f"background-color: {self._selection_highlight_color};"
         )
 
+    def _set_theme_combo_value(self, theme_name: str) -> None:
+        theme_name = str(theme_name).lower()
+        idx = self.theme_combo_box.findData(theme_name)
+        if idx < 0:
+            idx = self.theme_combo_box.findData(THEME_DEFAULT)
+        prev = self.theme_combo_box.blockSignals(True)
+        self.theme_combo_box.setCurrentIndex(idx)
+        self.theme_combo_box.blockSignals(prev)
+
     def arrange(self):
         layout = QtWidgets.QFormLayout()
         layout.setFieldGrowthPolicy(
@@ -59,9 +79,13 @@ class AppearanceTab(AbstractSettingsTab):
         layout.addRow(
             "Selection highlight color", self.selection_highlight_color_button
         )
+        layout.addRow("Theme", self.theme_combo_box)
 
         self.setLayout(layout)
 
     def apply_settings(self):
         SETTINGS.label_font_size.value = self.label_font_size_spinbox.value()
         SETTINGS.selection_highlight_color.value = self._selection_highlight_color
+        theme_name = self.theme_combo_box.currentData()
+        if theme_name is not None:
+            SETTINGS.gui_style.value = str(theme_name)

@@ -1,27 +1,32 @@
-"""
-RectWidget class for displaying a single localization in the grid view.
-"""
+"""Single-localization tile widget for the image mosaic grid."""
+
+from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Optional
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import cv2
 import numpy as np
 from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.QtCore import QThreadPool
 from requests import HTTPError
 from scipy.spatial.distance import cosine
 
 from vars_gridview.lib.association import BoundingBoxAssociation
 from vars_gridview.lib.constants import ICONS_DIR, SETTINGS
-from vars_gridview.lib.embedding import Embedding
 from vars_gridview.lib.log import LOGGER
 from vars_gridview.lib.m3 import operations
-from vars_gridview.lib.utils import fetch_image, get_timestamp
+from vars_gridview.lib.runnables import Worker
+from vars_gridview.lib.utils import color_for_concept, fetch_image, get_timestamp
+
+if TYPE_CHECKING:
+    from vars_gridview.lib.embedding import Embedding
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
     rectHover = QtCore.pyqtSignal(object)
+    roiRefreshed = QtCore.pyqtSignal(object)  # self
 
     clicked = QtCore.pyqtSignal(object, object)  # self, event
     similaritySort = QtCore.pyqtSignal(object, bool)  # self, same_class_only
@@ -31,7 +36,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def __init__(
         self,
-        associations: List[BoundingBoxAssociation],
+        associations: list[BoundingBoxAssociation],
         source_url: str,
         is_image: bool,
         ancillary_data: dict,
@@ -42,14 +47,15 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         label_slot: callable,
         verify_slot: callable,
         mark_training_slot: callable,
-        embedding_model: Optional[Embedding] = None,
+        embedding_model: Embedding | None = None,
         parent=None,
-        text_label="rect widget",
+        text_label: str = "rect widget",
         scale_x: float = 1.0,
         scale_y: float = 1.0,
-        video_url: Optional[str] = None,
-        elapsed_time_millis: Optional[int] = None,
-    ):
+        video_url: str | None = None,
+        elapsed_time_millis: int | None = None,
+        preload_roi: bool = True,
+    ) -> None:
         QtWidgets.QGraphicsWidget.__init__(self, parent)
 
         self.associations = associations
@@ -80,8 +86,15 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         self.roi = None
         self.pic = None
+        self._roi_loaded = False
         self._embedding = None
-        self.update_roi_pic()
+        self._embedding_refresh_generation = 0
+        if preload_roi:
+            self.update_roi_pic()
+        else:
+            # Paint a cheap placeholder immediately, then fetch ROI asynchronously.
+            self.roi = np.zeros((self.picdims[1], self.picdims[0], 3), dtype=np.uint8)
+            self.pic = self.getpic(self.roi)
 
         self._clicked_slot = clicked_slot
         self._similarity_sort_slot = similarity_sort_slot
@@ -89,9 +102,9 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self._verify_slot = verify_slot
         self._mark_training_slot = mark_training_slot
 
-        self.association.rect_widget = self  # back-reference
-
         self._deleted = False  # Flag to indicate if this rect widget has been deleted. Used to prevent double deletion.
+        self._roi_refresh_generation = 0
+        self._roi_batch_generation = 0
 
         self._connect()
 
@@ -105,20 +118,14 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.verify.connect(self._verify_slot)
         self.markForTraining.connect(self._mark_training_slot)
 
-    def get_image(self) -> Optional[np.ndarray]:
-        """
-        Get the image data for this rect widget.
-        """
+    def get_image(self) -> np.ndarray | None:
+        """Return the full source image for this ROI, or ``None`` on error."""
         try:
             image = fetch_image(
                 self.source_url, self.elapsed_time_millis if not self.is_image else None
             )
         except HTTPError as e:
-            QtWidgets.QMessageBox.critical(
-                None,
-                "Could not load image",
-                f"Failed to load image from {self.source_url}: {e}",
-            )
+            LOGGER.error(f"Failed to load image from {self.source_url}: {e}")
             return None
         except Exception as e:
             LOGGER.error(f"Unexpected error while fetching image: {e}")
@@ -151,9 +158,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     @property
     def deleted(self) -> bool:
-        """
-        Check if this rect widget has been deleted.
-        """
+        """Whether this rect widget (and its association) has been deleted."""
         return self._deleted
 
     @deleted.setter
@@ -166,7 +171,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def delete(self, observation: bool = False) -> bool:
         """
-        Delete this rect widget and its associated localization. If observation is True, delete the entire observation instead.
+        Mark this rect widget as deleted.
+
+        Network deletion is intentionally owned by higher-level controller/service
+        code (ImageMosaic/AnnotationController). This method only updates local
+        state so view objects never perform direct API mutations.
 
         Args:
             observation: If True, delete the entire observation instead of just the association.
@@ -177,24 +186,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         if self.deleted:  # Don't delete twice
             raise ValueError("This rect widget has already been deleted")
 
-        if observation:
-            observation_uuid = self.association.observation.uuid
-            try:
-                operations.delete_observation(observation_uuid)
-                self.deleted = True
-            except Exception as e:
-                LOGGER.error(
-                    f"Error deleting observation {observation_uuid} from rect widget: {e}"
-                )
-        else:
-            association_uuid = self.association.uuid
-            try:
-                operations.delete_association(association_uuid)
-                self.deleted = True
-            except Exception as e:
-                LOGGER.error(
-                    f"Error deleting association {association_uuid} from rect widget: {e}"
-                )
+        _ = observation
+        self.deleted = True
 
         return self.deleted
 
@@ -225,6 +218,33 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             self.update_embedding()
         return self._embedding
 
+    @property
+    def has_cached_embedding(self) -> bool:
+        """Whether this tile already has a computed embedding."""
+        return self._embedding is not None
+
+    @property
+    def roi_loaded(self) -> bool:
+        """Whether this tile currently has a fetched (non-placeholder) ROI image."""
+        return self._roi_loaded
+
+    def invalidate_embedding_cache(self) -> None:
+        """Clear any cached embedding so it can be recomputed lazily."""
+        self._embedding = None
+
+    def cache_embedding(self, embedding) -> None:
+        """Store an externally computed embedding payload for this tile."""
+        self._embedding = embedding
+
+    @property
+    def roi_batch_generation(self) -> int:
+        """Current ROI loading batch generation assigned by the mosaic."""
+        return self._roi_batch_generation
+
+    def assign_roi_batch_generation(self, generation: int) -> None:
+        """Assign the ROI batch generation used to ignore stale refresh callbacks."""
+        self._roi_batch_generation = generation
+
     def update_embedding(self):
         """
         Update the embedding value.
@@ -237,9 +257,17 @@ class RectWidget(QtWidgets.QGraphicsWidget):
                 "Embedding model is not provided; cannot compute embedding"
             )
 
+        if not self._roi_loaded or self.roi is None:
+            raise RuntimeError("ROI image is not loaded yet; cannot compute embedding")
+
         self._embedding = self._embedding_model.embed(
-            self.get_roi()[::-1],
+            self.roi[:, :, ::-1],
         )
+
+    @staticmethod
+    def _embed_roi(embedding_model: Embedding, roi: np.ndarray):
+        """Compute embedding from a pre-fetched ROI image."""
+        return embedding_model.embed(roi[:, :, ::-1])
 
     def get_roi(self) -> np.ndarray:
         """
@@ -273,10 +301,85 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def update_roi_pic(self):
         self.roi = self.get_roi()
+        self._roi_loaded = True
         self.pic = self.getpic(self.roi)
-        if self._embedding_model is not None:
-            self.update_embedding()
+        # Invalidate cached embedding; bulk precompute is coordinated by ImageMosaic.
+        self.invalidate_embedding_cache()
         self.update()
+
+    def request_roi_refresh(self) -> None:
+        """Refresh ROI image asynchronously and apply only the latest result."""
+        self._roi_refresh_generation += 1
+        generation = self._roi_refresh_generation
+
+        worker = Worker(self._fetch_roi_with_generation, generation)
+        worker.signals.result.connect(self._on_async_roi_refresh_result)
+        worker.signals.error.connect(
+            lambda err: LOGGER.error(
+                f"Error refreshing ROI for {self.association.uuid}: {err[1]}"
+            )
+        )
+        QThreadPool.globalInstance().start(worker)
+
+    def _fetch_roi_with_generation(self, generation: int):
+        return generation, self.get_roi()
+
+    @QtCore.pyqtSlot(object)
+    def _on_async_roi_refresh_result(self, payload) -> None:
+        generation, roi = payload
+        self._apply_async_roi_refresh(generation, roi)
+
+    def _apply_async_roi_refresh(self, generation: int, roi) -> None:
+        if generation != self._roi_refresh_generation:
+            return
+        self.roi = roi
+        self._roi_loaded = True
+        self.pic = self.getpic(roi)
+        # Invalidate cached embedding; bulk precompute is coordinated by ImageMosaic.
+        self.invalidate_embedding_cache()
+        self.update()
+        self.roiRefreshed.emit(self)
+
+    def request_embedding_refresh(self) -> None:
+        """Refresh this tile's embedding asynchronously from the current ROI."""
+        if self._embedding_model is None or self.roi is None or not self._roi_loaded:
+            return
+
+        self._embedding_refresh_generation += 1
+        generation = self._embedding_refresh_generation
+        roi_copy = self.roi.copy()
+
+        worker = Worker(
+            self._embed_roi_with_generation,
+            self._embedding_model,
+            roi_copy,
+            generation,
+        )
+        worker.signals.result.connect(self._on_async_embedding_refresh_result)
+        worker.signals.error.connect(
+            lambda err: LOGGER.error(
+                f"Error refreshing embedding for {self.association.uuid}: {err[1]}"
+            )
+        )
+        QThreadPool.globalInstance().start(worker)
+
+    @staticmethod
+    def _embed_roi_with_generation(
+        embedding_model: Embedding,
+        roi: np.ndarray,
+        generation: int,
+    ):
+        return generation, RectWidget._embed_roi(embedding_model, roi)
+
+    @QtCore.pyqtSlot(object)
+    def _on_async_embedding_refresh_result(self, payload) -> None:
+        generation, embedding = payload
+        self._apply_async_embedding_refresh(generation, embedding)
+
+    def _apply_async_embedding_refresh(self, generation: int, embedding) -> None:
+        if generation != self._embedding_refresh_generation:
+            return
+        self._embedding = embedding
 
     def embedding_distance(self, other: "RectWidget") -> float:
         """
@@ -290,7 +393,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """
         return cosine(self.embedding, other.embedding)
 
-    def update_embedding_model(self, embedding_model: Embedding):
+    def update_embedding_model(self, embedding_model: Embedding | None):
         self._embedding_model = embedding_model
 
     @property
@@ -306,20 +409,20 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         return self.associations[self.localization_index]
 
     @property
-    def image_width(self) -> Optional[int]:
+    def image_width(self) -> int | None:
         image = self.get_image()
         if image is None:
             return None
         return image.shape[1]
 
     @property
-    def image_height(self) -> Optional[int]:
+    def image_height(self) -> int | None:
         image = self.get_image()
         if image is None:
             return None
         return image.shape[0]
 
-    def annotation_datetime(self) -> Optional[datetime]:
+    def annotation_datetime(self) -> datetime | None:
         video_start_datetime = self.video_data["video_start_timestamp"]
 
         elapsed_time_millis = self.video_data.get("index_elapsed_time_millis", None)
@@ -341,18 +444,13 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         return qimg
 
-    def update_zoom(self, zoom: int):
-        self._zoom = zoom
+    def update_zoom(self, zoom: float):
+        self._zoom = max(float(zoom), 0.01)
         self.boundingRect()
         self.updateGeometry()
 
-    def get_full_image(self) -> Optional[np.ndarray]:
-        """
-        Get the full image that this ROI comes from.
-
-        Returns:
-            Optional[np.ndarray]: The full image, or None if an error occurs.
-        """
+    def get_full_image(self) -> np.ndarray | None:
+        """Return the full source image rotated 90° CCW, or ``None`` on error."""
         try:
             return np.rot90(self.get_image(), 3, (0, 1))
         except Exception as e:
@@ -513,9 +611,21 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             The scaled and padded pixmap.
         """
         # Get relevant dimensions
-        roi_height, roi_width, _ = roi.shape
         max_width = self.pic_width
         max_height = self.pic_height
+
+        # Some backends can return an empty ROI for tiny/degenerate boxes while zooming.
+        # Fallback to a blank image so we do not divide by zero when computing scale.
+        if roi is None or roi.ndim < 2 or roi.shape[0] <= 0 or roi.shape[1] <= 0:
+            roi = np.zeros((max_height, max_width, 3), dtype=np.uint8)
+
+        # Ensure we always hand a 3-channel image to the Qt conversion path.
+        if roi.ndim == 2:
+            roi = cv2.cvtColor(roi, cv2.COLOR_GRAY2BGR)
+        elif roi.ndim == 3 and roi.shape[2] == 4:
+            roi = cv2.cvtColor(roi, cv2.COLOR_BGRA2BGR)
+
+        roi_height, roi_width = roi.shape[:2]
 
         # Scale the ROI to fit the square
         scale = min(max_width / roi_width, max_height / roi_height)
@@ -545,11 +655,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         pen.setBrush(QtCore.Qt.GlobalColor.black)
         painter.setPen(pen)
 
-        def color_for_concept(concept: str):
-            hash = sum(map(ord, concept)) << 5
-            color = QtGui.QColor()
-            color.setHsl(round((hash % 360) / 360 * 255), 255, 217, 255)
-            return color
+        def color_for_concept_local(concept: str) -> QtGui.QColor:
+            return color_for_concept(concept)
 
         # Fill outline background if selected
         if self.is_selected:
@@ -562,7 +669,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         if self.is_verified:
             painter.fillRect(
                 self.border_rect,
-                color_for_concept(self.text_label),
+                color_for_concept_local(self.text_label),
             )
         else:
             painter.fillRect(
@@ -573,7 +680,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         # Fill label background
         painter.fillRect(
             self.label_rect,
-            color_for_concept(self.text_label),
+            color_for_concept_local(self.text_label),
         )
 
         # Draw image

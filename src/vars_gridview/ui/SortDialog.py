@@ -1,6 +1,11 @@
+"""Sort dialog for the image mosaic.
+
+Provides a reorderable list of :class:`~vars_gridview.lib.sort_methods.SortMethod`
+criteria.  The user can add, remove, and drag-to-reorder methods; accepting the
+dialog exposes the resulting composite sort as :attr:`SortDialog.method`.
 """
-Sort dialog. Provides an input for the user to specify the sort order of the rect widgets (ROIs) in the grid view. Supports multiple sort criteria and precedence.
-"""
+
+from __future__ import annotations
 
 from PyQt6.QtCore import pyqtSlot
 from PyQt6.QtWidgets import (
@@ -12,20 +17,29 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 import vars_gridview.lib.sort_methods as sm
 
 
 class SortDialogItem(QListWidgetItem):
-    def __init__(self, method: sm.SortMethod, *args, **kwargs):
+    """List item that carries a :class:`~vars_gridview.lib.sort_methods.SortMethod` reference."""
+
+    def __init__(self, method: type[sm.SortMethod], *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.method = method
         self.setText(method.NAME)
 
 
 class SortDialog(QDialog):
-    def __init__(self, parent):
+    """Dialog for composing a multi-criteria sort order.
+
+    After :meth:`accept` the chosen composite method is available as
+    :attr:`method`.
+    """
+
+    def __init__(self, parent: QWidget | None) -> None:
         super().__init__(parent=parent)
 
         self.methods = [
@@ -102,35 +116,22 @@ class SortDialog(QDialog):
     def _clear_methods(self):
         self._methods_list.clear()
 
-    def _get_method(self) -> sm.SortMethod:
+    def _get_method(self) -> type[sm.SortMethod] | sm.SortMethodGroup:
+        """Build the composite sort method from the current list."""
         if self._methods_list.count() == 0:
-            return sm.NoopSort()
-        elif self._methods_list.count() == 1:
+            return sm.NoopSort
+        if self._methods_list.count() == 1:
             return self._methods_list.item(0).method
-        else:
-            methods = [
-                self._methods_list.item(idx).method
-                for idx in range(self._methods_list.count())
-            ]
-            return sm.SortMethodGroup(*methods)
+        methods = [
+            self._methods_list.item(idx).method
+            for idx in range(self._methods_list.count())
+        ]
+        return sm.SortMethodGroup(*methods)
 
     def accept(self) -> None:
         self.method = self._get_method()
         super().accept()
 
-    def clear(self):
-        """
-        Clear the current sort methods from the dialog.
-        """
+    def clear(self) -> None:
+        """Clear all sort methods from the dialog."""
         self._clear_methods()
-
-
-if __name__ == "__main__":
-    # Test code, just show the dialog
-    import sys
-
-    from PyQt6.QtWidgets import QApplication
-
-    app = QApplication(sys.argv)
-    dialog = SortDialog(None)
-    dialog.exec()
