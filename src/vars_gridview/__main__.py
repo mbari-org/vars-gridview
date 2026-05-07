@@ -6,6 +6,7 @@ import argparse
 import logging
 import sys
 import traceback
+from typing import Optional, Sequence
 
 from PyQt6 import QtWidgets, QtGui, QtCore
 
@@ -16,10 +17,16 @@ from vars_gridview.lib.config.constants import (
     ICONS_DIR,
     get_settings,
 )
+from vars_gridview.lib.runtime.desktop_entry import (
+    install_desktop_entry,
+    uninstall_desktop_entry,
+)
 from vars_gridview.lib.runtime.log import LOGGER, AppLogger
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(
+    argv: Optional[Sequence[str]] = None,
+) -> tuple[argparse.Namespace, list[str]]:
     """
     Parse command line arguments.
 
@@ -30,15 +37,32 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Verbose logging to console"
     )
-    return parser.parse_args()
+    subparsers = parser.add_subparsers(dest="command")
+    subparsers.add_parser(
+        "install-desktop",
+        help="Install user-level Linux desktop entry and icons.",
+    )
+    subparsers.add_parser(
+        "uninstall-desktop",
+        help="Remove user-level Linux desktop entry and icons.",
+    )
+
+    cli_args = list(argv) if argv is not None else sys.argv[1:]
+    args, qt_args = parser.parse_known_args(cli_args)
+    return args, qt_args
 
 
-def main():
+def main(argv: Optional[Sequence[str]] = None) -> int:
     """
     Main entrypoint.
     """
     # Parse command line arguments
-    args = parse_args()
+    args, qt_args = parse_args(argv)
+
+    if args.command == "install-desktop":
+        return install_desktop_entry()
+    if args.command == "uninstall-desktop":
+        return uninstall_desktop_entry()
 
     # Set up logging
     if args.verbose:
@@ -47,7 +71,7 @@ def main():
     LOGGER.info(f"Starting {APP_NAME} v{APP_VERSION}")
 
     # Create the Qt application
-    app = QtWidgets.QApplication(sys.argv)
+    app = QtWidgets.QApplication([sys.argv[0], *qt_args])
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_ORGANIZATION)
 
@@ -73,7 +97,7 @@ def main():
     except Exception as e:
         LOGGER.critical(f"Could not create main window: {e}")
         LOGGER.debug(traceback.format_exc())  # Log the full traceback
-        sys.exit(1)
+        return 1
 
     # Exit after app is finished
     try:
@@ -83,8 +107,8 @@ def main():
         LOGGER.debug(traceback.format_exc())  # Log the full traceback
         status = 1
 
-    sys.exit(status)
+    return status
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
