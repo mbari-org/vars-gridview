@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.30.0 (2026-05-11)
+
+### Documentation
+
+- Add upgrade instructions
+  ([`72f5cc1`](https://github.com/mbari-org/vars-gridview/commit/72f5cc12a9fab36bffbbda1421a2508d1d9da549))
+
+Update installation instructions to include upgrade command.
+
+### Features
+
+- Add desktop entry install for linux
+  ([`45b190e`](https://github.com/mbari-org/vars-gridview/commit/45b190e19ae488b246c136891c7d0f9d35a21e17))
+
+- Quick label functionality, selected status
+  ([`d7fec9a`](https://github.com/mbari-org/vars-gridview/commit/d7fec9a53aca7310f9271edf335b8b8bb7aeda1b))
+
+
 ## v0.29.0 (2026-01-15)
 
 ### Features
