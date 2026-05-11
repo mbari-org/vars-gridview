@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.30.1 (2026-05-11)
+
+### Bug Fixes
+
+- Ctrl/shift select in grid
+  ([`be5be58`](https://github.com/mbari-org/vars-gridview/commit/be5be58d5d3c89be9006b25dc98338be131d84ec))
+
+
 ## v0.30.0 (2026-05-11)
 
 ### Documentation
