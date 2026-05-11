@@ -189,8 +189,7 @@ class BoundingBox(pg.RectROI):
                 self.image_mosaic.stats_changed.emit(
                     {
                         "Status": (
-                            "Waiting for source image dimensions; "
-                            "bounds check deferred"
+                            "Waiting for source image dimensions; bounds check deferred"
                         )
                     }
                 )

@@ -1,7 +1,8 @@
+import json
 import sys
 from pathlib import Path
 from shutil import rmtree
-from typing import Any, List, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, List, Optional, Tuple, cast
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 from sharktopoda_client.client import SharktopodaClient
@@ -80,6 +81,9 @@ from vars_gridview.ui.style import (
     action_button_style,
     apply_app_theme,
 )
+
+if TYPE_CHECKING:
+    from vars_gridview.lib.vision.embedding import Embedding
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -223,9 +227,12 @@ class MainWindow(QtWidgets.QMainWindow):
             delete_callback=self._delete_from_box,
         )
         self.image_mosaic.stats_changed.connect(self._on_mosaic_stats_changed)
+        self.image_mosaic.selection_model.selection_changed.connect(
+            self._on_selection_changed
+        )
 
         self.status_info_widget = StatusInfoWidget(
-            {"Status": "Ready"}, parent=self.ui.statusInfoContainer
+            {"Status": "Ready", "Selected": "0"}, parent=self.ui.statusInfoContainer
         )
         self.ui.statusInfoLayout.addWidget(self.status_info_widget)
 
@@ -237,10 +244,19 @@ class MainWindow(QtWidgets.QMainWindow):
             False  # Whether the Sharktopoda client is connected
         )
 
-        # Connect signals to slots
+        self._connect_ui_actions()
+        self._connect_settings_watchers()
+        self.settings_dialog = self._build_settings_dialog()
+        self._configure_graphics_viewports()
+
+        self._launch()
+
+    def _connect_ui_actions(self) -> None:
+        """Connect UI button and checkbox signals to MainWindow actions."""
         self.ui.discardButton.clicked.connect(self.delete)
         self.ui.clearSelections.clicked.connect(self.clear_selected)
         self.ui.labelSelectedButton.clicked.connect(self.label_selected)
+        self.ui.saveFavoriteButton.clicked.connect(self._save_quick_label_favorite)
         self.ui.verifySelectedButton.clicked.connect(self.verify_selected)
         self.ui.unverifySelectedButton.clicked.connect(self.unverify_selected)
         self.ui.markTrainingSelectedButton.clicked.connect(self.mark_training_selected)
@@ -255,6 +271,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.openVideo.clicked.connect(self.open_video)
         self.ui.sortButton.clicked.connect(self._sort_widgets)
 
+    def _connect_settings_watchers(self) -> None:
+        """Connect setting proxies to view updates and coordinator handlers."""
         self._settings.label_font_size.valueChanged.connect(self.update_layout)
         self._settings.embeddings_enabled.valueChanged.connect(
             self._embedding_lifecycle.handle_embeddings_enabled
@@ -266,9 +284,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self._embedding_lifecycle.on_embedding_config_changed
         )
 
-        # Create the settings dialog and register tabs
-        self.settings_dialog = SettingsDialog(parent=self)
-        self.settings_dialog.register(
+    def _build_settings_dialog(self) -> SettingsDialog:
+        """Create and register all settings tabs."""
+        dialog = SettingsDialog(parent=self)
+        dialog.register(
             M3Tab(settings=self._settings),
             AppearanceTab(settings=self._settings),
             VideoPlayerTab(
@@ -279,7 +298,10 @@ class MainWindow(QtWidgets.QMainWindow):
             CacheTab(self._clear_cache, settings=self._settings),
             EmbeddingsTab(settings=self._settings),
         )
+        return dialog
 
+    def _configure_graphics_viewports(self) -> None:
+        """Disable touch-event handling in graphics viewports."""
         # Create the sort dialog
         self.sort_dialog = SortDialog(parent=self)
 
@@ -290,10 +312,8 @@ class MainWindow(QtWidgets.QMainWindow):
             QtCore.Qt.WidgetAttribute.WA_AcceptTouchEvents, False
         )
 
-        self._launch()
-
     @property
-    def loaded(self):
+    def loaded(self) -> bool:
         return self.image_mosaic is not None and self.box_handler is not None
 
     def _launch(self):
@@ -310,6 +330,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Set up the label combo boxes asynchronously.
         self._kb_ui.setup_label_boxes_async()
+
+        # Populate quick-label favorites bar.
+        self._render_favorites()
 
         # Set up the menu bar
         self._setup_menu_bar()
@@ -452,18 +475,10 @@ class MainWindow(QtWidgets.QMainWindow):
             try:
                 rmtree(cache_dir)
                 LOGGER.info("Cache cleared")
-                QtWidgets.QMessageBox.information(
-                    self,
-                    "Cache Cleared",
-                    "Cache cleared successfully.",
-                )
+                self._notify_info("Cache Cleared", "Cache cleared successfully.")
             except Exception as e:
                 LOGGER.error(f"Could not clear cache: {e}")
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    "Cache Clear Failed",
-                    f"Could not clear cache: {e}",
-                )
+                self._notify_error("Cache Clear Failed", f"Could not clear cache: {e}")
 
     def _open_settings(self):
         """
@@ -481,8 +496,7 @@ class MainWindow(QtWidgets.QMainWindow):
         """Return True when results are loaded, otherwise show a standard warning."""
         if self.loaded:
             return True
-        QtWidgets.QMessageBox.warning(
-            self,
+        self._notify_warning(
             "Not Loaded",
             f"No results are loaded, so {operation} cannot be performed.",
         )
@@ -645,16 +659,121 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_mosaic_stats_changed(self, stats: dict[str, str]) -> None:
         self._update_status_info(stats)
 
+    @QtCore.pyqtSlot(list)
+    def _on_selection_changed(self, selected: list) -> None:
+        self._update_status_info({"Selected": str(len(selected))})
+
     def _update_status_info(self, state: dict[str, str]) -> None:
         self.status_info_widget.update(state)
 
+    # ── Quick-label favorites ──────────────────────────────────────────────────
+
+    def _load_favorites(self) -> list[dict]:
+        try:
+            return json.loads(self._settings.quick_label_favorites.value)
+        except Exception:
+            return []
+
+    def _save_favorites(self, favorites: list[dict]) -> None:
+        self._settings.quick_label_favorites.value = json.dumps(favorites)
+
+    def _render_favorites(self) -> None:
+        layout = self.ui.favoritesChipsLayout
+        # FlowLayout has no built-in clearWidgets; take all items and delete
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+        favorites = self._load_favorites()
+        for idx, fav in enumerate(favorites):
+            concept = fav.get("concept", "")
+            part = fav.get("part", "")
+            label = concept or "(any)"
+            if part:
+                label += f" / {part}"
+            chip = QtWidgets.QPushButton(label)
+            chip.setToolTip(
+                f"Quick-label selected ROIs: concept='{concept or '(unchanged)'}', "
+                f"part='{part or '(unchanged)'}'\nRight-click to remove"
+            )
+            chip.setContextMenuPolicy(QtCore.Qt.ContextMenuPolicy.CustomContextMenu)
+            chip.clicked.connect(
+                lambda checked, i=idx: self._apply_quick_label_favorite(i)
+            )
+            chip.customContextMenuRequested.connect(
+                lambda pos, i=idx, btn=chip: self._show_favorite_context_menu(
+                    btn, pos, i
+                )
+            )
+            layout.addWidget(chip)
+
+    def _save_quick_label_favorite(self) -> None:
+        concept = self.ui.labelComboBox.currentText().strip()
+        part = self.ui.partComboBox.currentText().strip()
+        if not concept and not part:
+            self._notify_warning(
+                "Empty Favorite",
+                "Enter a concept or part before saving a favorite.",
+            )
+            return
+        favorites = self._load_favorites()
+        if any(
+            f.get("concept", "") == concept and f.get("part", "") == part
+            for f in favorites
+        ):
+            self._notify_warning(
+                "Duplicate Favorite",
+                "This concept/part combination is already saved as a favorite.",
+            )
+            return
+        favorites.append({"concept": concept, "part": part})
+        self._save_favorites(favorites)
+        self._render_favorites()
+
+    def _apply_quick_label_favorite(self, index: int) -> None:
+        if not self._require_loaded("quick labeling"):
+            return
+        favorites = self._load_favorites()
+        if index >= len(favorites):
+            return
+        fav = favorites[index]
+        self._annotation_actions.label_selected_quick(
+            fav.get("concept", ""), fav.get("part", "")
+        )
+
+    def _show_favorite_context_menu(
+        self,
+        button: QtWidgets.QPushButton,
+        pos: QtCore.QPoint,
+        index: int,
+    ) -> None:
+        menu = QtWidgets.QMenu(self)
+        remove_action = menu.addAction("Remove favorite")
+        action = menu.exec(button.mapToGlobal(pos))
+        if action is remove_action:
+            favorites = self._load_favorites()
+            if index < len(favorites):
+                favorites.pop(index)
+                self._save_favorites(favorites)
+                self._render_favorites()
+
     @QtCore.pyqtSlot(str, str)
     def _on_concept_remapped(self, original: str, canonical: str) -> None:
-        QtWidgets.QMessageBox.information(
-            self,
+        self._notify_info(
             "Remapped Name",
             f"Remapped concept from '{original}' to '{canonical}'.",
         )
+
+    def _notify_info(self, title: str, message: str) -> None:
+        QtWidgets.QMessageBox.information(self, title, message)
+
+    def _notify_warning(self, title: str, message: str) -> None:
+        QtWidgets.QMessageBox.warning(self, title, message)
+
+    def _notify_error(self, title: str, message: str) -> None:
+        QtWidgets.QMessageBox.critical(self, title, message)
 
     def _restore_gui(self):
         """
@@ -668,6 +787,10 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ui.splitter1.restoreState(self._settings.gui_splitter1_state.value)
         if self._settings.gui_splitter2_state.value is not None:
             self.ui.splitter2.restoreState(self._settings.gui_splitter2_state.value)
+        if self._settings.gui_outer_splitter_state.value is not None:
+            self.ui.outerSplitter.restoreState(
+                self._settings.gui_outer_splitter_state.value
+            )
         self.ui.zoomSpinBox.setValue(int(self._settings.gui_zoom.value * 100))
 
     def _save_gui(self):
@@ -675,6 +798,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self._settings.gui_window_state.value = self.saveState()
         self._settings.gui_splitter1_state.value = self.ui.splitter1.saveState()
         self._settings.gui_splitter2_state.value = self.ui.splitter2.saveState()
+        self._settings.gui_outer_splitter_state.value = (
+            self.ui.outerSplitter.saveState()
+        )
 
     @QtCore.pyqtSlot(object)
     def _on_gui_style_changed(self, _value: object) -> None:
@@ -738,9 +864,7 @@ class MainWindow(QtWidgets.QMainWindow):
             part = "self"
 
         if concept.strip() == "":
-            QtWidgets.QMessageBox.critical(
-                self, "Empty Concept", "Concept cannot be empty."
-            )
+            self._notify_error("Empty Concept", "Concept cannot be empty.")
             return
 
         self._annotation_actions.label_selected(concept, part)
@@ -801,7 +925,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_zoom(self, zoom: int):
         self._settings.gui_zoom.value = zoom / 100
 
-    def _apply_embedding_model(self, model: object | None) -> None:
+    def _apply_embedding_model(self, model: "Embedding | None") -> None:
         if self.image_mosaic is not None:
             self.image_mosaic.update_embedding_model(model)
             if model is not None:
@@ -834,7 +958,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _request_close_after_save(self) -> None:
         self.close()
 
-    def closeEvent(self, event) -> None:  # type: ignore[override]
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         self._save_gui()
         if self._shutdown_save.consume_allow_close_once():
             QtWidgets.QMainWindow.closeEvent(self, event)
@@ -858,9 +982,10 @@ class MainWindow(QtWidgets.QMainWindow):
         Returns:
             Optional[Tuple[List[QueryConstraint], int, int]]: A tuple containing the constraints list, limit, and offset. None if the dialog was cancelled.
         """
-        if self._kb_service is None or self._session_controller.context is None:
-            QtWidgets.QMessageBox.warning(
-                self,
+        kb_service = self._kb_service
+        session_context = self._session_controller.context
+        if kb_service is None or session_context is None:
+            self._notify_warning(
                 "Not Ready",
                 "Knowledge base and user services are not initialized.",
             )
@@ -868,10 +993,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
         dialog = QueryDialog(
             parent=self,
-            kb_concepts_getter=lambda: list(self._kb_service.get_concepts().keys()),
-            kb_descendants_getter=self._kb_service.get_descendants,
-            users_getter=lambda: self._session_controller.context.vars_user_server.get_all_users().json(),
-            video_sequence_names_getter=self._kb_service.get_video_sequence_names,
+            kb_concepts_getter=lambda: list(kb_service.get_concepts().keys()),
+            kb_descendants_getter=kb_service.get_descendants,
+            users_getter=lambda: session_context.vars_user_server.get_all_users().json(),
+            video_sequence_names_getter=kb_service.get_video_sequence_names,
         )
         ok = dialog.exec()
         return (dialog.constraints, dialog.limit, dialog.offset) if ok else None

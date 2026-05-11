@@ -22,6 +22,18 @@ from vars_gridview.ui.coordinators.query_presentation_coordinator import (
 from vars_gridview.ui.coordinators.dirty_association_save_coordinator import (
     DirtyAssociationSaveCoordinator,
 )
+from vars_gridview.ui.coordinators.mosaic_roi_loading_coordinator import (
+    MosaicRoiLoadingCoordinator,
+)
+from vars_gridview.ui.coordinators.mosaic_similarity_coordinator import (
+    MosaicSimilarityCoordinator,
+)
+from vars_gridview.ui.coordinators.mosaic_embedding_coordinator import (
+    MosaicEmbeddingCoordinator,
+)
+from vars_gridview.ui.coordinators.mosaic_tile_action_coordinator import (
+    MosaicTileActionCoordinator,
+)
 
 __all__ = [
     "AnnotationActionCoordinator",
@@ -29,6 +41,10 @@ __all__ = [
     "DetailPaneCoordinator",
     "DirtyAssociationSaveCoordinator",
     "MainWindowMenuCoordinator",
+    "MosaicRoiLoadingCoordinator",
+    "MosaicEmbeddingCoordinator",
+    "MosaicSimilarityCoordinator",
+    "MosaicTileActionCoordinator",
     "QueryPresentationCoordinator",
     "ShutdownSaveCoordinator",
     "VideoNavigationCoordinator",

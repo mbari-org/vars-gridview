@@ -168,6 +168,41 @@ class AnnotationActionCoordinator:
             ),
         )
 
+    def label_selected_quick(self, concept: str, part: str) -> None:
+        """Label selected ROIs using a quick-label favorite.
+
+        Blank concept/part means leave that field unchanged on the ROI.
+        """
+        effective_concept = concept.strip() or None
+        effective_part = part.strip() or None
+
+        if effective_concept is None and effective_part is None:
+            return
+
+        controller = self._controller()
+        if controller is None:
+            self._ensure_annotation_ready()
+            return
+
+        label_parts = []
+        if effective_concept is not None:
+            label_parts.append(f"'{effective_concept}'")
+        if effective_part is not None:
+            label_parts.append(f"part '{effective_part}'")
+        confirm_suffix = " ".join(label_parts)
+
+        self._run_selected_annotation_action(
+            action_key="label",
+            confirm_title="Confirm Quick Label",
+            confirm_message=f"Label {{count}} localizations as {confirm_suffix}?",
+            run_action=lambda associations: controller.label_selected_partial(
+                associations,
+                effective_concept,
+                effective_part,
+                self._settings.username.value,
+            ),
+        )
+
     def verify_selected(self, state: bool) -> None:
         controller = self._controller()
         if controller is None:

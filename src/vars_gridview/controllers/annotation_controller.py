@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence
 from uuid import UUID
 
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
@@ -259,19 +259,61 @@ class AnnotationController(QObject):
 
     # ── Worker functions (run off-thread) ──────────────────────────────────────
 
+    def label_selected_partial(
+        self,
+        associations: Sequence[BoundingBoxAssociation],
+        concept: Optional[str],
+        part: Optional[str],
+        observer: str | None = None,
+    ) -> None:
+        """Apply concept and/or part to associations; None means leave that field unchanged.
+
+        Args:
+            associations: Localizations to label.
+            concept: Proposed concept name (canonicalised via KB), or None to leave unchanged.
+            part: Proposed part name, or None to leave unchanged.
+            observer: VARS user name.  Falls back to the service default.
+        """
+        if not associations:
+            return
+
+        canonical = concept
+        if concept is not None:
+            try:
+                canonical = self._kb.get_concept_name(concept)
+            except Exception as exc:
+                self.operation_failed.emit(
+                    f"Could not resolve concept '{concept}': {exc}"
+                )
+                return
+            if canonical != concept:
+                self.concept_remapped.emit(concept, canonical)
+
+        label_parts = []
+        if canonical is not None:
+            label_parts.append(f"'{canonical}'")
+        if part is not None:
+            label_parts.append(f"part '{part}'")
+        desc = f"Labelling {len(associations)} localizations as " + " ".join(
+            label_parts
+        )
+        self._dispatch(
+            desc, self._apply_labels, list(associations), canonical, part, observer
+        )
+
     def _apply_labels(
         self,
         associations: list[BoundingBoxAssociation],
-        concept: str,
-        part: str,
+        concept: Optional[str],
+        part: Optional[str],
         observer: str | None,
     ) -> None:
         """Apply concept/part labels and push to VARS.
 
         Args:
             associations: Localizations to update.
-            concept: Canonical concept name.
-            part: Body part (``"self"`` for whole animal).
+            concept: Canonical concept name, or None to leave unchanged.
+            part: Body part, or None to leave unchanged.
             observer: VARS user name.
         """
         failures: list[str] = []

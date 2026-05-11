@@ -6,6 +6,7 @@ import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.ui.widgets.json_tree import JSONTree
+from vars_gridview.ui.widgets.flow_layout import FlowLayout
 from vars_gridview.ui.style import UiGeometry, UiTypography, control_font
 
 
@@ -76,12 +77,47 @@ class MainWindowLayout:
 
         info_layout.addWidget(info_splitter)
 
-        self.verticalLayout.addWidget(self.splitter2)
+        controls_font = control_font()
+
+        # ── Outer vertical splitter: mosaic area + collapsible favorites panel ──
+        self.outerSplitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Vertical)
+        self.outerSplitter.setObjectName("outerSplitter")
+        self.outerSplitter.addWidget(self.splitter2)
+
+        self.favoritesPanel = QtWidgets.QWidget()
+        self.favoritesPanel.setObjectName("favoritesPanel")
+        favorites_layout = QtWidgets.QVBoxLayout(self.favoritesPanel)
+        favorites_layout.setObjectName("favoritesPanelLayout")
+        favorites_layout.setContentsMargins(0, 2, 0, 2)
+        favorites_layout.setSpacing(2)
+
+        favorites_header = QtWidgets.QHBoxLayout()
+        favorites_header.setSpacing(4)
+        self.saveFavoriteButton = QtWidgets.QPushButton(self.favoritesPanel)
+        self.saveFavoriteButton.setObjectName("saveFavoriteButton")
+        self.saveFavoriteButton.setFont(controls_font)
+        self.saveFavoriteButton.setText("★ SAVE FAVORITE")
+        self.saveFavoriteButton.setToolTip(
+            "Save the current Class Label / Part as a quick-label favorite"
+        )
+        favorites_header.addWidget(self.saveFavoriteButton)
+        favorites_header.addStretch()
+        favorites_layout.addLayout(favorites_header)
+
+        self.favoritesChipsWidget = QtWidgets.QWidget(self.favoritesPanel)
+        self.favoritesChipsWidget.setObjectName("favoritesChipsWidget")
+        self.favoritesChipsLayout = FlowLayout(self.favoritesChipsWidget, spacing=4)
+        self.favoritesChipsLayout.setObjectName("favoritesChipsLayout")
+        favorites_layout.addWidget(self.favoritesChipsWidget, 1)
+
+        self.outerSplitter.addWidget(self.favoritesPanel)
+        self.outerSplitter.setCollapsible(0, False)
+        self.outerSplitter.setCollapsible(1, True)
+
+        self.verticalLayout.addWidget(self.outerSplitter)
 
         self.horizontalLayout_2 = QtWidgets.QHBoxLayout()
         self.horizontalLayout_2.setObjectName("horizontalLayout_2")
-
-        controls_font = control_font()
 
         self.quitButton = QtWidgets.QPushButton(self.centralwidget)
         self.quitButton.setObjectName("quitButton")

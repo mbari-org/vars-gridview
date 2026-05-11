@@ -197,10 +197,18 @@ class AppSettings:
         self.gui_splitter2_state: SettingProxy[QtCore.QByteArray] = SettingProxy(
             _s, "gui/splitter2_state", QtCore.QByteArray, None
         )
+        self.gui_outer_splitter_state: SettingProxy[QtCore.QByteArray] = SettingProxy(
+            _s, "gui/outer_splitter_state", QtCore.QByteArray, None
+        )
         self.gui_style: SettingProxy[str] = SettingProxy(
             _s, "gui/style", str, "default"
         )
         self.gui_zoom: SettingProxy[float] = SettingProxy(_s, "gui/zoom", float, 0.60)
+
+        # ── Quick-label favorites ──────────────────────────────────────────────
+        self.quick_label_favorites: SettingProxy[str] = SettingProxy(
+            _s, "labeling/quick_label_favorites", str, "[]"
+        )
 
 
 def build_settings() -> AppSettings:
