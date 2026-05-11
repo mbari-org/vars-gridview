@@ -102,7 +102,7 @@ class RectInteractionCoordinator(QtCore.QObject):
         if not dirty_associations:
             pending = self._dequeue_latest_click()
             if pending is not None:
-                self._apply_rect_click(*pending)
+                self._apply_rect_click(pending[0], ctrl=pending[1], shift=pending[2])
             return
 
         self._pre_click_save_in_progress = True
@@ -129,7 +129,7 @@ class RectInteractionCoordinator(QtCore.QObject):
 
         pending = self._dequeue_latest_click()
         if pending is not None:
-            self._apply_rect_click(*pending)
+            self._apply_rect_click(pending[0], ctrl=pending[1], shift=pending[2])
 
     @QtCore.pyqtSlot(tuple)
     def _on_pre_click_save_error(self, err: tuple) -> None:
