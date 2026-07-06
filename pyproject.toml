@@ -1,6 +1,6 @@
 [project]
 name = "vars-gridview"
-version = "0.30.2"
+version = "0.30.3"
 description = "VARS GridView is a tool for reviewing and correcting VARS localizations in bulk."
 authors = [
     { name = "Kevin Barnard", email = "kbarnard@mbari.org" },
@@ -27,6 +27,7 @@ license = "MIT"
 
 [project.scripts]
 vars-gridview = "vars_gridview.__main__:main"
+
 
 
 

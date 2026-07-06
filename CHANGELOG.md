@@ -1,6 +1,43 @@
 # CHANGELOG
 
 
+## v0.30.3 (2026-07-06)
+
+### Bug Fixes
+
+- Correct grid selection Ctrl/Shift behaviour and add Shift+Arrow support
+  ([`a2a0c58`](https://github.com/mbari-org/vars-gridview/commit/a2a0c58e1e2b779191106e5747c45f289d4b0abc))
+
+- Anchor tracking moved into MosaicSelectionCoordinator so Shift+Click always extends from the
+  original anchor, not the last clicked item - Ctrl+Shift+Click unions the new range with the
+  existing selection instead of replacing it - Shift+Arrow keys now extend the selection from the
+  anchor; the nav cursor tracks the live end so a subsequent plain Arrow continues from there, not
+  from the anchor - Add eight new tests covering all corrected behaviours
+
+- Correct pyqtgraph bounding-box coordinate handling and rendering
+  ([`5243fa7`](https://github.com/mbari-org/vars-gridview/commit/5243fa78a4bae8dbe163e18967791f818a0a8a67))
+
+Switch to row-major image axis order plus ViewBox.invertY(True) so the ROI detail view matches
+  standard top-down image pixel coordinates. This removes the np.rot90 image rotation and the
+  accompanying y-flip and sign-branch math that stood in for it in BoundingBox/BoxHandler, which was
+  a recurring source of subtle coordinate bugs.
+
+Also: - Replace the custom check_bounds() post-hoc snap with pyqtgraph's native maxBounds, which
+  clamps drag/resize continuously. - Complete the RectROI scale-handle set to all 4 corners + 4
+  edges. - Enable antialiasing on the ROI detail graphics view. - Remove the now-dead,
+  rotation-based RectWidget.get_full_image().
+
+- Replace flashing query progress dialogs with one persistent, cancellable dialog
+  ([`69b1d14`](https://github.com/mbari-org/vars-gridview/commit/69b1d1423e8a5225952bbfc8ea2b222f47723039))
+
+Loading a query popped up to six independent QProgressDialogs in quick succession (network fetch + 4
+  mosaic-build stages + ROI image load), most flashing open and closed before they could be read,
+  and only one had a working cancel button. Replace all of them with a single StagedProgressDialog
+  showing a checklist of all 8 stages, driven by one shared cancellation token threaded through the
+  whole query -> mosaic-build -> ROI-load pipeline so Cancel actually stops the entire operation
+  instead of just one stage.
+
+
 ## v0.30.2 (2026-07-06)
 
 ### Bug Fixes
