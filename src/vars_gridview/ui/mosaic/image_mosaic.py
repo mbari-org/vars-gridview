@@ -696,11 +696,16 @@ class ImageMosaic(QtCore.QObject):
         """
         self._selection.select(rect_widget, clear=clear)
 
-    def select_range(self, first: RectWidget, last: RectWidget):
+    @property
+    def selection_anchor(self) -> RectWidget | None:
+        """The anchor widget for Shift-based range selection."""
+        return cast("RectWidget | None", self._selection.anchor)
+
+    def select_range(self, first: RectWidget, last: RectWidget, add: bool = False):
         """
         Select a range of rect widgets.
         """
-        self._selection.select_range(first, last)
+        self._selection.select_range(first, last, add=add)
 
     def clear_selected(self):
         """
@@ -712,17 +717,19 @@ class ImageMosaic(QtCore.QObject):
     def _on_selection_changed(self, selected: list[RectWidget]) -> None:
         self._selection.update_widget_selection_flags(selected)
 
-    def select_relative(self, key: QtCore.Qt.Key) -> bool:
+    def select_relative(self, key: QtCore.Qt.Key, *, shift: bool = False) -> bool:
         """
         Select a rect widget relative to the currently selected one.
 
         Args:
-            key: The key pressed
+            key: The key pressed.
+            shift: When ``True``, extend the current selection instead of replacing it.
         """
         return self._selection.select_relative(
             key=key,
             columns=self._n_columns,
             activate_callback=lambda widget: self._rect_clicked_slot(widget, None),
+            shift=shift,
         )
 
     def eventFilter(
@@ -737,7 +744,10 @@ class ImageMosaic(QtCore.QObject):
             and event.type() == QtCore.QEvent.Type.KeyPress
         ):
             key_event = cast(QtGui.QKeyEvent, event)
-            if self.select_relative(cast(QtCore.Qt.Key, key_event.key())):
+            shift = bool(
+                key_event.modifiers() & QtCore.Qt.KeyboardModifier.ShiftModifier
+            )
+            if self.select_relative(cast(QtCore.Qt.Key, key_event.key()), shift=shift):
                 # Consume handled arrow keys so QGraphicsView doesn't auto-scroll.
                 return True
         return super().eventFilter(source, event)

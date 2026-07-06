@@ -177,9 +177,10 @@ class RectInteractionCoordinator(QtCore.QObject):
         shift: bool,
     ) -> None:
         """Apply ctrl/shift selection behavior in the mosaic view."""
-        last_selected_rect = self._last_selected_getter()
-        if shift and last_selected_rect is not None:
-            self._image_mosaic.select_range(last_selected_rect, rect)
+        anchor = self._image_mosaic.selection_anchor
+        if shift and anchor is not None:
+            # Shift+Click: extend range from anchor; Ctrl+Shift adds to existing selection.
+            self._image_mosaic.select_range(anchor, rect, add=ctrl)
         elif ctrl and rect.is_selected:
             self._image_mosaic.deselect(rect)
         else:
