@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from threading import Event
 from typing import Callable
 
 from PyQt6 import QtWidgets
@@ -51,13 +52,19 @@ class QueryResultsCoordinator:
         hide_unlabeled: bool,
         hide_training: bool,
         hide_nontraining: bool,
+        cancel_event: Event,
     ) -> BoxHandler | None:
         self._image_mosaic.hide_labeled = hide_labeled
         self._image_mosaic.hide_unlabeled = hide_unlabeled
         self._image_mosaic.hide_training = hide_training
         self._image_mosaic.hide_nontraining = hide_nontraining
 
-        self._image_mosaic.populate(query_headers, query_rows)
+        self._image_mosaic.populate(
+            query_headers, query_rows, cancel_event=cancel_event
+        )
+
+        if cancel_event.is_set():
+            return None
 
         sort_dialog = self._sort_dialog_getter()
         sort_dialog.clear()

@@ -68,29 +68,55 @@ def test_paging_carries_previous_constraints():
 def test_on_count_result_ignores_stale_generation() -> None:
     ctrl = QueryController()
     request = _build_request_from_execute(ctrl)
-    progress_calls = []
-    ctrl.query_progress.connect(
-        lambda message, step, total: progress_calls.append((message, step, total))
-    )
+    stage_calls = []
+    ctrl.query_stage_started.connect(lambda key: stage_calls.append(key))
 
     ctrl._request_generation = 2
     ctrl._on_count_result((request, 100, 1))
 
-    assert progress_calls == []
+    assert stage_calls == []
 
 
 def test_on_download_result_ignores_stale_generation() -> None:
     ctrl = QueryController()
     request = _build_request_from_execute(ctrl)
-    progress_calls = []
-    ctrl.query_progress.connect(
-        lambda message, step, total: progress_calls.append((message, step, total))
-    )
+    stage_calls = []
+    ctrl.query_stage_started.connect(lambda key: stage_calls.append(key))
 
     ctrl._request_generation = 5
     ctrl._on_download_result((request, 100, 4, "h\trow"))
 
-    assert progress_calls == []
+    assert stage_calls == []
+
+
+def test_on_count_result_stops_when_cancelled() -> None:
+    ctrl = QueryController()
+    request = _build_request_from_execute(ctrl)
+    stage_calls = []
+    cancelled_calls = []
+    ctrl.query_stage_started.connect(lambda key: stage_calls.append(key))
+    ctrl.query_cancelled.connect(lambda: cancelled_calls.append(True))
+
+    ctrl.cancel()
+    ctrl._on_count_result((request, 100, ctrl._request_generation))
+
+    assert stage_calls == []
+    assert cancelled_calls == [True]
+
+
+def test_on_download_result_stops_when_cancelled() -> None:
+    ctrl = QueryController()
+    request = _build_request_from_execute(ctrl)
+    stage_calls = []
+    cancelled_calls = []
+    ctrl.query_stage_started.connect(lambda key: stage_calls.append(key))
+    ctrl.query_cancelled.connect(lambda: cancelled_calls.append(True))
+
+    ctrl.cancel()
+    ctrl._on_download_result((request, 100, ctrl._request_generation, "h\trow"))
+
+    assert stage_calls == []
+    assert cancelled_calls == [True]
 
 
 def test_on_result_ignores_stale_generation() -> None:

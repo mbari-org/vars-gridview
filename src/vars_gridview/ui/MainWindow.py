@@ -47,8 +47,8 @@ from vars_gridview.ui.coordinators.video_navigation_coordinator import (
 from vars_gridview.ui.coordinators.shutdown_save_coordinator import (
     ShutdownSaveCoordinator,
 )
-from vars_gridview.ui.coordinators.query_presentation_coordinator import (
-    QueryPresentationCoordinator,
+from vars_gridview.ui.coordinators.query_progress_coordinator import (
+    QueryProgressCoordinator,
 )
 from vars_gridview.ui.coordinators.login_session_coordinator import (
     LoginSessionCoordinator,
@@ -134,13 +134,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._query_controller = QueryController(parent=self)
         self._query_controller.query_started.connect(self._on_query_started)
-        self._query_controller.query_progress.connect(self._on_query_progress)
+        self._query_controller.query_stage_started.connect(self._on_query_stage_started)
         self._query_controller.query_failed.connect(self._on_query_failed)
+        self._query_controller.query_cancelled.connect(self._on_query_cancelled)
         self._query_controller.results_ready.connect(self._on_query_results)
-        self._query_presentation = QueryPresentationCoordinator(
+        self._query_progress = QueryProgressCoordinator(
             parent=self,
             dialog_parent=self,
             status_update_callback=self._update_status_info,
+            cancel_callback=self._query_controller.cancel,
         )
         self._dirty_association_save = DirtyAssociationSaveCoordinator(
             parent=self,
@@ -227,6 +229,10 @@ class MainWindow(QtWidgets.QMainWindow):
             delete_callback=self._delete_from_box,
         )
         self.image_mosaic.stats_changed.connect(self._on_mosaic_stats_changed)
+        self.image_mosaic.mosaic_stage_started.connect(self._query_progress.begin_stage)
+        self.image_mosaic.mosaic_stage_progress.connect(
+            self._query_progress.on_stage_progress
+        )
         self.image_mosaic.selection_model.selection_changed.connect(
             self._on_selection_changed
         )
@@ -568,15 +574,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot()
     def _on_query_started(self) -> None:
-        self._query_presentation.on_query_started()
+        self._query_progress.on_query_started()
 
-    @QtCore.pyqtSlot(str, int, int)
-    def _on_query_progress(self, message: str, step: int, total_steps: int) -> None:
-        self._query_presentation.on_query_progress(message, step, total_steps)
+    @QtCore.pyqtSlot(str)
+    def _on_query_stage_started(self, key: str) -> None:
+        self._query_progress.begin_stage(key)
 
     @QtCore.pyqtSlot(str)
     def _on_query_failed(self, message: str) -> None:
-        self._query_presentation.on_query_failed(message)
+        self._query_progress.on_query_failed(message)
+
+    @QtCore.pyqtSlot()
+    def _on_query_cancelled(self) -> None:
+        self._query_progress.on_query_cancelled()
 
     @QtCore.pyqtSlot(list, list, int, int, int)
     def _on_query_results(
@@ -587,15 +597,6 @@ class MainWindow(QtWidgets.QMainWindow):
         total_pages: int,
         total_rows: int,
     ) -> None:
-        self._query_presentation.mark_rendering()
-        self._update_status_info(
-            {
-                "Page": f"{page_number} of {total_pages}",
-                "Rows": str(total_rows),
-                "Status": "Ready",
-            }
-        )
-
         self.box_handler = self._query_results.apply_query_results(
             query_headers=query_headers,
             query_rows=query_rows,
@@ -603,8 +604,21 @@ class MainWindow(QtWidgets.QMainWindow):
             hide_unlabeled=self.ui.hideUnlabeled.isChecked(),
             hide_training=self.ui.hideTraining.isChecked(),
             hide_nontraining=self.ui.hideNontraining.isChecked(),
+            cancel_event=self._query_controller.cancel_event,
         )
-        self._query_presentation.mark_done()
+
+        if self._query_controller.cancel_event.is_set():
+            self._query_progress.on_query_cancelled()
+            return
+
+        self._update_status_info(
+            {
+                "Page": f"{page_number} of {total_pages}",
+                "Rows": str(total_rows),
+                "Status": "Ready",
+            }
+        )
+        self._query_progress.mark_done()
 
     def _change_concept_from_box(
         self,

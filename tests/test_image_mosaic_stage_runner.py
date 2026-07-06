@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from threading import Event
 from types import SimpleNamespace
 
 import pytest
@@ -30,10 +31,9 @@ def test_run_cancellable_stage_maps_cancel_runtime_error() -> None:
     with pytest.raises(Cancelled):
         ImageMosaic._run_cancellable_stage(
             fake_self,
-            label="stage",
-            maximum=1,
             cancelled_message="cancelled",
             missing_result_message=None,
+            cancel_event=Event(),
             worker_factory=lambda _cancel_event, _progress: None,
         )
 
@@ -44,10 +44,9 @@ def test_run_cancellable_stage_propagates_other_runtime_error() -> None:
     with pytest.raises(RuntimeError, match="boom"):
         ImageMosaic._run_cancellable_stage(
             fake_self,
-            label="stage",
-            maximum=1,
             cancelled_message="cancelled",
             missing_result_message=None,
+            cancel_event=Event(),
             worker_factory=lambda _cancel_event, _progress: None,
         )
 
@@ -58,10 +57,9 @@ def test_run_cancellable_stage_enforces_missing_result_message() -> None:
     with pytest.raises(RuntimeError, match="missing"):
         ImageMosaic._run_cancellable_stage(
             fake_self,
-            label="stage",
-            maximum=1,
             cancelled_message="cancelled",
             missing_result_message="missing",
+            cancel_event=Event(),
             worker_factory=lambda _cancel_event, _progress: None,
         )
 
@@ -71,10 +69,9 @@ def test_run_cancellable_stage_returns_result() -> None:
 
     result = ImageMosaic._run_cancellable_stage(
         fake_self,
-        label="stage",
-        maximum=1,
         cancelled_message="cancelled",
         missing_result_message="missing",
+        cancel_event=Event(),
         worker_factory=lambda _cancel_event, _progress: None,
     )
 

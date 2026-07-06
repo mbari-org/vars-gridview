@@ -15,6 +15,7 @@ Typical usage::
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Sequence
 
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
@@ -39,17 +40,21 @@ class QueryController(QObject):
 
     Signals:
         query_started: Emitted just before I/O begins.
+        query_stage_started: Emitted with the stage key ("count", "download",
+            or "parse") just before that stage's work begins.
         results_ready: Emitted on success.  Arguments are ``(headers, rows,
             page_number, total_pages, total_rows)``.
         query_failed: Emitted on any error with a human-readable message.
+        query_cancelled: Emitted when a cancelled query stops before finishing.
     """
 
     query_started = pyqtSignal()
-    query_progress = pyqtSignal(str, int, int)  # message, step, total_steps
+    query_stage_started = pyqtSignal(str)  # stage key
     results_ready = pyqtSignal(
         list, list, int, int, int
     )  # headers, rows, page, total_pages, total_rows
     query_failed = pyqtSignal(str)
+    query_cancelled = pyqtSignal()
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -57,6 +62,16 @@ class QueryController(QObject):
         self._total_rows: int = 0
         self._request_generation: int = 0
         self._annosaurus_client: AnnosaurusClient | None = None
+        self._cancel_event: threading.Event = threading.Event()
+
+    @property
+    def cancel_event(self) -> threading.Event:
+        """The cancellation token for the most recently dispatched query."""
+        return self._cancel_event
+
+    def cancel(self) -> None:
+        """Request cancellation of the in-flight query pipeline, if any."""
+        self._cancel_event.set()
 
     def set_annosaurus_client(self, client: AnnosaurusClient) -> None:
         """Attach the authenticated Annosaurus client for future queries."""
@@ -200,9 +215,10 @@ class QueryController(QObject):
 
         self._request_generation += 1
         generation = self._request_generation
+        self._cancel_event = threading.Event()
 
         self.query_started.emit()
-        self.query_progress.emit("Counting matching rows...", 1, 6)
+        self.query_stage_started.emit("count")
 
         worker = Worker(self._fetch_count, self._annosaurus_client, request, generation)
         worker.signals.result.connect(self._on_count_result)
@@ -285,8 +301,11 @@ class QueryController(QObject):
         request, total_rows, generation = payload
         if generation != self._request_generation:
             return
+        if self._cancel_event.is_set():
+            self.query_cancelled.emit()
+            return
 
-        self.query_progress.emit("Downloading result rows...", 2, 6)
+        self.query_stage_started.emit("download")
         if self._annosaurus_client is None:
             self.query_failed.emit("Query service is unavailable: no Annosaurus client")
             return
@@ -305,8 +324,11 @@ class QueryController(QObject):
         request, total_rows, generation, raw_tsv = payload
         if generation != self._request_generation:
             return
+        if self._cancel_event.is_set():
+            self.query_cancelled.emit()
+            return
 
-        self.query_progress.emit("Parsing result rows...", 3, 6)
+        self.query_stage_started.emit("parse")
         worker = Worker(
             self._parse_download,
             request,
@@ -327,8 +349,10 @@ class QueryController(QObject):
         request, total, generation, headers, rows = payload
         if generation != self._request_generation:
             return
+        if self._cancel_event.is_set():
+            self.query_cancelled.emit()
+            return
 
-        self.query_progress.emit("Finalizing query results...", 4, 6)
         self._last_request = request
         self._total_rows = total
         page = 1 + request.offset // request.limit

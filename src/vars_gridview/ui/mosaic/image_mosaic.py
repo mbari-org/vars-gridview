@@ -167,10 +167,12 @@ class ImageMosaic(QtCore.QObject):
     """
 
     stats_changed = QtCore.pyqtSignal(dict)
-    video_sequence_prepare_progress = QtCore.pyqtSignal(int, int)
-    proxy_prepare_progress = QtCore.pyqtSignal(int, int)
-    roi_spec_prepare_progress = QtCore.pyqtSignal(int, int)
-    localization_prepare_progress = QtCore.pyqtSignal(int, int)
+    mosaic_stage_started = QtCore.pyqtSignal(
+        str, int
+    )  # stage key, maximum (0 = indeterminate)
+    mosaic_stage_progress = QtCore.pyqtSignal(
+        str, int, int
+    )  # stage key, current, maximum
 
     def __init__(
         self,
@@ -231,15 +233,14 @@ class ImageMosaic(QtCore.QObject):
         self.n_images = 0
         self.n_localizations = 0
         self._embedding_generation = 0
-        self._load_coordinator = MosaicLoadCoordinator(
-            parent=self,
-            dialog_parent=self._graphics_view,
-        )
+        self._current_build_stage_key: str | None = None
+        self._load_coordinator = MosaicLoadCoordinator(parent=self)
+        self._load_coordinator.stage_progress.connect(self._on_load_stage_progress)
         self._roi_loading = MosaicRoiLoadingCoordinator(
             parent=self,
-            dialog_parent=self._graphics_view,
             max_concurrency=4,
         )
+        self._roi_loading.progress.connect(self._on_roi_loading_progress)
         self._similarity = MosaicSimilarityCoordinator(
             parent=self,
             dialog_parent=self._dialog_parent,
@@ -317,7 +318,13 @@ class ImageMosaic(QtCore.QObject):
     def moment_ancillary_data(self) -> dict[UUID, dict]:
         return self.store.moment_ancillary_data
 
-    def populate(self, query_headers: list[str], query_rows: list[list[str]]) -> None:
+    def populate(
+        self,
+        query_headers: list[str],
+        query_rows: list[list[str]],
+        *,
+        cancel_event: Event,
+    ) -> None:
         """Populate the mosaic from raw VARS query output.
 
         Clears any previous state, parses the rows, fetches ancillary
@@ -327,6 +334,8 @@ class ImageMosaic(QtCore.QObject):
         Args:
             query_headers: Column names as returned by the query endpoint.
             query_rows: One inner list per result row.
+            cancel_event: Shared cancellation token checked cooperatively at each
+                build stage; also passed on to ROI image loading.
         """
         # Clear existing widgets
         self._roi_loading.cancel_pending()
@@ -335,16 +344,18 @@ class ImageMosaic(QtCore.QObject):
 
         try:
             # Parse rows and build localization store off the UI thread.
-            rows = self._prepare_localization_data(query_headers, query_rows)
+            rows = self._prepare_localization_data(
+                query_headers, query_rows, cancel_event=cancel_event
+            )
 
             # Fetch video sequence data for the given groups
-            self._fetch_video_sequence_data()
+            self._fetch_video_sequence_data(cancel_event=cancel_event)
 
             # Derive and map proxy image metadata
-            self._map_proxy_data(rows)
+            self._map_proxy_data(rows, cancel_event=cancel_event)
 
             # Create the ROI widgets
-            self._create_rois()
+            self._create_rois(cancel_event=cancel_event)
         except Cancelled:
             LOGGER.info("Image mosaic loading cancelled by user")
             return
@@ -353,16 +364,18 @@ class ImageMosaic(QtCore.QObject):
         self,
         query_headers: list[str],
         query_rows: list[list[str]],
+        *,
+        cancel_event: Event,
     ) -> list[Row]:
         """Parse rows and build localization state off the UI thread."""
         cached_image_reference_urls = dict(self.store.image_reference_urls)
         cached_video_sequences_by_name = dict(self.store.video_sequences_by_name)
 
+        self._begin_build_stage("localization", maximum=max(0, len(query_rows)))
         payload = self._run_cancellable_stage(
-            label="Preparing localization data...",
-            maximum=max(0, len(query_rows)),
             cancelled_message="Localization preparation cancelled",
             missing_result_message="Localization preparation returned no result",
+            cancel_event=cancel_event,
             worker_factory=lambda cancel_event,
             progress_callback: self._mosaic_pipeline.build_localization_state(
                 query_rows=query_rows,
@@ -386,16 +399,16 @@ class ImageMosaic(QtCore.QObject):
         """Extract bounding-box associations from *rows* into association groups."""
         self.store.extract_associations(list(rows))
 
-    def _fetch_video_sequence_data(self) -> None:
+    def _fetch_video_sequence_data(self, *, cancel_event: Event) -> None:
         if self._vampire_squid_client is None:
             raise RuntimeError(
                 "ImageMosaic is missing VampireSquid client; call configure_services() after login"
             )
+        self._begin_build_stage("video_sequence", maximum=0)
         self._run_cancellable_stage(
-            label="Fetching video sequence data...",
-            maximum=0,
             cancelled_message="Video sequence fetch cancelled",
             missing_result_message=None,
+            cancel_event=cancel_event,
             worker_factory=lambda cancel_event,
             progress_callback: self._roi_loader.fetch_video_sequence_data(
                 vampire_squid_client=self._vampire_squid_client,
@@ -406,13 +419,13 @@ class ImageMosaic(QtCore.QObject):
             ),
         )
 
-    def _map_proxy_data(self, rows: list[Row]) -> None:
+    def _map_proxy_data(self, rows: list[Row], *, cancel_event: Event) -> None:
         """Derive proxy video data for each imaged moment in *rows* off-thread."""
+        self._begin_build_stage("proxy_mapping", maximum=max(0, len(rows)))
         payload = self._run_cancellable_stage(
-            label="Preparing proxy mappings...",
-            maximum=max(0, len(rows)),
             cancelled_message="Proxy mapping cancelled",
             missing_result_message="Proxy mapping returned no result",
+            cancel_event=cancel_event,
             worker_factory=lambda cancel_event,
             progress_callback: self._mosaic_pipeline.build_proxy_mapping(
                 rows=list(rows),
@@ -431,17 +444,17 @@ class ImageMosaic(QtCore.QObject):
         self.store.moment_proxy_data = proxy_data
         self.store.moment_timestamps = timestamps
 
-    def _create_rois(self) -> None:
+    def _create_rois(self, *, cancel_event: Event) -> None:
         if self._annosaurus_client is None or self._roi_service is None:
             raise RuntimeError(
                 "ImageMosaic is missing Annosaurus/ROI services; call configure_services() after login"
             )
 
+        self._begin_build_stage("roi_widgets", maximum=0)
         load_result = self._run_cancellable_stage(
-            label="Preparing ROI widgets...",
-            maximum=0,
             cancelled_message="ROI creation cancelled",
             missing_result_message="ROI spec preparation returned no result",
+            cancel_event=cancel_event,
             worker_factory=lambda cancel_event,
             progress_callback: self._roi_loader.create_widget_specs(
                 annosaurus_client=self._annosaurus_client,
@@ -464,9 +477,11 @@ class ImageMosaic(QtCore.QObject):
         self._rect_widgets = rect_widgets
         self.n_images = load_result.n_images
         self.n_localizations = load_result.n_localizations
+        self._begin_build_stage("roi_images", maximum=len(self._rect_widgets))
         self._roi_loading.start_loading(
             rect_widgets=self._rect_widgets,
             on_complete=self._on_all_roi_loaded,
+            cancel_event=cancel_event,
         )
 
         self._show_roi_creation_failures(failed_association_uuids)
@@ -506,18 +521,16 @@ class ImageMosaic(QtCore.QObject):
     def _run_cancellable_stage(
         self,
         *,
-        label: str,
-        maximum: int,
         cancelled_message: str,
         missing_result_message: str | None,
+        cancel_event: Event,
         worker_factory: Callable[[Event, Callable[[int, int], None]], object],
     ) -> object | None:
         """Run one load stage and normalize cancellation handling."""
         try:
             result = self._load_coordinator.run_stage(
-                label=label,
-                maximum=maximum,
                 cancelled_message=cancelled_message,
+                cancel_event=cancel_event,
                 worker_factory=worker_factory,
             )
         except RuntimeError as exc:
@@ -528,6 +541,21 @@ class ImageMosaic(QtCore.QObject):
         if result is None and missing_result_message is not None:
             raise RuntimeError(missing_result_message)
         return result
+
+    def _begin_build_stage(self, key: str, *, maximum: int) -> None:
+        """Record the active build stage and announce it to listeners."""
+        self._current_build_stage_key = key
+        self.mosaic_stage_started.emit(key, maximum)
+
+    @QtCore.pyqtSlot(int, int)
+    def _on_load_stage_progress(self, current: int, total: int) -> None:
+        if self._current_build_stage_key is None:
+            return
+        self.mosaic_stage_progress.emit(self._current_build_stage_key, current, total)
+
+    @QtCore.pyqtSlot(int, int)
+    def _on_roi_loading_progress(self, current: int, total: int) -> None:
+        self.mosaic_stage_progress.emit("roi_images", current, total)
 
     def update_embedding_model(self, embedding_model: Embedding | None) -> None:
         """Replace the active embedding model and invalidate cached embeddings."""
