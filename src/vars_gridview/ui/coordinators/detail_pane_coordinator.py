@@ -114,8 +114,7 @@ class DetailPaneCoordinator(QtCore.QObject):
                 DetailPaneCoordinator._placeholder_image(),
             )
 
-        rect_full_image = np.ascontiguousarray(np.rot90(image, 3, (0, 1)))
-        return generation, needs_autorange, rect_full_image
+        return generation, needs_autorange, image
 
     @staticmethod
     def _placeholder_image() -> np.ndarray:
@@ -153,11 +152,8 @@ class DetailPaneCoordinator(QtCore.QObject):
             return
         if self._selected_rect_getter() is not rect:
             return
-        # rect_full_image is rotated for display, so width/height are swapped
-        # relative to source image coordinates.
-        rect.set_source_image_dimensions(
-            rect_full_image.shape[0], rect_full_image.shape[1]
-        )
+        source_image_height, source_image_width = rect_full_image.shape[:2]
+        rect.set_source_image_dimensions(source_image_width, source_image_height)
 
         box_handler = self._box_handler_getter()
         if box_handler is None:
@@ -170,11 +166,9 @@ class DetailPaneCoordinator(QtCore.QObject):
         if needs_autorange:
             box_handler.view_box.autoRange()
 
-        # rect_full_image is rotated for display, so shape[1] maps to the
-        # source image height expected by bounding-box coordinate transforms.
-        source_image_height = rect_full_image.shape[1]
         box_handler.add_annotation(
             rect.localization_index,
             rect,
             image_height=source_image_height,
+            image_width=source_image_width,
         )

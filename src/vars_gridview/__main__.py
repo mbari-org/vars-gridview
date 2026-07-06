@@ -8,6 +8,7 @@ import sys
 import traceback
 from typing import Optional, Sequence
 
+import pyqtgraph as pg
 from PyQt6 import QtWidgets, QtGui, QtCore
 
 from vars_gridview.lib.config.constants import (
@@ -69,6 +70,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         AppLogger.get_instance().set_stream_level(logging.DEBUG)
 
     LOGGER.info(f"Starting {APP_NAME} v{APP_VERSION}")
+
+    # Use standard (row, col) image array order and antialiased rendering for
+    # all pyqtgraph views, so image/ROI display matches plain numpy/OpenCV
+    # image coordinates without manual rotation or axis-flip math.
+    pg.setConfigOptions(imageAxisOrder="row-major", antialias=True)
 
     # Create the Qt application
     app = QtWidgets.QApplication([sys.argv[0], *qt_args])

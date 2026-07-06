@@ -54,6 +54,10 @@ class MainWindowLayout:
         self.roiDetailGraphicsView = pg.GraphicsView(self.splitter1)
         self.roiDetailGraphicsView.setObjectName("roiDetailGraphicsView")
         self.roiDetailGraphicsView.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.roiDetailGraphicsView.setRenderHints(
+            QtGui.QPainter.RenderHint.Antialiasing
+            | QtGui.QPainter.RenderHint.SmoothPixmapTransform
+        )
 
         info_panel = QtWidgets.QWidget(self.splitter1)
         info_panel.setObjectName("infoPanel")

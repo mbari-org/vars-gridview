@@ -39,6 +39,7 @@ class BoundingBox(pg.RectROI):
         rect_widget: RectWidget,
         association: BoundingBoxAssociation,
         image_mosaic: ImageMosaic,
+        max_bounds: QtCore.QRectF | None = None,
         change_concept_callback=None,
         change_part_callback=None,
         delete_callback=None,
@@ -49,12 +50,14 @@ class BoundingBox(pg.RectROI):
 
         Args:
             view: The pyqtgraph ``ViewBox`` to which the box is added.
-            pos: ``(x, y)`` position of the box origin.
-            size: ``(width, height)`` of the box.
+            pos: ``(x, y)`` position of the box origin, in image pixel space.
+            size: ``(width, height)`` of the box, in image pixel space.
             rect_widget: The :class:`~vars_gridview.ui.mosaic.rect_widget.RectWidget`
                 backing this box in the mosaic.
             association: Underlying :class:`~vars_gridview.lib.annotation.association.BoundingBoxAssociation`.
             image_mosaic: The controlling :class:`~vars_gridview.ui.mosaic.image_mosaic.ImageMosaic`.
+            max_bounds: Optional rectangle (image bounds) the box may not be
+                dragged or resized outside of.
             change_concept_callback: Optional callback for concept changes.
             change_part_callback: Optional callback for part changes.
             delete_callback: Optional callback for deletion.
@@ -70,6 +73,7 @@ class BoundingBox(pg.RectROI):
             rotatable=False,
             removable=False,
             sideScalers=True,
+            maxBounds=max_bounds,
         )
         self.association = association
         self.rect_widget = rect_widget
@@ -78,9 +82,15 @@ class BoundingBox(pg.RectROI):
         self._change_part_callback = change_part_callback
         self._delete_callback = delete_callback
 
-        # GUI things
+        # GUI things. RectROI.__init__ (with sideScalers=True) already adds
+        # scale handles at the top-right corner and the top/right edge
+        # midpoints; fill in the remaining corner and edge midpoints so all
+        # four corners and edges can be dragged independently.
         self.addScaleHandle([1, 0], [0, 1])
         self.addScaleHandle([0, 1], [1, 0])
+        self.addScaleHandle([0, 0], [1, 1])
+        self.addScaleHandle([0, 0.5], [1, 0.5])
+        self.addScaleHandle([0.5, 0], [0.5, 1])
         self.addTranslateHandle([0.5, 0.5])
 
         self.label = label
@@ -95,7 +105,6 @@ class BoundingBox(pg.RectROI):
 
         self._menu = QtWidgets.QMenu()
         self._setup_menu()
-        self._missing_dims_notified = False
 
         self.setAcceptedMouseButtons(QtCore.Qt.MouseButton.LeftButton)
 
@@ -108,7 +117,6 @@ class BoundingBox(pg.RectROI):
         self.sigRemoveRequested.connect(lambda _: self.remove())
         self.sigRegionChanged.connect(self.draw_name)
         self.sigRegionChanged.connect(self._dirty)
-        self.sigRegionChangeFinished.connect(self.check_bounds)
         self.sigRegionChangeFinished.connect(self.update_association_box)
         self.sigClicked.connect(
             lambda _, ev: self.rect_widget.clicked.emit(self.rect_widget, ev)
@@ -173,42 +181,6 @@ class BoundingBox(pg.RectROI):
             "Part-change callback is not configured for BoundingBox context action"
         )
 
-    def check_bounds(self) -> None:
-        """
-        Check and adjust the bounds of the bounding box to ensure it stays within the image.
-        """
-        x, y = self.pos()
-        w, h = self.size()
-        h = -h  # Fix negative height
-
-        image_width = self.rect_widget.image_width
-        image_height = self.rect_widget.image_height
-        if image_width is None or image_height is None:
-            if not self._missing_dims_notified:
-                self._missing_dims_notified = True
-                self.image_mosaic.stats_changed.emit(
-                    {
-                        "Status": (
-                            "Waiting for source image dimensions; bounds check deferred"
-                        )
-                    }
-                )
-            LOGGER.debug(
-                "Skipping bounds check for %s because source dimensions are unavailable",
-                self.association.uuid,
-            )
-            return
-        self._missing_dims_notified = False
-
-        min_x = 0
-        max_x = image_width - w
-
-        min_y = h
-        max_y = image_height
-
-        if x < min_x or y < min_y or x > max_x or y > max_y:
-            self.setPos(min(max_x, max(min_x, x)), min(max_y, max(min_y, y)))
-
     @property
     def is_selected(self) -> bool:
         """
@@ -227,7 +199,6 @@ class BoundingBox(pg.RectROI):
         Update the bounding box association's coordinates with the current bounding box coordinates.
         """
         x, y, w, h = self.get_box()
-        y = self.rect_widget.image_height - y
         self.association.update_data(x=x, y=y, width=w, height=h)
         self.rect_widget.request_roi_refresh()
 
@@ -246,16 +217,18 @@ class BoundingBox(pg.RectROI):
         self.view.removeItem(self)
 
     def get_box(self) -> list[float]:
-        """Return ``[x, y, width, height]`` coordinates of the bounding box."""
+        """Return ``[x, y, width, height]`` coordinates of the bounding box, in
+        top-left-origin, y-down image pixel space."""
         x, y = self.pos()
         w, h = self.size()
 
-        # need to convert box coordinates to account for positive or
-        # negative width/height values from pyqtgraph roi object
-        if h > 0:
-            y = y + h
+        # Scale handles are invertible, so dragging one past the opposite
+        # edge/corner can leave width and/or height negative; normalize back
+        # to a canonical top-left origin with positive width/height.
         if w < 0:
             x = x + w
+        if h < 0:
+            y = y + h
 
         return [round(x), round(y), round(np.abs(w)), round(np.abs(h))]
 

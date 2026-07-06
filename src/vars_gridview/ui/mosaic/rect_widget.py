@@ -483,14 +483,6 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.boundingRect()
         self.updateGeometry()
 
-    def get_full_image(self) -> np.ndarray | None:
-        """Return the full source image rotated 90° CCW, or ``None`` on error."""
-        try:
-            return np.rot90(self.get_image(), 3, (0, 1))
-        except Exception as e:
-            LOGGER.error(f"Error getting full image: {e}")
-            return None
-
     @property
     def outline_x(self):
         return 0

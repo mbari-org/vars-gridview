@@ -63,6 +63,9 @@ class BoxHandler:
         self.graphics_view = graphics_view
         self.graphics_view.setCentralItem(self.view_box)
         self.view_box.setAspectLocked()
+        # Image row 0 is the top of the frame; match that in the view so box
+        # coordinates can be used directly in image pixel space (x, y-down).
+        self.view_box.invertY(True)
         self.roi_detail = pg.ImageItem()
         self.view_box.addItem(self.roi_detail)
         self.all_labels = all_labels or []
@@ -86,6 +89,7 @@ class BoxHandler:
         obj_idx: int,
         rect_widget: RectWidget,
         image_height: int | None = None,
+        image_width: int | None = None,
     ) -> None:
         """
         Add an annotation to the image.
@@ -95,7 +99,16 @@ class BoxHandler:
             rect_widget: ROI widget.
             image_height: Optional known image height to avoid re-fetching image
                 metadata from the rect widget.
+            image_width: Optional known image width to avoid re-fetching image
+                metadata from the rect widget.
         """
+        height = image_height if image_height is not None else rect_widget.image_height
+        width = image_width if image_width is not None else rect_widget.image_width
+        if height is None or width is None:
+            LOGGER.error("No dimensions for the image, not adding to the view")
+            return
+        max_bounds = QtCore.QRectF(0, 0, width, height)
+
         q_color = QtGui.QColor.fromString(
             self._settings.selection_highlight_color.value
         )
@@ -110,29 +123,22 @@ class BoxHandler:
                 avg = int(sum(color) / len(color))
                 color = (avg, avg, avg)  # Grayscale equivalent of original color
 
-            # Grab the bounds
+            # Grab the bounds (already in top-left-origin, y-down image pixel space)
             xmin, ymin, xmax, ymax = association.box
             if xmax - xmin <= 0 or ymax - ymin <= 0:  # Bad box bounds check
                 LOGGER.warning("Bad box bounds, not adding to the view")
             else:
                 label = association.text_label
-                height = (
-                    image_height
-                    if image_height is not None
-                    else rect_widget.image_height
-                )
-                if height is None:
-                    LOGGER.error("No height for the image, not adding to the view")
-                    return
 
                 # Create the bounding box
                 bb = BoundingBox(
                     self.view_box,
-                    [xmin, height - ymin],
-                    [xmax - xmin, -1 * (ymax - ymin)],
+                    [xmin, ymin],
+                    [xmax - xmin, ymax - ymin],
                     rect_widget,
                     association,
                     self.image_mosaic,
+                    max_bounds=max_bounds,
                     change_concept_callback=self._change_concept_callback,
                     change_part_callback=self._change_part_callback,
                     delete_callback=self._delete_callback,
