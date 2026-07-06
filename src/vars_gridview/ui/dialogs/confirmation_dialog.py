@@ -32,6 +32,9 @@ class ConfirmationDialog(QtWidgets.QDialog):
         self._button_box.button(
             QtWidgets.QDialogButtonBox.StandardButton.No
         ).pressed.connect(self.reject)
+        self._button_box.button(
+            QtWidgets.QDialogButtonBox.StandardButton.No
+        ).setDefault(True)
 
         self._arrange()
 

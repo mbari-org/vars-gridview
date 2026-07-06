@@ -77,6 +77,7 @@ class SortDialog(QDialog):
         self._clear_methods_button.clicked.connect(self._clear_methods)
 
         self._ok_button = QPushButton("OK")
+        self._ok_button.setDefault(True)
         self._ok_button.clicked.connect(self.accept)
 
         self._methods_list = QListWidget()

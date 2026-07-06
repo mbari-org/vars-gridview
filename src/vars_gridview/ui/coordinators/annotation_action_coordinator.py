@@ -81,7 +81,7 @@ class AnnotationActionCoordinator:
             parent,
             title,
             message.format(count=count),
-            defaultButton=QtWidgets.QMessageBox.StandardButton.No,
+            defaultButton=QtWidgets.QMessageBox.StandardButton.Yes,
         )
         return opt == QtWidgets.QMessageBox.StandardButton.Yes
 

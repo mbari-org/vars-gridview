@@ -19,6 +19,8 @@ class LoginDialog(QtWidgets.QDialog):
         Login form widget.
         """
 
+        submitted = QtCore.pyqtSignal()
+
         def __init__(
             self,
             parent: QtWidgets.QWidget | None = None,
@@ -57,6 +59,12 @@ class LoginDialog(QtWidgets.QDialog):
             self._raziel_url_line_edit.textChanged.connect(
                 self._update_raziel_url_setting
             )
+
+            self._username_line_edit.returnPressed.connect(
+                self._password_line_edit.setFocus
+            )
+            self._password_line_edit.returnPressed.connect(self.submitted)
+            self._raziel_url_line_edit.returnPressed.connect(self.submitted)
 
             self._arrange()
 
@@ -113,6 +121,7 @@ class LoginDialog(QtWidgets.QDialog):
         self._dialog_buttons.button(
             QtWidgets.QDialogButtonBox.StandardButton.Ok
         ).setText("Login")
+        self._login_form.submitted.connect(self.accept)
 
         self._arrange()
 

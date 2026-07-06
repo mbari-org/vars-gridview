@@ -89,6 +89,9 @@ class ConceptSelectionDialog(QtWidgets.QDialog):
         """Set up signal connections."""
         self.button_box.accepted.connect(self._on_accept)
         self.button_box.rejected.connect(self.reject)
+        self.concept_line_edit.returnPressed.connect(self._on_accept)
+        if self.include_part:
+            self.part_line_edit.returnPressed.connect(self._on_accept)
 
     def _on_accept(self) -> None:
         """Handle OK button click."""

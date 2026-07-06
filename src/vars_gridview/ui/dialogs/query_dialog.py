@@ -552,6 +552,7 @@ class BulkInputDialog(QDialog):
         self._delete_button.clicked.connect(self.delete_selected_items)
         self.dialog_buttons.accepted.connect(self.accept)
         self.dialog_buttons.rejected.connect(self.reject)
+        self._input.returnPressed.connect(self.add_items)
 
     def add_items(self):
         input_text = self._input.text()
@@ -660,6 +661,7 @@ class BulkConceptInputDialog(BulkInputDialog):
         self._add_button.setText("Add Concept")
         self._add_button.clicked.disconnect()  # Disconnect the parent's implementation
         self._add_button.clicked.connect(self._add_current_concept)
+        self._input.returnPressed.connect(self._add_current_concept)
 
         # Add a button to select from existing concepts
         self._select_button = QPushButton("Select from List")
