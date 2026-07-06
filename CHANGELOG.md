@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.30.2 (2026-07-06)
+
+### Bug Fixes
+
+- Improve return key UX across dialogs, closes #118
+  ([`39e3904`](https://github.com/mbari-org/vars-gridview/commit/39e3904fdcc0b31c6fc181e6fb600bcf795d18b2))
+
+- Enter submits concept selection, login, and sort dialogs - Enter adds items in bulk input/concept
+  dialogs instead of closing - Confirmation dialog defaults to No (destructive action safety) - Bulk
+  annotation action confirmations default to Yes
+
+
 ## v0.30.1 (2026-05-11)
 
 ### Bug Fixes
