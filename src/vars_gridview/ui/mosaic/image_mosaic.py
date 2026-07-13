@@ -173,6 +173,7 @@ class ImageMosaic(QtCore.QObject):
     mosaic_stage_progress = QtCore.pyqtSignal(
         str, int, int
     )  # stage key, current, maximum
+    rect_widgets_removed = QtCore.pyqtSignal(list)  # widgets removed from the mosaic
 
     def __init__(
         self,
@@ -704,13 +705,18 @@ class ImageMosaic(QtCore.QObject):
             return
 
         self.clear_selected()
+        removed = []
         for rw in rect_widgets:
             if rw in self._rect_widgets:
                 rw.hide()
                 self._rect_widgets.remove(rw)
+                removed.append(rw)
 
         self.n_localizations = len(self._rect_widgets)
         self.render_mosaic()
+
+        if removed:
+            self.rect_widgets_removed.emit(removed)
 
     def deselect(self, rect_widget: RectWidget):
         """

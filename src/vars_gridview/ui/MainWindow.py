@@ -236,6 +236,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.image_mosaic.selection_model.selection_changed.connect(
             self._on_selection_changed
         )
+        self.image_mosaic.rect_widgets_removed.connect(self._on_rect_widgets_removed)
 
         self.status_info_widget = StatusInfoWidget(
             {"Status": "Ready", "Selected": "0"}, parent=self.ui.statusInfoContainer
@@ -554,7 +555,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _prepare_for_new_results(self) -> None:
         """Reset active selection/detail panes before a new query page loads."""
-        if self.last_selected_rect is not None:
+        if (
+            self.last_selected_rect is not None
+            and self.last_selected_rect in self.image_mosaic.get_all_rect_widgets()
+        ):
             self.image_mosaic.deselect(self.last_selected_rect)
         self.last_selected_rect = None
 
@@ -676,6 +680,14 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot(list)
     def _on_selection_changed(self, selected: list) -> None:
         self._update_status_info({"Selected": str(len(selected))})
+
+    @QtCore.pyqtSlot(list)
+    def _on_rect_widgets_removed(self, removed: list) -> None:
+        # Invalidate the stale last-selected reference if its widget was
+        # removed from the mosaic (e.g. via delete), otherwise a later
+        # deselect() call against it raises ValueError.
+        if self.last_selected_rect is not None and self.last_selected_rect in removed:
+            self.last_selected_rect = None
 
     def _update_status_info(self, state: dict[str, str]) -> None:
         self.status_info_widget.update(state)
