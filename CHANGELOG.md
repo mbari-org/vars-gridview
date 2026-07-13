@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.30.4 (2026-07-13)
+
+### Bug Fixes
+
+- Invalidate stale last-selected rect when its widget is deleted
+  ([`22a9cb2`](https://github.com/mbari-org/vars-gridview/commit/22a9cb229ec78cba65723389446ddc35215e3cca))
+
+Deleting the currently highlighted tile left MainWindow.last_selected_rect pointing at a widget no
+  longer in the mosaic's widget list. The next query call unconditionally tried to deselect it,
+  raising "Widget not in rect widget list" and aborting the query. ImageMosaic now emits a
+  rect_widgets_removed signal on delete so MainWindow can clear the stale reference, and
+  _prepare_for_new_results guards against it as a backstop.
+
+
 ## v0.30.3 (2026-07-06)
 
 ### Bug Fixes
