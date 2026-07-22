@@ -113,6 +113,14 @@ class BoundingBox(pg.RectROI):
     def _connect(self) -> None:
         """
         Connect signals and slots.
+
+        The slots below close over ``self``, which creates a reference cycle
+        (this object's own signal-connection list ends up holding a reference
+        back to itself). That cycle can only be broken by Python's cyclic GC,
+        which races with Qt's own C++-side teardown of the scene graph and can
+        segfault (same failure mode as pyqtgraph#1628). ``remove()``
+        disconnects everything below before dropping the item from the scene
+        so it is freed deterministically by refcounting instead.
         """
         self.sigRemoveRequested.connect(lambda _: self.remove())
         self.sigRegionChanged.connect(self.draw_name)
@@ -213,6 +221,7 @@ class BoundingBox(pg.RectROI):
         """
         Remove the bounding box from the view.
         """
+        self.disconnect()
         self.view.removeItem(self.textItem)
         self.view.removeItem(self)
 

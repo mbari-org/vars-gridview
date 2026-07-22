@@ -29,6 +29,7 @@ class DetailPaneCoordinator(QtCore.QObject):
         self._box_handler_getter = box_handler_getter
         self._selected_rect_getter = selected_rect_getter
         self._detail_request_generation = 0
+        self._current_detail_image: Optional[np.ndarray] = None
 
     @staticmethod
     def rect_source_key(
@@ -162,6 +163,13 @@ class DetailPaneCoordinator(QtCore.QObject):
         rgb_image = np.ascontiguousarray(
             cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB)
         )
+        # pyqtgraph's ImageItem wraps this buffer via a raw pointer
+        # (pyqtgraph.functions.ndarray_to_qimage) and depends on a dynamic
+        # `qimage.data = arr` attribute to keep it alive Qt-side. Hold our own
+        # strong reference too so that mechanism failing (or a repaint
+        # queued against a since-replaced image) can't leave Qt painting from
+        # freed memory.
+        self._current_detail_image = rgb_image
         box_handler.roi_detail.setImage(rgb_image)
         if needs_autorange:
             box_handler.view_box.autoRange()

@@ -10,9 +10,11 @@ maintainers = [
     { name = "Kevin Barnard", email = "kbarnard@mbari.org" },
 ]
 dependencies = [
-    "pyqt6>=6.4.0",
+    "pyqt6==6.8.0",
+    "pyqt6-qt6==6.8.1",
+    "pyqt6-sip==13.10.0",
     "requests>=2.27.1",
-    "pyqtgraph>=0.13.0",
+    "pyqtgraph==0.14.0",
     "opencv-python>=4.5.5.62",
     "qdarkstyle>=3.0.3",
     "beholder-client>=0.3.1",
