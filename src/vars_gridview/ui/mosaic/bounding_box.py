@@ -251,7 +251,10 @@ class BoundingBox(pg.RectROI):
 
         if self.textItem is None:
             self.textItem = pg.TextItem(
-                text=self.label, color=(255, 255, 255), fill=(70, 70, 70)
+                text=self.label,
+                color=(255, 255, 255),
+                fill=(70, 70, 70),
+                anchor=(0, 1),
             )
             self.textItem.setPos(x, y)
             self.view.addItem(self.textItem)
