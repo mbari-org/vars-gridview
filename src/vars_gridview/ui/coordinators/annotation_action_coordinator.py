@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from PyQt6 import QtWidgets
 
@@ -260,9 +261,7 @@ class AnnotationActionCoordinator:
         opt = QtWidgets.QMessageBox.question(
             self._parent,
             "Confirm Deletion",
-            "Delete {} localizations?\nThis operation cannot be undone.".format(
-                len(to_delete)
-            ),
+            f"Delete {len(to_delete)} localizations?\nThis operation cannot be undone.",
             defaultButton=QtWidgets.QMessageBox.StandardButton.No,
         )
         if opt == QtWidgets.QMessageBox.StandardButton.Yes:

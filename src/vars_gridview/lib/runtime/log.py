@@ -51,7 +51,9 @@ class AppLogger:
         self._stream_handler.setFormatter(fmt)
 
         # File handler - everything (DEBUG+)
-        log_file = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.txt"
+        # Local wall-clock date on purpose, to match the local timestamps
+        # (`%(asctime)s`) written inside the file.
+        log_file = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.txt"  # noqa: DTZ005
         self._file_handler = logging.FileHandler(str(log_file))
         self._file_handler.setLevel(logging.DEBUG)
         self._file_handler.setFormatter(fmt)
@@ -84,4 +86,4 @@ class AppLogger:
 #: Module-level logger shortcut.  Re-exported for convenience.
 LOGGER: logging.Logger = AppLogger.get_instance().logger
 
-__all__ = ["AppLogger", "LOGGER"]
+__all__ = ["LOGGER", "AppLogger"]

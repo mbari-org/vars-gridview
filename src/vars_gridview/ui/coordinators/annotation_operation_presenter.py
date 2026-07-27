@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Callable, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from PyQt6 import QtCore, QtWidgets
 
 if TYPE_CHECKING:
     from vars_gridview.lib.annotation.box_handler import BoxHandler
-    from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
     from vars_gridview.ui.coordinators.annotation_action_coordinator import (
         AnnotationActionCoordinator,
     )
+    from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
 
 
 class AnnotationOperationPresenter:

@@ -1,4 +1,5 @@
 import unittest
+
 from vars_gridview.lib.m3.query import QueryConstraint
 
 

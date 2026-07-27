@@ -72,6 +72,19 @@ release = [
     "python-semantic-release>=10.6.1",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# PyQt widget modules are named after the class they define (PascalCase),
+# matching the surrounding codebase's Qt convention rather than PEP 8 module
+# naming.
+"src/vars_gridview/ui/MainWindow.py" = ["N999"]
+"src/vars_gridview/ui/settings/SettingsDialog.py" = ["N999"]
+"src/vars_gridview/ui/settings/tabs/AbstractSettingsTab.py" = ["N999"]
+"src/vars_gridview/ui/settings/tabs/AppearanceTab.py" = ["N999"]
+"src/vars_gridview/ui/settings/tabs/CacheTab.py" = ["N999"]
+"src/vars_gridview/ui/settings/tabs/EmbeddingsTab.py" = ["N999"]
+"src/vars_gridview/ui/settings/tabs/M3Tab.py" = ["N999"]
+"src/vars_gridview/ui/settings/tabs/VideoPlayerTab.py" = ["N999"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

@@ -1,5 +1,6 @@
-from vars_gridview.controllers.annotation_controller import AnnotationController
 from uuid import UUID
+
+from vars_gridview.controllers.annotation_controller import AnnotationController
 
 
 class _FakeObservation:

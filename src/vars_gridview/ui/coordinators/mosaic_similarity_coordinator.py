@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from math import inf
-from typing import TYPE_CHECKING, Callable, Protocol, cast
+from typing import TYPE_CHECKING, Protocol, cast
 
 from PyQt6 import QtCore, QtWidgets
 
@@ -98,7 +99,7 @@ class MosaicSimilarityCoordinator(QtCore.QObject):
             else:
                 try:
                     distance = clicked_rect.embedding_distance(rect_widget)
-                except Exception:
+                except Exception:  # noqa: BLE001
                     distance = inf
 
             scored.append((distance, idx - 1))

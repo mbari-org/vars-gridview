@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
@@ -29,12 +30,12 @@ class DetailPaneCoordinator(QtCore.QObject):
         self._box_handler_getter = box_handler_getter
         self._selected_rect_getter = selected_rect_getter
         self._detail_request_generation = 0
-        self._current_detail_image: Optional[np.ndarray] = None
+        self._current_detail_image: np.ndarray | None = None
 
     @staticmethod
     def rect_source_key(
         rect: RectWidget,
-    ) -> tuple[Optional[str], Optional[int], float, float]:
+    ) -> tuple[str | None, int | None, float, float]:
         """Return a stable key for the source frame behind a rect widget."""
         return (
             rect.source_url,

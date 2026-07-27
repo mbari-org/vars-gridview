@@ -1,7 +1,7 @@
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QSizePolicy
+from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
 
-from vars_gridview.ui.widgets.status_info_item import StatusInfoItem
 from vars_gridview.ui.style import UiDimensions
+from vars_gridview.ui.widgets.status_info_item import StatusInfoItem
 
 
 class StatusInfoWidget(QWidget):

@@ -10,7 +10,6 @@ from pathlib import Path
 
 from vars_gridview.lib.config.constants import APP_NAME, ICONS_DIR
 
-
 APP_ID = "vars-gridview"
 APP_COMMENT = "Review and correct VARS localizations in bulk"
 ICONSET_DIR = ICONS_DIR / "VARSGridView.iconset"

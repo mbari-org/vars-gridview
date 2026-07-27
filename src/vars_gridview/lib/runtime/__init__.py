@@ -1,6 +1,6 @@
 """Runtime infrastructure helpers."""
 
-from vars_gridview.lib.runtime.log import AppLogger, LOGGER
+from vars_gridview.lib.runtime.log import LOGGER, AppLogger
 from vars_gridview.lib.runtime.runnables import (
     Worker,
     WorkerSignals,
@@ -9,8 +9,8 @@ from vars_gridview.lib.runtime.runnables import (
 )
 
 __all__ = [
-    "AppLogger",
     "LOGGER",
+    "AppLogger",
     "Worker",
     "WorkerSignals",
     "enqueue",

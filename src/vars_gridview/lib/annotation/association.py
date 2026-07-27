@@ -14,7 +14,6 @@ Design note:
 
 from __future__ import annotations
 
-from typing import Optional
 from uuid import UUID
 
 from vars_gridview.lib.annotation.observation import Observation
@@ -178,7 +177,7 @@ class BoundingBoxAssociation:
         return self._data["height"]
 
     @property
-    def verifier(self) -> Optional[str]:
+    def verifier(self) -> str | None:
         """
         Get the verifier of the bounding box.
 
@@ -188,7 +187,7 @@ class BoundingBoxAssociation:
         return self._data.get("verifier", None)
 
     @property
-    def image_reference_uuid(self) -> Optional[UUID]:
+    def image_reference_uuid(self) -> UUID | None:
         """
         Get the image reference UUID that this association is made on, if present.
 
@@ -297,7 +296,7 @@ class BoundingBoxAssociation:
         """
         self._deleted = value
 
-    def set_concept(self, concept: Optional[str], part: Optional[str]) -> None:
+    def set_concept(self, concept: str | None, part: str | None) -> None:
         """
         Set the concept and part. If either is None, it will not be updated.
 
@@ -316,7 +315,7 @@ class BoundingBoxAssociation:
             self._dirty_part = True
 
     def set_verified_concept(
-        self, concept: Optional[str], part: Optional[str], verifier: str
+        self, concept: str | None, part: str | None, verifier: str
     ) -> None:
         """
         Set the concept, part, and verifier. If either of concept or part is None, it will not be updated.
@@ -380,7 +379,7 @@ class BoundingBoxAssociation:
         """
         return "tags" in self._data and "training" in self._data["tags"]
 
-    def push_changes(self, observer: Optional[str] = None) -> None:
+    def push_changes(self, observer: str | None = None) -> None:
         """Flush dirty local state back to Annosaurus.
 
         Deprecated:

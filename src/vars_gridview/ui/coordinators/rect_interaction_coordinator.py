@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
@@ -61,7 +62,7 @@ class RectInteractionCoordinator(QtCore.QObject):
     def handle_rect_clicked(
         self,
         rect: RectWidget,
-        event: Optional[QtGui.QMouseEvent],
+        event: QtGui.QMouseEvent | None,
     ) -> None:
         """Persist dirty boxes off-thread before applying click selection state."""
         if not self._loaded_getter():
@@ -77,7 +78,7 @@ class RectInteractionCoordinator(QtCore.QObject):
             modifiers = event.modifiers()  # type: ignore[call-arg]
             ctrl = bool(modifiers & QtCore.Qt.KeyboardModifier.ControlModifier)
             shift = bool(modifiers & QtCore.Qt.KeyboardModifier.ShiftModifier)
-        except Exception:
+        except Exception:  # noqa: BLE001
             # Some Qt event wrappers can become invalid after async boundaries.
             return False, False
         return ctrl, shift
@@ -85,7 +86,7 @@ class RectInteractionCoordinator(QtCore.QObject):
     def _save_dirty_boxes_then_handle_click(
         self,
         rect: RectWidget,
-        event: Optional[QtGui.QMouseEvent],
+        event: QtGui.QMouseEvent | None,
     ) -> None:
         ctrl, shift = self._selection_modifiers(event)
 
@@ -158,7 +159,7 @@ class RectInteractionCoordinator(QtCore.QObject):
             f"{summary}\n\n{details}",
         )
 
-    def _dequeue_latest_click(self) -> Optional[tuple[RectWidget, bool, bool]]:
+    def _dequeue_latest_click(self) -> tuple[RectWidget, bool, bool] | None:
         if not self._pending_rect_clicks:
             return None
         latest = self._pending_rect_clicks[-1]
@@ -236,9 +237,9 @@ class RectInteractionCoordinator(QtCore.QObject):
     def _apply_rect_click(
         self,
         rect: RectWidget,
-        event: Optional[QtGui.QMouseEvent] = None,
-        ctrl: Optional[bool] = None,
-        shift: Optional[bool] = None,
+        event: QtGui.QMouseEvent | None = None,
+        ctrl: bool | None = None,
+        shift: bool | None = None,
     ) -> None:
         if not self._loaded_getter():
             return

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from vars_gridview.lib.config.constants import get_settings
 from vars_gridview.lib.config.settings import AppSettings

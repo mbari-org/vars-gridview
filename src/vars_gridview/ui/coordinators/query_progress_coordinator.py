@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from PyQt6 import QtCore, QtWidgets
 
@@ -81,4 +81,4 @@ class QueryProgressCoordinator(QtCore.QObject):
             self._dialog = None
 
 
-__all__ = ["QueryProgressCoordinator", "STAGES"]
+__all__ = ["STAGES", "QueryProgressCoordinator"]

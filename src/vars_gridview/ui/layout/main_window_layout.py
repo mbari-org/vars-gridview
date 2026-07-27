@@ -5,9 +5,9 @@ from __future__ import annotations
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from vars_gridview.ui.widgets.json_tree import JSONTree
-from vars_gridview.ui.widgets.flow_layout import FlowLayout
 from vars_gridview.ui.style import UiGeometry, UiTypography, control_font
+from vars_gridview.ui.widgets.flow_layout import FlowLayout
+from vars_gridview.ui.widgets.json_tree import JSONTree
 
 
 class MainWindowLayout:

@@ -9,12 +9,11 @@ expensive KB lookups (concept list, parts list, concept names) using
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import requests
 from cachetools import TTLCache
 
-from vars_gridview.lib.m3.clients import VARSKBServerClient, VampireSquidClient
+from vars_gridview.lib.m3.clients import VampireSquidClient, VARSKBServerClient
 
 _log = logging.getLogger(__name__)
 
@@ -46,14 +45,14 @@ class KnowledgeBaseService:
         self._ttl = ttl
 
         # Caches populated lazily.
-        self._concepts: Optional[dict[str, Optional[str]]] = None
-        self._parts: Optional[list[str]] = None
-        self._video_sequence_names: Optional[list[str]] = None
+        self._concepts: dict[str, str | None] | None = None
+        self._parts: list[str] | None = None
+        self._video_sequence_names: list[str] | None = None
         self._concept_name_cache: TTLCache = TTLCache(maxsize=512, ttl=ttl)
 
     # ── Concepts ───────────────────────────────────────────────────────────────
 
-    def get_concepts(self) -> dict[str, Optional[str]]:
+    def get_concepts(self) -> dict[str, str | None]:
         """Return all concept names mapped to their common names (lazy).
 
         Common names are ``None`` until :meth:`get_concept_name` is called.
@@ -71,7 +70,7 @@ class KnowledgeBaseService:
             _log.debug(f"Loaded {len(self._concepts)} KB concepts")
         return self._concepts
 
-    def get_concept_name(self, concept: str) -> Optional[str]:
+    def get_concept_name(self, concept: str) -> str | None:
         """Return the common name for *concept*, fetching it if not cached.
 
         Args:
@@ -91,7 +90,7 @@ class KnowledgeBaseService:
             try:
                 response = self._kb.get_concept(concept)
                 response.raise_for_status()
-                name: Optional[str] = response.json().get("name")
+                name: str | None = response.json().get("name")
             except requests.HTTPError:
                 name = None
             concepts[concept] = name

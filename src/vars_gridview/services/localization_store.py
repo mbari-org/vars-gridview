@@ -10,8 +10,8 @@ from json import loads
 from uuid import UUID
 
 from vars_gridview.lib.annotation.association import BoundingBoxAssociation
-from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.annotation.observation import Observation
+from vars_gridview.lib.runtime.log import LOGGER
 
 
 class LocalizationStore:
@@ -41,14 +41,14 @@ class LocalizationStore:
     def map_metadata(self, rows: list[object]) -> None:
         """Populate lookup tables from parsed query rows."""
         for row in rows:
-            image_reference_uuid = getattr(row, "image_reference_uuid")
-            image_url = getattr(row, "image_url")
-            observation_uuid = getattr(row, "observation_uuid")
-            concept = getattr(row, "concept")
-            observer = getattr(row, "observer")
-            observation_group = getattr(row, "observation_group")
-            imaged_moment_uuid = getattr(row, "imaged_moment_uuid")
-            video_uri = getattr(row, "video_uri")
+            image_reference_uuid = row.image_reference_uuid
+            image_url = row.image_url
+            observation_uuid = row.observation_uuid
+            concept = row.concept
+            observer = row.observer
+            observation_group = row.observation_group
+            imaged_moment_uuid = row.imaged_moment_uuid
+            video_uri = row.video_uri
 
             if image_reference_uuid not in self.image_reference_urls:
                 self.image_reference_urls[image_reference_uuid] = image_url
@@ -71,16 +71,16 @@ class LocalizationStore:
 
             if imaged_moment_uuid not in self.moment_ancillary_data:
                 ancillary = {
-                    "camera_platform": getattr(row, "camera_platform"),
-                    "video_sequence_name": getattr(row, "video_sequence_name"),
-                    "depth_meters": getattr(row, "depth_meters"),
-                    "latitude": getattr(row, "latitude"),
-                    "longitude": getattr(row, "longitude"),
-                    "oxygen_ml_per_l": getattr(row, "oxygen_ml_per_l"),
-                    "pressure_dbar": getattr(row, "pressure_dbar"),
-                    "salinity": getattr(row, "salinity"),
-                    "temperature_celsius": getattr(row, "temperature_celsius"),
-                    "light_transmission": getattr(row, "light_transmission"),
+                    "camera_platform": row.camera_platform,
+                    "video_sequence_name": row.video_sequence_name,
+                    "depth_meters": row.depth_meters,
+                    "latitude": row.latitude,
+                    "longitude": row.longitude,
+                    "oxygen_ml_per_l": row.oxygen_ml_per_l,
+                    "pressure_dbar": row.pressure_dbar,
+                    "salinity": row.salinity,
+                    "temperature_celsius": row.temperature_celsius,
+                    "light_transmission": row.light_transmission,
                 }
                 self.moment_ancillary_data[imaged_moment_uuid] = {
                     k: v for k, v in ancillary.items() if v is not None
@@ -91,20 +91,16 @@ class LocalizationStore:
                 and imaged_moment_uuid not in self.moment_video_data
             ):
                 video_data = {
-                    "index_elapsed_time_millis": getattr(
-                        row, "index_elapsed_time_millis"
-                    ),
-                    "index_timecode": getattr(row, "index_timecode"),
-                    "index_recorded_timestamp": getattr(
-                        row, "index_recorded_timestamp"
-                    ),
-                    "video_start_timestamp": getattr(row, "video_start_timestamp"),
+                    "index_elapsed_time_millis": row.index_elapsed_time_millis,
+                    "index_timecode": row.index_timecode,
+                    "index_recorded_timestamp": row.index_recorded_timestamp,
+                    "video_start_timestamp": row.video_start_timestamp,
                     "video_uri": video_uri,
-                    "video_container": getattr(row, "video_container"),
-                    "video_reference_uuid": getattr(row, "video_reference_uuid"),
-                    "video_sequence_name": getattr(row, "video_sequence_name"),
-                    "video_width": getattr(row, "video_width"),
-                    "video_height": getattr(row, "video_height"),
+                    "video_container": row.video_container,
+                    "video_reference_uuid": row.video_reference_uuid,
+                    "video_sequence_name": row.video_sequence_name,
+                    "video_width": row.video_width,
+                    "video_height": row.video_height,
                 }
                 self.moment_video_data[imaged_moment_uuid] = {
                     k: v for k, v in video_data.items() if v is not None
@@ -114,20 +110,20 @@ class LocalizationStore:
         """Build association groups keyed by `(imaged_moment_uuid, image_reference_uuid)`."""
         seen_associations: set[UUID] = set()
         for row in rows:
-            if getattr(row, "link_name") != "bounding box":
+            if row.link_name != "bounding box":
                 continue
 
-            association_uuid = getattr(row, "association_uuid")
+            association_uuid = row.association_uuid
             if association_uuid in seen_associations:
                 continue
             seen_associations.add(association_uuid)
 
-            imaged_moment_uuid = getattr(row, "imaged_moment_uuid")
-            video_start_timestamp = getattr(row, "video_start_timestamp")
-            video_sequence_name = getattr(row, "video_sequence_name")
-            observation_uuid = getattr(row, "observation_uuid")
-            to_concept = getattr(row, "to_concept")
-            link_value = getattr(row, "link_value")
+            imaged_moment_uuid = row.imaged_moment_uuid
+            video_start_timestamp = row.video_start_timestamp
+            video_sequence_name = row.video_sequence_name
+            observation_uuid = row.observation_uuid
+            to_concept = row.to_concept
+            link_value = row.link_value
 
             if video_start_timestamp is None:
                 LOGGER.warning(

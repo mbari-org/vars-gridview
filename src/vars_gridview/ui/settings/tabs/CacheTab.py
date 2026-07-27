@@ -2,8 +2,8 @@ from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.config.constants import get_settings
 from vars_gridview.lib.config.settings import AppSettings
-from vars_gridview.ui.widgets.file_selection_line_edit import DirectorySelectionLineEdit
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
+from vars_gridview.ui.widgets.file_selection_line_edit import DirectorySelectionLineEdit
 
 
 class CacheTab(AbstractSettingsTab):

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+from uuid import UUID
+
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtGui
-from uuid import UUID
-from typing import TYPE_CHECKING
 
 from vars_gridview.lib.config.constants import get_settings
 from vars_gridview.lib.config.settings import AppSettings

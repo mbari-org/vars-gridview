@@ -95,7 +95,7 @@ class NoopSort(SortMethod):
     NAME = "No-op"
 
     @staticmethod
-    def key(rect: RectWidget) -> None:  # noqa: ARG004
+    def key(rect: RectWidget) -> None:
         return None
 
 
@@ -372,30 +372,30 @@ class ConfidenceSort(SortMethod):  # type: ignore[misc]
 
 
 __all__ = [
-    "SortMethod",
-    "SortMethodGroup",
-    "NoopSort",
-    "RecordedTimestampSort",
-    "AssociationUUIDSort",
-    "ObservationUUIDSort",
-    "ImageReferenceUUIDSort",
-    "LabelSort",
-    "WidthSort",
-    "HeightSort",
     "AreaSort",
     "AspectRatioSort",
-    "IntensityMeanSort",
-    "IntensityVarianceSort",
+    "AssociationUUIDSort",
+    "CannySort",
+    "ConfidenceSort",
+    "DepthSort",
+    "FrequencyDomainSort",
+    "HeightSort",
+    "HueMeanCenterRegion",
     "HueMeanSort",
     "HueVarianceSort",
-    "HueMeanCenterRegion",
-    "DepthSort",
-    "LaplacianVarianceSort",
+    "ImageReferenceUUIDSort",
+    "IntensityMeanSort",
+    "IntensityVarianceSort",
+    "LabelSort",
     "LaplacianOfGaussianSort",
+    "LaplacianVarianceSort",
+    "NoopSort",
+    "ObservationUUIDSort",
+    "RecordedTimestampSort",
     "SobelSort",
-    "CannySort",
-    "FrequencyDomainSort",
+    "SortMethod",
+    "SortMethodGroup",
     "VerifierSort",
-    "ConfidenceSort",
+    "WidthSort",
     "association_data_sort",
 ]

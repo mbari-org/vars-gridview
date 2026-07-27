@@ -14,11 +14,11 @@ from requests import HTTPError
 from scipy.spatial.distance import cosine
 
 from vars_gridview.lib.annotation.association import BoundingBoxAssociation
+from vars_gridview.lib.common.time import get_timestamp
 from vars_gridview.lib.config.constants import ICONS_DIR, get_settings
 from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.runtime.runnables import Worker
-from vars_gridview.lib.common.time import get_timestamp
 from vars_gridview.lib.vision.image_utils import color_for_concept
 from vars_gridview.services.roi_service import RoiService
 
@@ -146,7 +146,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         except HTTPError as e:
             LOGGER.error(f"Failed to load image from {self.source_url}: {e}")
             return None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             LOGGER.error(f"Unexpected error while fetching image: {e}")
             return None
 
@@ -403,7 +403,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             return
         self._embedding = embedding
 
-    def embedding_distance(self, other: "RectWidget") -> float:
+    def embedding_distance(self, other: RectWidget) -> float:
         """
         Calculate the embedding distance between this rect widget and another.
 
@@ -620,7 +620,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             self._zoom * self.outline_height,
         )
 
-    def sizeHint(self, which, constraint=QtCore.QSizeF()):
+    def sizeHint(self, which, constraint=None):
         return self.boundingRect().size()
 
     def getpic(self, roi: np.ndarray) -> QtGui.QPixmap:

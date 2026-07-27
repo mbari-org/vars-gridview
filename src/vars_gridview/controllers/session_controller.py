@@ -17,8 +17,8 @@ import logging
 
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
 
-from vars_gridview.lib.m3 import M3Context
 from vars_gridview.lib.auth.raziel import authenticate
+from vars_gridview.lib.m3 import M3Context
 from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.services.annotation_service import AnnotationService
 from vars_gridview.services.knowledge_base_service import KnowledgeBaseService

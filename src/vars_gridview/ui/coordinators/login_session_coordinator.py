@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional, Tuple
+from collections.abc import Callable
 
 from PyQt6 import QtCore, QtWidgets
 
@@ -69,7 +69,7 @@ class LoginSessionCoordinator(QtCore.QObject):
         *,
         parent_widget: QtWidgets.QWidget,
         login_dialog_factory: Callable[[QtWidgets.QWidget], object] | None = None,
-    ) -> Optional[Tuple[str, str, str]]:
+    ) -> tuple[str, str, str] | None:
         factory = login_dialog_factory or (lambda parent: LoginDialog(parent=parent))
         login_dialog = factory(parent_widget)
         login_dialog.focus_username()

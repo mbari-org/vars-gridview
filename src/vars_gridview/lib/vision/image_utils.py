@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from functools import cache
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -16,8 +15,8 @@ from vars_gridview.lib.runtime.log import LOGGER
 
 def fetch_image(
     url: str,
-    elapsed_time_millis: Optional[int] = None,
-    beholder_client: Optional[BeholderClient] = None,
+    elapsed_time_millis: int | None = None,
+    beholder_client: BeholderClient | None = None,
 ) -> np.ndarray:
     """Fetch and decode a still image or Beholder frame."""
     try:
@@ -55,4 +54,4 @@ def color_for_concept(concept: str) -> QColor:
     return color
 
 
-__all__ = ["fetch_image", "color_for_concept"]
+__all__ = ["color_for_concept", "fetch_image"]

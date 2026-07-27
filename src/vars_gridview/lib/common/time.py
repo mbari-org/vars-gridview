@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Optional
 
 
 def get_timestamp(
     video_start_timestamp: datetime,
-    recorded_timestamp: Optional[datetime] = None,
-    elapsed_time_millis: Optional[int] = None,
-    timecode: Optional[str] = None,
-) -> Optional[datetime]:
+    recorded_timestamp: datetime | None = None,
+    elapsed_time_millis: int | None = None,
+    timecode: str | None = None,
+) -> datetime | None:
     """Resolve the best available timestamp for an annotation."""
     if recorded_timestamp is not None:
         return recorded_timestamp

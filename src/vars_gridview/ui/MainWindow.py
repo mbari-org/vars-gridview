@@ -2,11 +2,16 @@ import json
 import sys
 from pathlib import Path
 from shutil import rmtree
-from typing import TYPE_CHECKING, Any, List, Optional, Tuple, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 from sharktopoda_client.client import SharktopodaClient
 
+from vars_gridview.controllers.annotation_controller import AnnotationController
+from vars_gridview.controllers.query_controller import QueryController
+from vars_gridview.controllers.session_controller import SessionController
+from vars_gridview.lib.annotation.box_handler import BoxHandler
+from vars_gridview.lib.common.filesystem import open_file_browser
 from vars_gridview.lib.config.constants import (
     APP_NAME,
     APP_VERSION,
@@ -16,24 +21,10 @@ from vars_gridview.lib.config.constants import (
     get_settings,
 )
 from vars_gridview.lib.config.settings import AppSettings
-from vars_gridview.lib.annotation.box_handler import BoxHandler
-from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
-from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.m3.query import QueryConstraint
-from vars_gridview.lib.common.filesystem import open_file_browser
-from vars_gridview.controllers.annotation_controller import AnnotationController
-from vars_gridview.controllers.query_controller import QueryController
-from vars_gridview.controllers.session_controller import SessionController
-from vars_gridview.ui.mosaic.rect_widget import RectWidget
-from vars_gridview.ui.dialogs.confirmation_dialog import ConfirmationDialog
-from vars_gridview.ui.dialogs.login_dialog import LoginDialog
-from vars_gridview.ui.dialogs.query_dialog import QueryDialog
+from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.ui.coordinators.annotation_action_coordinator import (
     AnnotationActionCoordinator,
-)
-from vars_gridview.ui.layout.main_window_layout import MainWindowLayout
-from vars_gridview.ui.coordinators.main_window_menu_coordinator import (
-    MainWindowMenuCoordinator,
 )
 from vars_gridview.ui.coordinators.annotation_operation_presenter import (
     AnnotationOperationPresenter,
@@ -41,17 +32,8 @@ from vars_gridview.ui.coordinators.annotation_operation_presenter import (
 from vars_gridview.ui.coordinators.detail_pane_coordinator import (
     DetailPaneCoordinator,
 )
-from vars_gridview.ui.coordinators.video_navigation_coordinator import (
-    VideoNavigationCoordinator,
-)
-from vars_gridview.ui.coordinators.shutdown_save_coordinator import (
-    ShutdownSaveCoordinator,
-)
-from vars_gridview.ui.coordinators.query_progress_coordinator import (
-    QueryProgressCoordinator,
-)
-from vars_gridview.ui.coordinators.login_session_coordinator import (
-    LoginSessionCoordinator,
+from vars_gridview.ui.coordinators.dirty_association_save_coordinator import (
+    DirtyAssociationSaveCoordinator,
 )
 from vars_gridview.ui.coordinators.embedding_lifecycle_coordinator import (
     EmbeddingLifecycleCoordinator,
@@ -59,18 +41,35 @@ from vars_gridview.ui.coordinators.embedding_lifecycle_coordinator import (
 from vars_gridview.ui.coordinators.knowledge_base_ui_coordinator import (
     KnowledgeBaseUiCoordinator,
 )
+from vars_gridview.ui.coordinators.login_session_coordinator import (
+    LoginSessionCoordinator,
+)
+from vars_gridview.ui.coordinators.main_window_menu_coordinator import (
+    MainWindowMenuCoordinator,
+)
+from vars_gridview.ui.coordinators.query_progress_coordinator import (
+    QueryProgressCoordinator,
+)
 from vars_gridview.ui.coordinators.query_results_coordinator import (
     QueryResultsCoordinator,
 )
 from vars_gridview.ui.coordinators.rect_interaction_coordinator import (
     RectInteractionCoordinator,
 )
-from vars_gridview.ui.coordinators.dirty_association_save_coordinator import (
-    DirtyAssociationSaveCoordinator,
+from vars_gridview.ui.coordinators.shutdown_save_coordinator import (
+    ShutdownSaveCoordinator,
 )
-from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
+from vars_gridview.ui.coordinators.video_navigation_coordinator import (
+    VideoNavigationCoordinator,
+)
+from vars_gridview.ui.dialogs.confirmation_dialog import ConfirmationDialog
+from vars_gridview.ui.dialogs.login_dialog import LoginDialog
+from vars_gridview.ui.dialogs.query_dialog import QueryDialog
 from vars_gridview.ui.dialogs.sort_dialog import SortDialog
-from vars_gridview.ui.widgets.status_info_widget import StatusInfoWidget
+from vars_gridview.ui.layout.main_window_layout import MainWindowLayout
+from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
+from vars_gridview.ui.mosaic.rect_widget import RectWidget
+from vars_gridview.ui.settings.SettingsDialog import SettingsDialog
 from vars_gridview.ui.settings.tabs.AppearanceTab import AppearanceTab
 from vars_gridview.ui.settings.tabs.CacheTab import CacheTab
 from vars_gridview.ui.settings.tabs.EmbeddingsTab import EmbeddingsTab
@@ -81,6 +80,7 @@ from vars_gridview.ui.style import (
     action_button_style,
     apply_app_theme,
 )
+from vars_gridview.ui.widgets.status_info_widget import StatusInfoWidget
 
 if TYPE_CHECKING:
     from vars_gridview.lib.vision.embedding import Embedding
@@ -124,7 +124,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Services/controllers (initialized after login)
         self._annotation_service = None
         self._kb_service = None
-        self._annotation_controller: Optional[AnnotationController] = None
+        self._annotation_controller: AnnotationController | None = None
         self._session_controller = SessionController(parent=self)
         self._session_controller.logged_in.connect(self._on_session_logged_in)
         self._login_flow = LoginSessionCoordinator(
@@ -156,12 +156,16 @@ class MainWindow(QtWidgets.QMainWindow):
             settings=self._settings,
             dialog_parent=self,
             embedding_model=None,
-            concept_provider=lambda: list(self._kb_service.get_concepts().keys())
-            if self._kb_service is not None
-            else [],
-            part_provider=lambda: list(self._kb_service.get_parts())
-            if self._kb_service is not None
-            else [],
+            concept_provider=lambda: (
+                list(self._kb_service.get_concepts().keys())
+                if self._kb_service is not None
+                else []
+            ),
+            part_provider=lambda: (
+                list(self._kb_service.get_parts())
+                if self._kb_service is not None
+                else []
+            ),
             label_action_callback=self._label_single_from_tile,
             verify_action_callback=self._verify_single_from_tile,
             mark_training_action_callback=self._mark_training_single_from_tile,
@@ -244,7 +248,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.statusInfoLayout.addWidget(self.status_info_widget)
 
         # Box handler (handles the ROIs and annotations)
-        self.box_handler: Optional[BoxHandler] = None
+        self.box_handler: BoxHandler | None = None
 
         self.sharktopoda_client = None  # Sharktopoda client
         self.sharktopoda_connected = (
@@ -353,7 +357,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._settings.sharktopoda_autoconnect.value:
             try:
                 self._setup_sharktopoda_client()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 LOGGER.warning(f"Could not set up Sharktopoda client: {e}")
 
         LOGGER.info("Launch successful")
@@ -449,7 +453,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._settings.sharktopoda_outgoing_port.value,
                 self._settings.sharktopoda_incoming_port.value,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             LOGGER.error(f"Could not create Sharktopoda client: {e}")
             return
 
@@ -483,7 +487,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 rmtree(cache_dir)
                 LOGGER.info("Cache cleared")
                 self._notify_info("Cache Cleared", "Cache cleared successfully.")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 LOGGER.error(f"Could not clear cache: {e}")
                 self._notify_error("Cache Clear Failed", f"Could not clear cache: {e}")
 
@@ -628,7 +632,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self,
         rect_widget: RectWidget,
         current_concept: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         return self._annotation_actions.change_concept_from_box(
             rect_widget,
             current_concept,
@@ -638,7 +642,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self,
         rect_widget: RectWidget,
         current_part: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         return self._annotation_actions.change_part_from_box(
             rect_widget,
             current_part,
@@ -697,7 +701,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _load_favorites(self) -> list[dict]:
         try:
             return json.loads(self._settings.quick_label_favorites.value)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return []
 
     def _save_favorites(self, favorites: list[dict]) -> None:
@@ -958,7 +962,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.image_mosaic.precompute_embeddings_async()
 
     @QtCore.pyqtSlot(object, object)
-    def rect_clicked(self, rect: RectWidget, event: Optional[QtGui.QMouseEvent]):
+    def rect_clicked(self, rect: RectWidget, event: QtGui.QMouseEvent | None):
         self._rect_interaction.handle_rect_clicked(rect, event)
 
     @QtCore.pyqtSlot()
@@ -1001,7 +1005,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         QtWidgets.QMainWindow.closeEvent(self, event)
 
-    def get_query_params(self) -> Optional[Tuple[List[QueryConstraint], int, int]]:
+    def get_query_params(self) -> tuple[list[QueryConstraint], int, int] | None:
         """
         Show the query dialog and return the constraints dictionary, limit, and offset.
 
@@ -1021,7 +1025,9 @@ class MainWindow(QtWidgets.QMainWindow):
             parent=self,
             kb_concepts_getter=lambda: list(kb_service.get_concepts().keys()),
             kb_descendants_getter=kb_service.get_descendants,
-            users_getter=lambda: session_context.vars_user_server.get_all_users().json(),
+            users_getter=lambda: (
+                session_context.vars_user_server.get_all_users().json()
+            ),
             video_sequence_names_getter=kb_service.get_video_sequence_names,
         )
         ok = dialog.exec()

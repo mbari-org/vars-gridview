@@ -28,8 +28,8 @@ __all__ = [
     "SHARKTOPODA_APP_NAME",
     "STYLE_DIR",
     "UI_FILE",
-    "get_settings",
     "AppSettings",
     "SettingProxy",
     "build_settings",
+    "get_settings",
 ]

@@ -68,18 +68,18 @@ class AnnotationService:
         obs = observer or self._observer
         do_modify_box = False
 
-        if assoc._dirty_concept:  # noqa: SLF001
+        if assoc._dirty_concept:
             self._update_observation_concept(assoc.observation.uuid, assoc.concept, obs)
-            assoc._dirty_concept = False  # noqa: SLF001
+            assoc._dirty_concept = False
             do_modify_box = True
 
-        if assoc._dirty_part:  # noqa: SLF001
+        if assoc._dirty_part:
             self._update_association_part(assoc.uuid, assoc.part)
-            assoc._dirty_part = False  # noqa: SLF001
+            assoc._dirty_part = False
             do_modify_box = True
 
-        if assoc._dirty_box:  # noqa: SLF001
-            assoc._dirty_box = False  # noqa: SLF001
+        if assoc._dirty_box:
+            assoc._dirty_box = False
             do_modify_box = True
 
         if do_modify_box:

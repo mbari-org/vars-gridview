@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from threading import Event
-from typing import TYPE_CHECKING, Callable, cast
+from typing import TYPE_CHECKING, cast
 
 from PyQt6 import QtCore
 
+from vars_gridview.lib.runtime.log import LOGGER
 
 if TYPE_CHECKING:
     from vars_gridview.ui.mosaic.rect_widget import RectWidget
@@ -91,8 +93,8 @@ class MosaicRoiLoadingCoordinator(QtCore.QObject):
         rw = cast("RectWidget", rect_widget)
         try:
             rw.roiRefreshed.disconnect(self._on_rect_roi_refreshed)
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.debug(f"roiRefreshed already disconnected: {exc}")
 
         if rw.roi_batch_generation != self._generation:
             return

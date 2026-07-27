@@ -9,11 +9,9 @@ list of endpoint dicts returned by Raziel.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
 
 from beholder_client import BeholderClient
 
-from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.m3.clients import (
     AnnosaurusClient,
     SkimmerClient,
@@ -21,6 +19,7 @@ from vars_gridview.lib.m3.clients import (
     VARSKBServerClient,
     VARSUserServerClient,
 )
+from vars_gridview.lib.runtime.log import LOGGER
 
 
 @dataclass(frozen=True)
@@ -44,7 +43,7 @@ class M3Context:
     skimmer: SkimmerClient
 
     @classmethod
-    def from_endpoint_data(cls, endpoints: list[dict]) -> "M3Context":
+    def from_endpoint_data(cls, endpoints: list[dict]) -> M3Context:
         """Construct an :class:`M3Context` from Raziel endpoint data.
 
         Args:
@@ -59,7 +58,7 @@ class M3Context:
             ValueError: If a required endpoint entry is missing.
         """
 
-        def _get(name: str) -> tuple[str, Optional[str]]:
+        def _get(name: str) -> tuple[str, str | None]:
             entry = next((e for e in endpoints if e["name"] == name), None)
             if entry is None:
                 raise ValueError(f'Endpoint "{name}" not found in endpoint data')

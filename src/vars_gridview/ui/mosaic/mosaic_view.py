@@ -86,8 +86,8 @@ class MosaicView:
             rect_widget_height_f = all_widgets[0].boundingRect().height()
 
             # Defensive guard: stale/invalid geometry can transiently report zero.
-            rect_widget_width = max(int(round(rect_widget_width_f)), 1)
-            rect_widget_height = max(int(round(rect_widget_height_f)), 1)
+            rect_widget_width = max(round(rect_widget_width_f), 1)
+            rect_widget_height = max(round(rect_widget_height_f), 1)
 
             columns = max(int(width / rect_widget_width), 1)
         else:
@@ -235,4 +235,4 @@ class MosaicView:
         return 0
 
 
-__all__ = ["MosaicView", "MosaicRenderResult", "MosaicVisibilityFilters"]
+__all__ = ["MosaicRenderResult", "MosaicView", "MosaicVisibilityFilters"]

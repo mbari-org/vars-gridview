@@ -8,12 +8,14 @@ service.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Callable, Iterable
+from collections.abc import Callable, Iterable
 from urllib.parse import quote
 
 import cv2
 import numpy as np
 import requests
+
+from vars_gridview.lib.runtime.log import LOGGER
 
 
 class Embedding(ABC):
@@ -164,8 +166,8 @@ class HttpEmbedding(Embedding):
                     self._base_url,
                     timeout_seconds=self._timeout_seconds,
                 )
-            except Exception:
-                pass
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.debug(f"Could not list available embedding models: {exc}")
             if available and self._model_name not in available:
                 raise RuntimeError(
                     f"Embedding model '{self._model_name}' is not available. "
@@ -209,7 +211,7 @@ class HttpEmbedding(Embedding):
             if detail is not None:
                 return str(detail)
             return str(payload)
-        except Exception:
+        except Exception:  # noqa: BLE001
             return response.text or "Unknown error"
 
     @staticmethod

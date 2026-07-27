@@ -16,8 +16,9 @@ It is deliberately thin:
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional, Sequence
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
@@ -106,7 +107,7 @@ class AnnotationController(QObject):
 
         try:
             canonical = self._kb.get_concept_name(concept)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             self.operation_failed.emit(f"Could not resolve concept '{concept}': {exc}")
             return
 
@@ -262,8 +263,8 @@ class AnnotationController(QObject):
     def label_selected_partial(
         self,
         associations: Sequence[BoundingBoxAssociation],
-        concept: Optional[str],
-        part: Optional[str],
+        concept: str | None,
+        part: str | None,
         observer: str | None = None,
     ) -> None:
         """Apply concept and/or part to associations; None means leave that field unchanged.
@@ -281,7 +282,7 @@ class AnnotationController(QObject):
         if concept is not None:
             try:
                 canonical = self._kb.get_concept_name(concept)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 self.operation_failed.emit(
                     f"Could not resolve concept '{concept}': {exc}"
                 )
@@ -304,8 +305,8 @@ class AnnotationController(QObject):
     def _apply_labels(
         self,
         associations: list[BoundingBoxAssociation],
-        concept: Optional[str],
-        part: Optional[str],
+        concept: str | None,
+        part: str | None,
         observer: str | None,
     ) -> None:
         """Apply concept/part labels and push to VARS.

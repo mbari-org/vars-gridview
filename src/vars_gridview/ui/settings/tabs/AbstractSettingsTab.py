@@ -1,5 +1,3 @@
-from typing import Optional
-
 from PyQt6 import QtCore, QtWidgets
 
 
@@ -15,7 +13,7 @@ class AbstractSettingsTab(QtWidgets.QWidget):
     Signal emitted when settings are changed.
     """
 
-    def __init__(self, name: str, parent: Optional[QtWidgets.QWidget] = None):
+    def __init__(self, name: str, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
 
         self._name = name

@@ -11,7 +11,6 @@ responsive.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 import cv2
 import numpy as np
@@ -47,8 +46,8 @@ class RoiService:
         self,
         assoc: BoundingBoxAssociation,
         image_url: str,
-        elapsed_time_millis: Optional[int] = None,
-    ) -> Optional[np.ndarray]:
+        elapsed_time_millis: int | None = None,
+    ) -> np.ndarray | None:
         """Fetch the cropped ROI for *assoc*.
 
         Args:
@@ -89,8 +88,8 @@ class RoiService:
     def fetch_full_image(
         self,
         image_url: str,
-        elapsed_time_millis: Optional[int] = None,
-    ) -> Optional[np.ndarray]:
+        elapsed_time_millis: int | None = None,
+    ) -> np.ndarray | None:
         """Fetch an entire frame image without cropping.
 
         Args:

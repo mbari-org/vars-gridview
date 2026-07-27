@@ -15,7 +15,8 @@ Typical usage::
 from __future__ import annotations
 
 import traceback
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, pyqtSignal
 
@@ -84,4 +85,4 @@ class Worker(QRunnable):
             self.signals.finished.emit()
 
 
-__all__ = ["enqueue", "start", "Worker", "WorkerSignals"]
+__all__ = ["Worker", "WorkerSignals", "enqueue", "start"]

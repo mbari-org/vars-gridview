@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib.runtime.log import LOGGER
-
 from vars_gridview.lib.runtime.runnables import Worker
 
 
@@ -20,8 +19,8 @@ class ShutdownSaveCoordinator(QtCore.QObject):
         self._in_progress = False
         self._dialog: QtWidgets.QProgressDialog | None = None
         self._allow_close_once = False
-        self._request_close_callback: Optional[Callable[[], None]] = None
-        self._clear_dirty_callback: Optional[Callable[[set], None]] = None
+        self._request_close_callback: Callable[[], None] | None = None
+        self._clear_dirty_callback: Callable[[set], None] | None = None
 
     @property
     def in_progress(self) -> bool:

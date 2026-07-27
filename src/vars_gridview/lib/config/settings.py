@@ -15,7 +15,7 @@ Usage example::
 
 from __future__ import annotations
 
-from typing import Generic, Optional, TypeVar
+from typing import Generic, TypeVar
 
 from PyQt6 import QtCore
 
@@ -44,7 +44,7 @@ class SettingProxy(QtCore.QObject, Generic[T]):
         qsettings: QtCore.QSettings,
         key: str,
         type_: type,
-        default: Optional[T],
+        default: T | None,
     ) -> None:
         super().__init__()
         self._settings = qsettings
@@ -122,6 +122,7 @@ class AppSettings:
             qsettings: Platform-scoped ``QSettings`` instance.
         """
         from pathlib import Path
+
         from platformdirs import user_cache_dir
 
         _s = qsettings
@@ -229,4 +230,4 @@ def build_settings() -> AppSettings:
     return AppSettings(qsettings)
 
 
-__all__ = ["SettingProxy", "AppSettings", "build_settings"]
+__all__ = ["AppSettings", "SettingProxy", "build_settings"]

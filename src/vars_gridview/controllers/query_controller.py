@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Sequence
+from collections.abc import Sequence
 
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
 
+from vars_gridview.lib.common.tsv import parse_tsv
 from vars_gridview.lib.m3.clients import AnnosaurusClient
 from vars_gridview.lib.m3.query import (
     QueryConstraint,
@@ -27,7 +28,6 @@ from vars_gridview.lib.m3.query import (
     merge_constraints,
 )
 from vars_gridview.lib.runtime.runnables import Worker
-from vars_gridview.lib.common.tsv import parse_tsv
 
 _LOG = logging.getLogger(__name__)
 

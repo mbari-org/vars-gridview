@@ -113,8 +113,9 @@ class AppearanceTab(AbstractSettingsTab):
             changed.add(self._settings.selection_highlight_color.key)
 
         theme_name = self.theme_combo_box.currentData()
-        if theme_name is not None:
-            if self._settings.gui_style.set_value(str(theme_name)):
-                changed.add(self._settings.gui_style.key)
+        if theme_name is not None and self._settings.gui_style.set_value(
+            str(theme_name)
+        ):
+            changed.add(self._settings.gui_style.key)
 
         return changed

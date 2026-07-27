@@ -7,47 +7,48 @@ CRUD operations on bounding-box annotations.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from threading import Event
-from typing import TYPE_CHECKING, Any, Callable, List, cast
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from iso8601 import parse_date
-from PyQt6 import QtCore, QtGui, QtWidgets
 from pydantic import BaseModel
+from PyQt6 import QtCore, QtGui, QtWidgets
 
+from vars_gridview.controllers.selection_model import SelectionModel
 from vars_gridview.lib.annotation.association import BoundingBoxAssociation
 from vars_gridview.lib.config.constants import get_settings
 from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.sorting.sort_methods import SortMethod, SortMethodGroup
-from vars_gridview.controllers.selection_model import SelectionModel
 from vars_gridview.services.localization_store import LocalizationStore
 from vars_gridview.services.mosaic_pipeline import MosaicPipeline
-from vars_gridview.services.roi_loader import RoiLoadResult, RoiLoader
-from vars_gridview.ui.coordinators.mosaic_load_coordinator import MosaicLoadCoordinator
-from vars_gridview.ui.coordinators.mosaic_selection_coordinator import (
-    MosaicSelectionCoordinator,
+from vars_gridview.services.roi_loader import RoiLoader, RoiLoadResult
+from vars_gridview.ui.coordinators.mosaic_embedding_coordinator import (
+    MosaicEmbeddingCoordinator,
 )
+from vars_gridview.ui.coordinators.mosaic_load_coordinator import MosaicLoadCoordinator
 from vars_gridview.ui.coordinators.mosaic_roi_loading_coordinator import (
     MosaicRoiLoadingCoordinator,
 )
+from vars_gridview.ui.coordinators.mosaic_selection_coordinator import (
+    MosaicSelectionCoordinator,
+)
 from vars_gridview.ui.coordinators.mosaic_similarity_coordinator import (
     MosaicSimilarityCoordinator,
-)
-from vars_gridview.ui.coordinators.mosaic_embedding_coordinator import (
-    MosaicEmbeddingCoordinator,
 )
 from vars_gridview.ui.coordinators.mosaic_tile_action_coordinator import (
     MosaicTileActionCoordinator,
 )
 from vars_gridview.ui.mosaic.mosaic_view import MosaicView, MosaicVisibilityFilters
-from vars_gridview.ui.mosaic.rect_widget_factory import RectWidgetFactory
 from vars_gridview.ui.mosaic.rect_widget import RectWidget
+from vars_gridview.ui.mosaic.rect_widget_factory import RectWidgetFactory
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.vision.embedding import Embedding
     from vars_gridview.lib.m3.clients import AnnosaurusClient, VampireSquidClient
+    from vars_gridview.lib.vision.embedding import Embedding
     from vars_gridview.services.roi_service import RoiService
 
 
@@ -143,7 +144,7 @@ class Row(BaseModel):
                 continue
             try:
                 row_dict[key] = parse_date(str(timestamp_raw))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 raise ValueError(f"Invalid {key}: {timestamp_raw}") from exc
 
         return cls(**row_dict)
@@ -153,8 +154,6 @@ class Cancelled(Exception):
     """
     Exception raised when the user cancels an operation.
     """
-
-    pass
 
 
 class ImageMosaic(QtCore.QObject):
@@ -208,7 +207,7 @@ class ImageMosaic(QtCore.QObject):
         self._concept_provider = concept_provider
         self._part_provider = part_provider
 
-        self._rect_widgets: List[RectWidget] = []
+        self._rect_widgets: list[RectWidget] = []
         self._n_columns = 0
         self.selection_model = SelectionModel(parent=self)
         self.selection_model.selection_changed.connect(self._on_selection_changed)
@@ -377,15 +376,16 @@ class ImageMosaic(QtCore.QObject):
             cancelled_message="Localization preparation cancelled",
             missing_result_message="Localization preparation returned no result",
             cancel_event=cancel_event,
-            worker_factory=lambda cancel_event,
-            progress_callback: self._mosaic_pipeline.build_localization_state(
-                query_rows=query_rows,
-                row_parser=lambda row: Row.parse(query_headers, row),
-                cached_image_reference_urls=cached_image_reference_urls,
-                cached_video_sequences_by_name=cached_video_sequences_by_name,
-                cancel_event=cancel_event,
-                progress_callback=progress_callback,
-                cancelled_message="Localization preparation cancelled",
+            worker_factory=lambda cancel_event, progress_callback: (
+                self._mosaic_pipeline.build_localization_state(
+                    query_rows=query_rows,
+                    row_parser=lambda row: Row.parse(query_headers, row),
+                    cached_image_reference_urls=cached_image_reference_urls,
+                    cached_video_sequences_by_name=cached_video_sequences_by_name,
+                    cancel_event=cancel_event,
+                    progress_callback=progress_callback,
+                    cancelled_message="Localization preparation cancelled",
+                )
             ),
         )
         rows, store = cast(tuple[list[object], LocalizationStore], payload)
@@ -410,13 +410,14 @@ class ImageMosaic(QtCore.QObject):
             cancelled_message="Video sequence fetch cancelled",
             missing_result_message=None,
             cancel_event=cancel_event,
-            worker_factory=lambda cancel_event,
-            progress_callback: self._roi_loader.fetch_video_sequence_data(
-                vampire_squid_client=self._vampire_squid_client,
-                moment_video_data=self.moment_video_data,
-                video_sequences_by_name=self.video_sequences_by_name,
-                progress_callback=progress_callback,
-                should_cancel=cancel_event.is_set,
+            worker_factory=lambda cancel_event, progress_callback: (
+                self._roi_loader.fetch_video_sequence_data(
+                    vampire_squid_client=self._vampire_squid_client,
+                    moment_video_data=self.moment_video_data,
+                    video_sequences_by_name=self.video_sequences_by_name,
+                    progress_callback=progress_callback,
+                    should_cancel=cancel_event.is_set,
+                )
             ),
         )
 
@@ -427,15 +428,16 @@ class ImageMosaic(QtCore.QObject):
             cancelled_message="Proxy mapping cancelled",
             missing_result_message="Proxy mapping returned no result",
             cancel_event=cancel_event,
-            worker_factory=lambda cancel_event,
-            progress_callback: self._mosaic_pipeline.build_proxy_mapping(
-                rows=list(rows),
-                existing_moment_proxy_data=self.moment_proxy_data,
-                existing_moment_timestamps=self.moment_timestamps,
-                video_sequences_by_name=self.video_sequences_by_name,
-                roi_loader=self._roi_loader,
-                cancel_event=cancel_event,
-                progress_callback=progress_callback,
+            worker_factory=lambda cancel_event, progress_callback: (
+                self._mosaic_pipeline.build_proxy_mapping(
+                    rows=list(rows),
+                    existing_moment_proxy_data=self.moment_proxy_data,
+                    existing_moment_timestamps=self.moment_timestamps,
+                    video_sequences_by_name=self.video_sequences_by_name,
+                    roi_loader=self._roi_loader,
+                    cancel_event=cancel_event,
+                    progress_callback=progress_callback,
+                )
             ),
         )
         proxy_data, timestamps = cast(
@@ -456,17 +458,18 @@ class ImageMosaic(QtCore.QObject):
             cancelled_message="ROI creation cancelled",
             missing_result_message="ROI spec preparation returned no result",
             cancel_event=cancel_event,
-            worker_factory=lambda cancel_event,
-            progress_callback: self._roi_loader.create_widget_specs(
-                annosaurus_client=self._annosaurus_client,
-                association_groups=self.association_groups,
-                moment_video_data=self.moment_video_data,
-                moment_proxy_data=self.moment_proxy_data,
-                moment_timestamps=self.moment_timestamps,
-                image_reference_urls=self.image_reference_urls,
-                moment_ancillary_data=self.moment_ancillary_data,
-                progress_callback=progress_callback,
-                should_cancel=cancel_event.is_set,
+            worker_factory=lambda cancel_event, progress_callback: (
+                self._roi_loader.create_widget_specs(
+                    annosaurus_client=self._annosaurus_client,
+                    association_groups=self.association_groups,
+                    moment_video_data=self.moment_video_data,
+                    moment_proxy_data=self.moment_proxy_data,
+                    moment_timestamps=self.moment_timestamps,
+                    image_reference_urls=self.image_reference_urls,
+                    moment_ancillary_data=self.moment_ancillary_data,
+                    progress_callback=progress_callback,
+                    should_cancel=cancel_event.is_set,
+                )
             ),
         )
         load_result = cast(RoiLoadResult, load_result)

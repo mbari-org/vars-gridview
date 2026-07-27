@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 import numpy as np
@@ -132,7 +133,8 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
                     continue
                 uuids.append(rect_widget.association_uuid)
                 roi_images.append(roi[:, :, ::-1])
-            except Exception:
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.debug(f"Skipping ROI for embedding, failed to read: {exc}")
                 continue
 
         if not roi_images:

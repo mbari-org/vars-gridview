@@ -6,10 +6,10 @@ import argparse
 import logging
 import sys
 import traceback
-from typing import Optional, Sequence
+from collections.abc import Sequence
 
 import pyqtgraph as pg
-from PyQt6 import QtWidgets, QtGui, QtCore
+from PyQt6 import QtCore, QtGui, QtWidgets
 
 from vars_gridview.lib.config.constants import (
     APP_NAME,
@@ -26,7 +26,7 @@ from vars_gridview.lib.runtime.log import LOGGER, AppLogger
 
 
 def parse_args(
-    argv: Optional[Sequence[str]] = None,
+    argv: Sequence[str] | None = None,
 ) -> tuple[argparse.Namespace, list[str]]:
     """
     Parse command line arguments.
@@ -53,7 +53,7 @@ def parse_args(
     return args, qt_args
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """
     Main entrypoint.
     """
@@ -100,7 +100,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         main = MainWindow(app, settings=get_settings())
         main.show()
         splash.finish(main)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         LOGGER.critical(f"Could not create main window: {e}")
         LOGGER.debug(traceback.format_exc())  # Log the full traceback
         return 1
@@ -108,7 +108,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     # Exit after app is finished
     try:
         status = app.exec()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         LOGGER.critical(f"Fatal exception: {e}")
         LOGGER.debug(traceback.format_exc())  # Log the full traceback
         status = 1

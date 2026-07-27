@@ -1,5 +1,5 @@
-from uuid import UUID
 from datetime import datetime, timezone
+from uuid import UUID
 
 from vars_gridview.services.localization_store import LocalizationStore
 from vars_gridview.ui.mosaic.image_mosaic import Row

@@ -1,5 +1,6 @@
 import unittest
 from unittest.mock import Mock
+
 from vars_gridview.lib.sorting.sort_methods import AspectRatioSort
 
 

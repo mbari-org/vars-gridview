@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import wraps
-from typing import Any, Optional, TypeVar
+from typing import Any, TypeVar
 
 import requests
 import requests.auth
@@ -104,9 +104,9 @@ class M3Client:
         api_key: If provided, :meth:`authenticate` is called immediately.
     """
 
-    def __init__(self, base_url: str, api_key: Optional[str] = None) -> None:
+    def __init__(self, base_url: str, api_key: str | None = None) -> None:
         self._session = requests.Session()
-        self._api_key: Optional[str] = api_key
+        self._api_key: str | None = api_key
         self.base_url = base_url  # uses the setter to strip trailing slash
         if api_key is not None:
             self.authenticate(api_key)
@@ -123,7 +123,7 @@ class M3Client:
         self._base_url = value.rstrip("/")
 
     @property
-    def api_key(self) -> Optional[str]:
+    def api_key(self) -> str | None:
         """API key supplied at construction (may be ``None``)."""
         return self._api_key
 
@@ -164,7 +164,7 @@ class M3Client:
     # ── Authentication ──────────────────────────────────────────────────────────
 
     def authenticate(
-        self, api_key: Optional[str] = None, auth_path: str = "/auth"
+        self, api_key: str | None = None, auth_path: str = "/auth"
     ) -> None:
         """Exchange an API key for a JWT and attach it to the session.
 
@@ -320,7 +320,7 @@ class SkimmerClient(M3Client):
         top: int,
         right: int,
         bottom: int,
-        ms: Optional[int] = None,
+        ms: int | None = None,
     ) -> requests.Response:
         """Request a cropped sub-image from a frame URL.
 
@@ -348,14 +348,14 @@ class SkimmerClient(M3Client):
 
 
 __all__ = [
+    "AnnosaurusClient",
     "JWTAuth",
+    "M3Client",
     "NotAuthenticated",
+    "SkimmerClient",
+    "VARSKBServerClient",
+    "VARSUserServerClient",
+    "VampireSquidClient",
     "needs_auth",
     "reauth",
-    "M3Client",
-    "AnnosaurusClient",
-    "VampireSquidClient",
-    "VARSUserServerClient",
-    "VARSKBServerClient",
-    "SkimmerClient",
 ]

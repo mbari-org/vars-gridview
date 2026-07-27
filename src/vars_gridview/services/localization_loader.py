@@ -13,10 +13,10 @@ import logging
 from uuid import UUID
 
 from vars_gridview.lib.annotation.association import BoundingBoxAssociation
-from vars_gridview.lib.m3.clients import AnnosaurusClient
-from vars_gridview.lib.m3.query import QueryRequest
 from vars_gridview.lib.annotation.observation import Observation
 from vars_gridview.lib.common.tsv import parse_tsv
+from vars_gridview.lib.m3.clients import AnnosaurusClient
+from vars_gridview.lib.m3.query import QueryRequest
 
 _log = logging.getLogger(__name__)
 
@@ -200,4 +200,4 @@ class LocalizationLoader:
         group.associations.append(assoc)
 
 
-__all__ = ["LocalizationGroup", "LocalizationLoader", "QUERY_COLUMNS"]
+__all__ = ["QUERY_COLUMNS", "LocalizationGroup", "LocalizationLoader"]

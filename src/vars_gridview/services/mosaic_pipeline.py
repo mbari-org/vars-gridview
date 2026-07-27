@@ -5,8 +5,8 @@ This module contains non-Qt worker payload builders used by ImageMosaic.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from threading import Event
-from typing import Callable
 from uuid import UUID
 
 from vars_gridview.lib.runtime.log import LOGGER

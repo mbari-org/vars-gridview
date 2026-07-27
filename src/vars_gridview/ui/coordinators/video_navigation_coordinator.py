@@ -20,6 +20,7 @@ from vars_gridview.lib.vision.image_utils import color_for_concept
 
 if TYPE_CHECKING:
     from sharktopoda_client.client import SharktopodaClient
+
     from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
@@ -123,9 +124,9 @@ class VideoNavigationCoordinator:
                 continue
 
         if not vlc_opened:
-            url = video_url + "#t={},{}".format(
-                elapsed_time_seconds - self.BROWSER_SEEK_EPSILON_SECONDS,
-                elapsed_time_seconds,
+            url = (
+                video_url
+                + f"#t={elapsed_time_seconds - self.BROWSER_SEEK_EPSILON_SECONDS},{elapsed_time_seconds}"
             )
             webbrowser.open(url)
             LOGGER.info(f"Opened video in web browser: {url}")
@@ -163,10 +164,10 @@ class VideoNavigationCoordinator:
                 uuid=uuid4(),
                 concept=rect_q.association.concept,
                 elapsed_time_millis=int(rect_q.elapsed_time_millis or 0),
-                x=int(round(rect_q.scale_x * rect_q.association.x)),
-                y=int(round(rect_q.scale_y * rect_q.association.y)),
-                width=int(round(rect_q.scale_x * rect_q.association.width)),
-                height=int(round(rect_q.scale_y * rect_q.association.height)),
+                x=round(rect_q.scale_x * rect_q.association.x),
+                y=round(rect_q.scale_y * rect_q.association.y),
+                width=round(rect_q.scale_x * rect_q.association.width),
+                height=round(rect_q.scale_y * rect_q.association.height),
                 duration_millis=self.SHARKTOPODA_LOCALIZATION_DURATION_MILLIS,
                 color=color_for_concept(rect_q.association.concept).name(),
             )
@@ -220,5 +221,5 @@ class VideoNavigationCoordinator:
         if sys.platform == "darwin":
             try:
                 os.system(f"open -a {SHARKTOPODA_APP_NAME}")
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 LOGGER.warning(f"Could not open Sharktopoda: {e}")

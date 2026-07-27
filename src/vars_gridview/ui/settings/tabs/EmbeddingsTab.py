@@ -2,8 +2,8 @@ from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.config.constants import get_settings
 from vars_gridview.lib.config.settings import AppSettings
-from vars_gridview.lib.vision.embedding import HttpEmbedding
 from vars_gridview.lib.runtime.runnables import Worker
+from vars_gridview.lib.vision.embedding import HttpEmbedding
 from vars_gridview.ui.settings.tabs.AbstractSettingsTab import AbstractSettingsTab
 
 

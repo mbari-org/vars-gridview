@@ -15,7 +15,7 @@ class _Rect:
         self.text_label = label
         self._distances = distances or {}
 
-    def embedding_distance(self, other: "_Rect") -> float:
+    def embedding_distance(self, other: _Rect) -> float:
         if other.name not in self._distances:
             raise RuntimeError("distance unavailable")
         return self._distances[other.name]

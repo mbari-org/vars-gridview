@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from PyQt6 import QtCore
 from typing import Any, cast
+
+from PyQt6 import QtCore
 
 from vars_gridview.controllers.selection_model import SelectionModel
 from vars_gridview.ui.coordinators.mosaic_selection_coordinator import (
@@ -142,7 +143,7 @@ def _make_coordinator(
 
 def test_anchor_set_on_select() -> None:
     widgets = [_FakeWidget("a"), _FakeWidget("b"), _FakeWidget("c")]
-    model, _, coordinator = _make_coordinator(widgets)
+    _, _, coordinator = _make_coordinator(widgets)
 
     coordinator.select(widgets[0], clear=True)
     assert coordinator.anchor is widgets[0]
@@ -153,7 +154,7 @@ def test_anchor_set_on_select() -> None:
 
 def test_anchor_set_on_deselect() -> None:
     widgets = [_FakeWidget("a"), _FakeWidget("b")]
-    model, _, coordinator = _make_coordinator(widgets)
+    _, _, coordinator = _make_coordinator(widgets)
 
     coordinator.select(widgets[0], clear=True)
     coordinator.select(widgets[1], clear=False)
@@ -163,7 +164,7 @@ def test_anchor_set_on_deselect() -> None:
 
 def test_anchor_preserved_by_select_range() -> None:
     widgets = [_FakeWidget(x) for x in "abcde"]
-    model, _, coordinator = _make_coordinator(widgets)
+    _, _, coordinator = _make_coordinator(widgets)
 
     coordinator.select(widgets[0], clear=True)
     coordinator.select_range(widgets[0], widgets[2])
@@ -257,7 +258,7 @@ def test_shift_arrow_shrinks_when_past_anchor() -> None:
 def test_plain_arrow_after_shift_navigates_from_nav_cursor() -> None:
     """Plain arrow after a Shift+Arrow session navigates from the live end."""
     widgets = [_FakeWidget(x) for x in "abcd"]
-    model, view, coordinator = _make_coordinator(widgets)
+    model, _, coordinator = _make_coordinator(widgets)
 
     coordinator.select(widgets[0], clear=True)
     # Shift+Right twice: nav cursor moves to widgets[2], anchor stays at widgets[0].

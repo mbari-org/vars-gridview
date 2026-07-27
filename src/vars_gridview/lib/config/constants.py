@@ -9,7 +9,8 @@ without a running ``QApplication``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
 from platformdirs import user_log_dir
 
 from vars_gridview import __version__
@@ -35,7 +36,7 @@ UI_FILE: Path = ASSETS_DIR / "gridview.ui"
 LOG_DIR: Path = Path(user_log_dir(APP_NAME, APP_ORGANIZATION))
 
 # ── Lazily-initialised global settings singleton ───────────────────────────────
-_SETTINGS: Optional[AppSettings] = None  # type: ignore[name-defined]
+_SETTINGS: AppSettings | None = None  # type: ignore[name-defined]
 
 SHARKTOPODA_APP_NAME: str = "Sharktopoda"
 
@@ -74,11 +75,11 @@ __all__ = [
     "APP_VERSION",
     "ASSETS_DIR",
     "ICONS_DIR",
-    "STYLE_DIR",
-    "UI_FILE",
     "LOG_DIR",
     "ROOT_DIR",
-    "SHARKTOPODA_APP_NAME",
     "SETTINGS",
+    "SHARKTOPODA_APP_NAME",
+    "STYLE_DIR",
+    "UI_FILE",
     "get_settings",
 ]

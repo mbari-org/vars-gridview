@@ -13,17 +13,18 @@ Thread-affinity note:
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from iso8601 import parse_date
 
-from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.common.time import get_timestamp
 from vars_gridview.lib.m3.clients import AnnosaurusClient, VampireSquidClient
+from vars_gridview.lib.runtime.log import LOGGER
 
 if TYPE_CHECKING:
     from vars_gridview.lib.annotation.association import BoundingBoxAssociation
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
 class RoiLoadResult:
     """Result bundle returned by `RoiLoader.create_widget_specs`."""
 
-    widget_specs: list["RoiWidgetSpec"]
+    widget_specs: list[RoiWidgetSpec]
     n_images: int
     n_localizations: int
     failed_association_uuids: list[UUID]
@@ -43,7 +44,7 @@ class RoiLoadResult:
 class RoiWidgetSpec:
     """Plain data required to construct one mosaic `RectWidget`."""
 
-    associations: list["BoundingBoxAssociation"]
+    associations: list[BoundingBoxAssociation]
     source_url: str
     is_image: bool
     ancillary_data: dict
@@ -68,11 +69,11 @@ class RoiLoader:
         should_cancel: Callable[[], bool] | None = None,
     ) -> None:
         """Fetch and cache video-sequence records needed by current moments."""
-        video_sequence_names = set(
+        video_sequence_names = {
             video_data["video_sequence_name"]
             for video_data in moment_video_data.values()
             if video_data.get("video_sequence_name", None) is not None
-        )
+        }
         video_sequence_names -= set(video_sequences_by_name.keys())
 
         total = len(video_sequence_names)
@@ -87,8 +88,7 @@ class RoiLoader:
                 for name in video_sequence_names
             }
 
-            done = 0
-            for vs_future in as_completed(vs_futures):
+            for done, vs_future in enumerate(as_completed(vs_futures), start=1):
                 if should_cancel is not None and should_cancel():
                     for future in vs_futures:
                         future.cancel()
@@ -111,7 +111,6 @@ class RoiLoader:
                         video_sequence_data
                     )
 
-                done += 1
                 if progress_callback is not None:
                     progress_callback(done, total)
 
@@ -134,17 +133,17 @@ class RoiLoader:
             if should_cancel is not None and should_cancel():
                 raise RuntimeError("Proxy mapping cancelled")
 
-            imaged_moment_uuid = getattr(row, "imaged_moment_uuid")
+            imaged_moment_uuid = row.imaged_moment_uuid
             if imaged_moment_uuid in moment_proxy_data:
                 if progress_callback is not None and (idx == total or idx % 250 == 0):
                     progress_callback(idx, total)
                 continue
 
             moment_timestamp = get_timestamp(
-                getattr(row, "video_start_timestamp"),
-                getattr(row, "index_recorded_timestamp"),
-                getattr(row, "index_elapsed_time_millis"),
-                getattr(row, "index_timecode"),
+                row.video_start_timestamp,
+                row.index_recorded_timestamp,
+                row.index_elapsed_time_millis,
+                row.index_timecode,
             )
             moment_timestamps[imaged_moment_uuid] = moment_timestamp
 
@@ -152,7 +151,7 @@ class RoiLoader:
                 continue
 
             mp4_video_data = self.find_mp4_video_data(
-                video_sequence_name=getattr(row, "video_sequence_name"),
+                video_sequence_name=row.video_sequence_name,
                 timestamp=moment_timestamp,
                 video_sequences_by_name=video_sequences_by_name,
             )
@@ -460,4 +459,4 @@ class RoiLoader:
         }
 
 
-__all__ = ["RoiLoader", "RoiLoadResult", "RoiWidgetSpec"]
+__all__ = ["RoiLoadResult", "RoiLoader", "RoiWidgetSpec"]

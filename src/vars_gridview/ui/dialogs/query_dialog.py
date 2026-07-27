@@ -1,13 +1,18 @@
-from typing import Any, Callable, Iterable, List, Optional, Tuple
+from collections.abc import Callable, Iterable
+from typing import Any
 from uuid import UUID
 
-from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, pyqtSlot, QTimer
+from PyQt6.QtCore import QAbstractListModel, QModelIndex, QObject, Qt, QTimer, pyqtSlot
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import (
-    QApplication,
     QAbstractItemView,
+    QApplication,
+    QCheckBox,
+    QCompleter,
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFormLayout,
     QHBoxLayout,
     QInputDialog,
     QLineEdit,
@@ -15,15 +20,11 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QMessageBox,
     QPushButton,
+    QSpinBox,
     QStyle,
     QVBoxLayout,
     QWidget,
-    QSpinBox,
-    QFormLayout,
-    QCompleter,
-    QCheckBox,
 )
-from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 
 from vars_gridview.lib.m3.query import QueryConstraint
 
@@ -60,11 +61,11 @@ class BaseFilter:
     Base class for a filter that can be applied to a query. When called, it should return a Result object or None.
     """
 
-    def __init__(self, parent: Optional[QWidget], name: str):
+    def __init__(self, parent: QWidget | None, name: str):
         self.parent = parent
         self.name = name
 
-    def __call__(self) -> Optional[BaseResult]:
+    def __call__(self) -> BaseResult | None:
         """
         When called, this method should display a dialog or interface to the user to gather input for the filter.
 
@@ -103,7 +104,7 @@ class InConstraintResult(BaseResult):
     A constraint result that creates an IN constraint for a given key and a list of values.
     """
 
-    def __init__(self, label: str, values: List[Any], key: str):
+    def __init__(self, label: str, values: list[Any], key: str):
         self.label = label
         self.values = values
         self.key = key
@@ -223,7 +224,7 @@ class ConceptDescInConstraintResult(InConstraintResult):
     A constraint result that creates an IN constraint for a concept and its descendants.
     """
 
-    def __init__(self, concept: str, descendants: List[str]):
+    def __init__(self, concept: str, descendants: list[str]):
         super().__init__("Concept (+ descendants)", [concept] + descendants, "concept")
         self._concept = concept
         self._descendants = descendants
@@ -243,7 +244,7 @@ class DepthRangeConstraintResult(BaseResult):
     A constraint result that creates min/max constraints for depth range.
     """
 
-    def __init__(self, min_depth: Optional[float], max_depth: Optional[float]):
+    def __init__(self, min_depth: float | None, max_depth: float | None):
         self.min_depth = min_depth
         self.max_depth = max_depth
 
@@ -290,7 +291,7 @@ class FunctionalFilter(BaseFilter):
         super().__init__(parent, name)
         self.func = func
 
-    def __call__(self) -> Optional[BaseResult]:
+    def __call__(self) -> BaseResult | None:
         return self.func()
 
 
@@ -299,12 +300,12 @@ class SimpleTextFilter(BaseFilter):
     A simple text input filter that creates an equality constraint.
     """
 
-    def __init__(self, parent, name: str, key: str, prompt: Optional[str] = None):
+    def __init__(self, parent, name: str, key: str, prompt: str | None = None):
         super().__init__(parent, name)
         self.key = key
         self.prompt = prompt or name
 
-    def __call__(self) -> Optional[EqualityConstraintResult]:
+    def __call__(self) -> EqualityConstraintResult | None:
         text, ok = QInputDialog.getText(
             self.parent, self.name, self.prompt, QLineEdit.EchoMode.Normal, ""
         )
@@ -325,7 +326,7 @@ class ItemSelectFilter(BaseFilter):
         self.key = key
         self.editable = editable
 
-    def __call__(self) -> Optional[EqualityConstraintResult]:
+    def __call__(self) -> EqualityConstraintResult | None:
         items = self.items_getter()
         value, ok = QInputDialog.getItem(
             self.parent, self.name, self.name, items, 0, self.editable
@@ -339,12 +340,12 @@ class UUIDListFilter(BaseFilter):
     A filter that allows the user to input multiple UUIDs at once.
     """
 
-    def __init__(self, parent, name: str, key: str, title: Optional[str] = None):
+    def __init__(self, parent, name: str, key: str, title: str | None = None):
         super().__init__(parent, name)
         self.key = key
         self.title = title or name + "s"
 
-    def __call__(self) -> Optional[UUIDInConstraintResult]:
+    def __call__(self) -> UUIDInConstraintResult | None:
         uuids, ok = BulkUUIDInputDialog.get_uuids(self.title, self.parent)
         if ok:
             if not uuids:
@@ -361,7 +362,7 @@ class BulkConceptFilter(BaseFilter):
         super().__init__(parent, name)
         self._concepts_getter = concepts_getter
 
-    def __call__(self) -> Optional[ConceptInConstraintResult]:
+    def __call__(self) -> ConceptInConstraintResult | None:
         concepts, ok = BulkConceptInputDialog.get_concepts(
             "Select Concepts", self.parent, concepts_getter=self._concepts_getter
         )
@@ -385,7 +386,7 @@ class ConceptDescFilter(BaseFilter):
         self._concepts_getter = concepts_getter
         self._descendants_getter = descendants_getter
 
-    def __call__(self) -> Optional[ConceptDescInConstraintResult]:
+    def __call__(self) -> ConceptDescInConstraintResult | None:
         concept, ok = QInputDialog.getItem(
             self.parent,
             "Concept",
@@ -410,7 +411,7 @@ class GeneratorFilter(SimpleTextFilter):
     A filter that allows the user to input a generator string to filter by.
     """
 
-    def __call__(self) -> Optional[GeneratorConstraintResult]:
+    def __call__(self) -> GeneratorConstraintResult | None:
         result = super().__call__()
         return GeneratorConstraintResult(result.value) if result else None
 
@@ -420,7 +421,7 @@ class VerifierFilter(SimpleTextFilter):
     A filter that allows the user to input a verifier string to filter by.
     """
 
-    def __call__(self) -> Optional[VerifierConstraintResult]:
+    def __call__(self) -> VerifierConstraintResult | None:
         result = super().__call__()
         return VerifierConstraintResult(result.value) if result else None
 
@@ -430,7 +431,7 @@ class DepthRangeFilter(BaseFilter):
     A filter that allows the user to specify a depth range constraint.
     """
 
-    def __call__(self) -> Optional[DepthRangeConstraintResult]:
+    def __call__(self) -> DepthRangeConstraintResult | None:
         # Create a custom dialog for depth range input
         dialog = QDialog(self.parent)
         dialog.setWindowTitle("Depth Range")
@@ -518,7 +519,7 @@ class BulkInputDialog(QDialog):
     """
 
     def __init__(
-        self, parent: Optional[QWidget] = None, placeholder_text: str = ""
+        self, parent: QWidget | None = None, placeholder_text: str = ""
     ) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -567,7 +568,7 @@ class BulkInputDialog(QDialog):
         for item in selected_items:
             self._list.takeItem(self._list.row(item))
 
-    def items(self) -> List[str]:
+    def items(self) -> list[str]:
         """Return all currently entered items from the list widget."""
         return [self._list.item(i).text() for i in range(self._list.count())]
 
@@ -575,9 +576,9 @@ class BulkInputDialog(QDialog):
     def get_items(
         cls,
         title: str = "Enter items",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
         placeholder_text: str = "",
-    ) -> Tuple[List[str], bool]:
+    ) -> tuple[list[str], bool]:
         dialog = cls(parent, placeholder_text)
         dialog.setWindowTitle(title)
         dialog.resize(450, 300)
@@ -595,7 +596,7 @@ class BulkUUIDInputDialog(BulkInputDialog):
     The parsed UUIDs should be rendered in a QListWidget.
     """
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(
             parent,
             placeholder_text="Enter UUIDs separated by commas, spaces, or newlines",
@@ -605,8 +606,8 @@ class BulkUUIDInputDialog(BulkInputDialog):
 
     @classmethod
     def get_uuids(
-        cls, title: str = "Enter UUIDs", parent: Optional[QWidget] = None
-    ) -> Tuple[List[str], bool]:
+        cls, title: str = "Enter UUIDs", parent: QWidget | None = None
+    ) -> tuple[list[str], bool]:
         dialog = cls(parent)
         dialog.setWindowTitle(title)
         dialog.resize(450, 300)
@@ -634,7 +635,7 @@ class BulkConceptInputDialog(BulkInputDialog):
 
     def __init__(
         self,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
         concepts_getter: Callable[[], list[str]] | None = None,
     ) -> None:
         super().__init__(
@@ -644,7 +645,7 @@ class BulkConceptInputDialog(BulkInputDialog):
         # Cache concepts list
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            getter = concepts_getter or (lambda: [])
+            getter = concepts_getter or (list)
             self._concepts = getter()
         finally:
             QApplication.restoreOverrideCursor()
@@ -720,9 +721,12 @@ class BulkConceptInputDialog(BulkInputDialog):
         concept, ok = QInputDialog.getItem(
             self, "Select Concept", "Concept", self._concepts, 0, True
         )
-        if ok and concept:
-            if not self._list.findItems(concept, Qt.MatchFlag.MatchExactly):
-                self._list.addItem(concept)
+        if (
+            ok
+            and concept
+            and not self._list.findItems(concept, Qt.MatchFlag.MatchExactly)
+        ):
+            self._list.addItem(concept)
 
     def add_items(self):
         # This is intentionally empty to prevent splitting by spaces
@@ -733,9 +737,9 @@ class BulkConceptInputDialog(BulkInputDialog):
     def get_concepts(
         cls,
         title: str = "Enter Concepts",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
         concepts_getter: Callable[[], list[str]] | None = None,
-    ) -> Tuple[List[str], bool]:
+    ) -> tuple[list[str], bool]:
         dialog = cls(parent, concepts_getter=concepts_getter)
         dialog.setWindowTitle(title)
         dialog.resize(450, 300)
@@ -750,7 +754,7 @@ class ResultListModel(QAbstractListModel):
     """
 
     def __init__(
-        self, parent: Optional[QObject] = None, results: List[BaseResult] = None
+        self, parent: QObject | None = None, results: list[BaseResult] | None = None
     ):
         super().__init__(parent=parent)
 
@@ -783,7 +787,7 @@ class ResultListModel(QAbstractListModel):
         del self.results[index]
         self.endRemoveRows()
 
-    def remove_results(self, indices: List[int]):
+    def remove_results(self, indices: list[int]):
         indices.sort(reverse=True)
         for index in indices:
             self.remove_result(index)
@@ -802,7 +806,7 @@ class QueryDialog(QDialog):
     def __init__(
         self,
         parent,
-        filters: Optional[List[BaseFilter]] = None,
+        filters: list[BaseFilter] | None = None,
         *,
         kb_concepts_getter: Callable[[], list[str]] | None = None,
         kb_descendants_getter: Callable[[str], list[str]] | None = None,
@@ -811,10 +815,10 @@ class QueryDialog(QDialog):
     ):
         super().__init__(parent=parent)
 
-        self._kb_concepts_getter = kb_concepts_getter or (lambda: [])
+        self._kb_concepts_getter = kb_concepts_getter or (list)
         self._kb_descendants_getter = kb_descendants_getter or (lambda _concept: [])
-        self._users_getter = users_getter or (lambda: [])
-        self._video_sequence_names_getter = video_sequence_names_getter or (lambda: [])
+        self._users_getter = users_getter or (list)
+        self._video_sequence_names_getter = video_sequence_names_getter or (list)
 
         self.setWindowTitle("Query")
         self.setLayout(QVBoxLayout())
@@ -876,7 +880,7 @@ class QueryDialog(QDialog):
         self.remove_constraint_button.pressed.connect(self.remove_selected_filters)
         self.clear_filters_button.pressed.connect(self.clear)
 
-    def _create_default_filters(self) -> List[BaseFilter]:
+    def _create_default_filters(self) -> list[BaseFilter]:
         """
         Create the default set of filters available in the dialog.
 
@@ -1001,7 +1005,7 @@ class QueryDialog(QDialog):
         return self.offset_edit.value()
 
     @property
-    def constraints(self) -> List[QueryConstraint]:
+    def constraints(self) -> list[QueryConstraint]:
         """
         The list of QueryConstraint objects representing the constraints set in the dialog.
         """
