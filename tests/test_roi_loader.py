@@ -151,3 +151,59 @@ def test_create_widget_specs_builds_expected_counts() -> None:
         assert spec.video_url == "https://example/original.mp4"
         assert spec.association_index == 1
         assert len(spec.associations) == 2
+
+
+def test_create_widget_specs_for_image_ignores_missing_proxy_video_dimensions() -> None:
+    """An image-derived ROI should not be skipped just because the proxy
+    video used for scaling lacks width/height metadata — the image itself
+    doesn't need proxy scaling.
+    """
+    loader = RoiLoader()
+    annosaurus_client = _FakeAnnosaurusClient()
+
+    moment_uuid = UUID("77777777-7777-7777-7777-777777777777")
+    image_reference_uuid = UUID("88888888-8888-8888-8888-888888888888")
+    assoc_a = SimpleNamespace(
+        uuid=UUID("99999999-9999-9999-9999-999999999999"),
+        text_label="A",
+    )
+
+    now = datetime.now(timezone.utc)
+    association_groups = {(moment_uuid, image_reference_uuid): [assoc_a]}
+    moment_video_data = {
+        moment_uuid: {
+            # No http video_uri -> proxy path is used, and no video
+            # dimensions are known for this imaged moment.
+            "video_uri": None,
+        }
+    }
+    moment_proxy_data = {
+        moment_uuid: {
+            "video": {"start_timestamp": (now - timedelta(seconds=5)).isoformat()},
+            "video_reference": {
+                "uri": "https://example/proxy.mp4",
+                # width/height intentionally omitted
+            },
+        }
+    }
+    moment_timestamps = {moment_uuid: now}
+    image_reference_urls = {image_reference_uuid: "https://example/image.jpg"}
+    moment_ancillary_data = {moment_uuid: {}}
+
+    result = loader.create_widget_specs(
+        annosaurus_client=annosaurus_client,
+        association_groups=association_groups,
+        moment_video_data=moment_video_data,
+        moment_proxy_data=moment_proxy_data,
+        moment_timestamps=moment_timestamps,
+        image_reference_urls=image_reference_urls,
+        moment_ancillary_data=moment_ancillary_data,
+    )
+
+    assert result.n_images == 1
+    assert len(result.widget_specs) == 1
+    spec = result.widget_specs[0]
+    assert spec.source_url == "https://example/image.jpg"
+    assert spec.is_image is True
+    assert spec.scale_x == 1.0
+    assert spec.scale_y == 1.0

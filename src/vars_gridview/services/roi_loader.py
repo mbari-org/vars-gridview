@@ -305,6 +305,7 @@ class RoiLoader:
     ) -> dict | None:
         """Compute source/proxy details for one association group."""
         imaged_moment_uuid, image_reference_uuid = group_key
+        is_image = image_reference_uuid is not None
 
         scale_x = 1.0
         scale_y = 1.0
@@ -326,55 +327,99 @@ class RoiLoader:
             or not original_video_reference_uri.startswith("http")
         )
 
+        # Video URL/elapsed-time/scale are only required to locate and scale a
+        # video frame. For image-derived ROIs the image itself is the source,
+        # so these are purely supplementary (e.g. "jump to video") and their
+        # absence should not prevent the image from being shown.
         if use_proxy:
             proxy_video_data = moment_proxy_data.get(imaged_moment_uuid, None)
             if proxy_video_data is None:
-                LOGGER.error(
-                    f"Imaged moment {imaged_moment_uuid} has no proxy video reference, skipping"
-                )
-                return None
+                if is_image:
+                    LOGGER.warning(
+                        f"Imaged moment {imaged_moment_uuid} has no proxy video reference"
+                    )
+                else:
+                    LOGGER.error(
+                        f"Imaged moment {imaged_moment_uuid} has no proxy video reference, skipping"
+                    )
+                    return None
+            else:
+                source_width = video_data.get("video_width", None)
+                source_height = video_data.get("video_height", None)
+                proxy_video_reference = proxy_video_data.get("video_reference", {})
+                proxy_width = proxy_video_reference.get("width", None)
+                proxy_height = proxy_video_reference.get("height", None)
+                if (
+                    proxy_width is None
+                    or proxy_height is None
+                    or source_width is None
+                    or source_height is None
+                ):
+                    if is_image:
+                        LOGGER.warning(
+                            f"Imaged moment {imaged_moment_uuid} is missing video dimensions needed for proxy scaling"
+                        )
+                    else:
+                        LOGGER.error(
+                            f"Imaged moment {imaged_moment_uuid} is missing video dimensions needed for proxy scaling, skipping"
+                        )
+                        return None
+                else:
+                    scale_x = source_width / proxy_width
+                    scale_y = source_height / proxy_height
 
-            source_width = video_data.get("video_width", None)
-            source_height = video_data.get("video_height", None)
-            proxy_video_reference = proxy_video_data.get("video_reference", {})
-            proxy_width = proxy_video_reference.get("width", None)
-            proxy_height = proxy_video_reference.get("height", None)
-            if (
-                proxy_width is None
-                or proxy_height is None
-                or source_width is None
-                or source_height is None
-            ):
-                LOGGER.error(
-                    f"Imaged moment {imaged_moment_uuid} is missing video dimensions needed for proxy scaling, skipping"
-                )
-                return None
-            scale_x = source_width / proxy_width
-            scale_y = source_height / proxy_height
-
-            proxy_video = proxy_video_data.get("video", {})
-            proxy_video_start_timestamp = proxy_video.get("start_timestamp", None)
-            if proxy_video_start_timestamp is None:
-                LOGGER.error(
-                    f"Imaged moment {imaged_moment_uuid} proxy video reference missing start timestamp, skipping"
-                )
-                return None
-            proxy_video_start_timestamp = parse_date(proxy_video_start_timestamp)
-
-            elapsed_time_millis = round(
-                (moment_timestamp - proxy_video_start_timestamp).total_seconds() * 1000
-            )
-            video_url = proxy_video_data["video_reference"]["uri"]
+                    proxy_video = proxy_video_data.get("video", {})
+                    proxy_video_start_timestamp = proxy_video.get(
+                        "start_timestamp", None
+                    )
+                    if proxy_video_start_timestamp is None:
+                        if is_image:
+                            LOGGER.warning(
+                                f"Imaged moment {imaged_moment_uuid} proxy video reference missing start timestamp"
+                            )
+                        else:
+                            LOGGER.error(
+                                f"Imaged moment {imaged_moment_uuid} proxy video reference missing start timestamp, skipping"
+                            )
+                            return None
+                    else:
+                        proxy_video_start_timestamp = parse_date(
+                            proxy_video_start_timestamp
+                        )
+                        elapsed_time_millis = round(
+                            (
+                                moment_timestamp - proxy_video_start_timestamp
+                            ).total_seconds()
+                            * 1000
+                        )
+                        video_url = proxy_video_data["video_reference"]["uri"]
         else:
-            original_video_start_timestamp = video_data["video_start_timestamp"]
-            elapsed_time_millis = round(
-                (moment_timestamp - original_video_start_timestamp).total_seconds()
-                * 1000
+            original_video_start_timestamp = video_data.get(
+                "video_start_timestamp", None
             )
-            video_url = original_video_reference_uri
+            if original_video_start_timestamp is None:
+                if is_image:
+                    LOGGER.warning(
+                        f"Imaged moment {imaged_moment_uuid} is missing video start timestamp"
+                    )
+                else:
+                    LOGGER.error(
+                        f"Imaged moment {imaged_moment_uuid} is missing video start timestamp, skipping"
+                    )
+                    return None
+            else:
+                elapsed_time_millis = round(
+                    (moment_timestamp - original_video_start_timestamp).total_seconds()
+                    * 1000
+                )
+                video_url = original_video_reference_uri
 
-        is_image = image_reference_uuid is not None
         if not is_image:
+            if video_url is None:
+                LOGGER.error(
+                    f"Imaged moment {imaged_moment_uuid} has no resolvable video source, skipping"
+                )
+                return None
             source_url = video_url
         else:
             url = image_reference_urls.get(image_reference_uuid, None)
