@@ -248,9 +248,16 @@ class ImageMosaic(QtCore.QObject):
             apply_sorted_indices=self._apply_sorted_indices,
             sort_unavailable_callback=self._on_similarity_unavailable,
         )
-        self._embedding = MosaicEmbeddingCoordinator(
-            parent=self,
-            dialog_parent=self._dialog_parent,
+        self._embedding = MosaicEmbeddingCoordinator(parent=self)
+        self._embedding_precompute_total = 0
+        self._embedding.precompute_started.connect(
+            self._on_embedding_precompute_started
+        )
+        self._embedding.precompute_progress.connect(
+            self._on_embedding_precompute_progress
+        )
+        self._embedding.precompute_finished.connect(
+            self._on_embedding_precompute_finished
         )
         self._tile_actions = MosaicTileActionCoordinator(
             parent=self,
@@ -560,6 +567,22 @@ class ImageMosaic(QtCore.QObject):
     @QtCore.pyqtSlot(int, int)
     def _on_roi_loading_progress(self, current: int, total: int) -> None:
         self.mosaic_stage_progress.emit("roi_images", current, total)
+
+    @QtCore.pyqtSlot(int)
+    def _on_embedding_precompute_started(self, total: int) -> None:
+        self._embedding_precompute_total = total
+        self._begin_build_stage("embeddings", maximum=total)
+
+    @QtCore.pyqtSlot(int, int)
+    def _on_embedding_precompute_progress(self, current: int, total: int) -> None:
+        self.mosaic_stage_progress.emit("embeddings", current, total)
+
+    @QtCore.pyqtSlot()
+    def _on_embedding_precompute_finished(self) -> None:
+        # Force the indicator closed even if progress stalled short of total
+        # (e.g. an error occurred mid-batch).
+        total = self._embedding_precompute_total
+        self.mosaic_stage_progress.emit("embeddings", total, total)
 
     def update_embedding_model(self, embedding_model: Embedding | None) -> None:
         """Replace the active embedding model and invalidate cached embeddings."""

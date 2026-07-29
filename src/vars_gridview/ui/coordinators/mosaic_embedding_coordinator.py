@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 import numpy as np
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore
 
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.runtime.runnables import Worker
@@ -18,19 +18,20 @@ if TYPE_CHECKING:
 
 
 class MosaicEmbeddingCoordinator(QtCore.QObject):
-    """Own embedding-precompute worker lifecycle and progress UI."""
+    """Own embedding-precompute worker lifecycle.
 
-    precompute_progress = QtCore.pyqtSignal(int, int)
+    Does not own any UI presentation itself; callers connect to
+    :attr:`precompute_started`, :attr:`precompute_progress`, and
+    :attr:`precompute_finished` to drive their own non-blocking progress
+    display.
+    """
 
-    def __init__(
-        self,
-        *,
-        parent: QtCore.QObject,
-        dialog_parent: QtWidgets.QWidget | None,
-    ) -> None:
+    precompute_started = QtCore.pyqtSignal(int)  # total
+    precompute_progress = QtCore.pyqtSignal(int, int)  # current, total
+    precompute_finished = QtCore.pyqtSignal()
+
+    def __init__(self, *, parent: QtCore.QObject) -> None:
         super().__init__(parent)
-        self._dialog_parent = dialog_parent
-        self._dialog: QtWidgets.QProgressDialog | None = None
 
         self._in_progress = False
         self._pending = False
@@ -44,8 +45,6 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
             ]
             | None
         ) = None
-
-        self.precompute_progress.connect(self._on_progress)
 
     def on_model_changed(self, *, model_changed: bool, has_model: bool) -> None:
         """Track whether an in-flight precompute should be restarted."""
@@ -83,20 +82,9 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
             self._pending = True
             return
 
-        self._dialog = QtWidgets.QProgressDialog(
-            "Precomputing embeddings...",
-            None,
-            0,
-            len(targets),
-            self._dialog_parent,
-        )
-        self._dialog.setWindowTitle("Embeddings")
-        self._dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
-        self._dialog.setMinimumDuration(0)
-        self._dialog.setValue(0)
-        self._dialog.show()
-
         self._in_progress = True
+        self.precompute_started.emit(len(targets))
+
         worker = Worker(
             self.compute_embeddings_payload,
             targets,
@@ -152,19 +140,10 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
         if "not available" in message.lower():
             on_unavailable(message)
 
-    @QtCore.pyqtSlot(int, int)
-    def _on_progress(self, current: int, total: int) -> None:
-        if self._dialog is None:
-            return
-        self._dialog.setMaximum(max(0, total))
-        self._dialog.setValue(max(0, min(current, total)))
-
     @QtCore.pyqtSlot()
     def _on_finished(self) -> None:
         self._in_progress = False
-        if self._dialog is not None:
-            self._dialog.close()
-            self._dialog = None
+        self.precompute_finished.emit()
 
         if not self._pending or self._latest_request is None:
             return

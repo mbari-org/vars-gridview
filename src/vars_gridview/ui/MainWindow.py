@@ -80,6 +80,7 @@ from vars_gridview.ui.style import (
     action_button_style,
     apply_app_theme,
 )
+from vars_gridview.ui.widgets.progress_status_widget import ProgressStatusWidget
 from vars_gridview.ui.widgets.status_info_widget import StatusInfoWidget
 
 if TYPE_CHECKING:
@@ -237,6 +238,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.image_mosaic.mosaic_stage_progress.connect(
             self._query_progress.on_stage_progress
         )
+        self.image_mosaic.mosaic_stage_started.connect(self._on_mosaic_stage_started)
+        self.image_mosaic.mosaic_stage_progress.connect(self._on_mosaic_stage_progress)
         self.image_mosaic.selection_model.selection_changed.connect(
             self._on_selection_changed
         )
@@ -246,6 +249,21 @@ class MainWindow(QtWidgets.QMainWindow):
             {"Status": "Ready", "Selected": "0"}, parent=self.ui.statusInfoContainer
         )
         self.ui.statusInfoLayout.addWidget(self.status_info_widget)
+
+        self.roi_loading_status_widget = ProgressStatusWidget(
+            "Loading ROI images", parent=self.ui.statusInfoContainer
+        )
+        self.ui.statusInfoLayout.addWidget(self.roi_loading_status_widget)
+
+        self.embedding_precompute_status_widget = ProgressStatusWidget(
+            "Precomputing embeddings", parent=self.ui.statusInfoContainer
+        )
+        self.ui.statusInfoLayout.addWidget(self.embedding_precompute_status_widget)
+
+        self._mosaic_stage_status_widgets: dict[str, ProgressStatusWidget] = {
+            "roi_images": self.roi_loading_status_widget,
+            "embeddings": self.embedding_precompute_status_widget,
+        }
 
         # Box handler (handles the ROIs and annotations)
         self.box_handler: BoxHandler | None = None
@@ -587,6 +605,20 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot(str)
     def _on_query_stage_started(self, key: str) -> None:
         self._query_progress.begin_stage(key)
+
+    @QtCore.pyqtSlot(str, int)
+    def _on_mosaic_stage_started(self, key: str, maximum: int) -> None:
+        for stage_key, widget in self._mosaic_stage_status_widgets.items():
+            if stage_key == key:
+                widget.start(maximum)
+            else:
+                widget.hide_immediately()
+
+    @QtCore.pyqtSlot(str, int, int)
+    def _on_mosaic_stage_progress(self, key: str, current: int, total: int) -> None:
+        widget = self._mosaic_stage_status_widgets.get(key)
+        if widget is not None:
+            widget.update_progress(current, total)
 
     @QtCore.pyqtSlot(str)
     def _on_query_failed(self, message: str) -> None:
