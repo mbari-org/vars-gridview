@@ -86,7 +86,11 @@ class MosaicRoiLoadingCoordinator(QtCore.QObject):
             rect_widget.assign_roi_batch_generation(generation)
             rect_widget.roiRefreshed.connect(self._on_rect_roi_refreshed)
             self._inflight += 1
-            rect_widget.request_roi_refresh()
+            # No debounce: the coordinator calls this exactly once per tile,
+            # so there's nothing to coalesce -- unlike interactive callers
+            # (e.g. dragging a box), which legitimately fire repeatedly and
+            # rely on the default debounce to coalesce them.
+            rect_widget.request_roi_refresh(debounce=False)
 
     @QtCore.pyqtSlot(object)
     def _on_rect_roi_refreshed(self, rect_widget: object) -> None:

@@ -28,7 +28,7 @@ class _FakeRectWidget:
     def assign_roi_batch_generation(self, generation) -> None:
         self.roi_batch_generation = generation
 
-    def request_roi_refresh(self) -> None:
+    def request_roi_refresh(self, *, debounce: bool = True) -> None:
         self.roiRefreshed.emit(self)
 
 
@@ -59,9 +59,9 @@ def test_cancel_mid_load_stops_pumping_and_skips_callback() -> None:
 
     original_request = widgets[0].request_roi_refresh
 
-    def cancelling_request() -> None:
+    def cancelling_request(*, debounce: bool = True) -> None:
         cancel_event.set()
-        original_request()
+        original_request(debounce=debounce)
 
     widgets[0].request_roi_refresh = cancelling_request
     on_complete_calls = []

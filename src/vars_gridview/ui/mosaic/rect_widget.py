@@ -311,9 +311,19 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.invalidate_embedding_cache()
         self.update()
 
-    def request_roi_refresh(self) -> None:
-        """Refresh ROI image asynchronously and apply only the latest result."""
-        self.request_roi_refresh_debounced()
+    def request_roi_refresh(self, *, debounce: bool = True) -> None:
+        """Refresh ROI image asynchronously and apply only the latest result.
+
+        Args:
+            debounce: If ``True`` (default), coalesce rapid repeated calls
+                (e.g. from interactive box editing) behind a short delay.
+                Bulk loaders that call this once per tile, with nothing to
+                coalesce against, should pass ``False`` to skip it.
+        """
+        if debounce:
+            self.request_roi_refresh_debounced()
+        else:
+            self._start_roi_refresh_worker()
 
     def request_roi_refresh_debounced(self, debounce_ms: int = 120) -> None:
         """Schedule an ROI refresh after a short debounce delay."""
