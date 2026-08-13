@@ -336,3 +336,100 @@ def test_fetch_roi_does_not_retry_non_503_beholder_errors(monkeypatch) -> None:
 
     assert result is None
     assert len(beholder.calls) == 1
+
+
+def test_fetch_full_image_retries_beholder_503_past_the_bulk_retry_budget(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr("vars_gridview.services.roi_service.time.sleep", lambda s: None)
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.np.frombuffer",
+        lambda *_args, **_kwargs: b"arr",
+    )
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.cv2.imdecode",
+        lambda *_args, **_kwargs: "decoded",
+    )
+
+    # More failures than fetch_roi's small retry budget would tolerate --
+    # the interactive full-image path should keep going regardless.
+    beholder = _FakeBeholder(
+        responses=[_httpx_status_error(503) for _ in range(5)] + [b"frame"]
+    )
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
+
+    result = service.fetch_full_image(
+        "https://example/video.mp4", elapsed_time_millis=123
+    )
+
+    assert result == "decoded"
+    assert len(beholder.calls) == 6
+
+
+def test_fetch_full_image_stops_retrying_once_cancelled(monkeypatch) -> None:
+    monkeypatch.setattr("vars_gridview.services.roi_service.time.sleep", lambda s: None)
+    beholder = _FakeBeholder(responses=[_httpx_status_error(503) for _ in range(10)])
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
+
+    calls_before_cancel = 2
+    seen = {"n": 0}
+
+    def should_cancel() -> bool:
+        seen["n"] += 1
+        return seen["n"] >= calls_before_cancel
+
+    result = service.fetch_full_image(
+        "https://example/video.mp4",
+        elapsed_time_millis=123,
+        should_cancel=should_cancel,
+    )
+
+    assert result is None
+    assert len(beholder.calls) == calls_before_cancel
+
+
+def test_fetch_full_image_gives_up_once_deadline_passes(monkeypatch) -> None:
+    monkeypatch.setattr("vars_gridview.services.roi_service.time.sleep", lambda s: None)
+    # First call establishes the deadline; second (the post-failure check)
+    # reports time already past it, so a single failure is not retried.
+    times = iter([0.0, 1000.0])
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.time.monotonic", lambda: next(times)
+    )
+    beholder = _FakeBeholder(responses=[_httpx_status_error(503) for _ in range(10)])
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
+
+    result = service.fetch_full_image(
+        "https://example/video.mp4", elapsed_time_millis=123
+    )
+
+    assert result is None
+    assert len(beholder.calls) == 1
+
+
+def test_fetch_full_image_retries_static_image_503(monkeypatch) -> None:
+    monkeypatch.setattr("vars_gridview.services.roi_service.time.sleep", lambda s: None)
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.np.frombuffer",
+        lambda *_args, **_kwargs: b"arr",
+    )
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.cv2.imdecode",
+        lambda *_args, **_kwargs: "decoded",
+    )
+
+    responses = [
+        _FakeResponse(status_code=503),
+        _FakeResponse(status_code=503),
+        _FakeResponse(b"img", status_code=200),
+    ]
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.requests.get",
+        lambda *_args, **_kwargs: responses.pop(0),
+    )
+
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=_FakeBeholder())
+    result = service.fetch_full_image("https://example/image.jpg")
+
+    assert result == "decoded"
+    assert responses == []

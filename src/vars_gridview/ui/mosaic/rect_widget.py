@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -130,8 +131,16 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.verify.connect(self._verify_slot)
         self.markForTraining.connect(self._mark_training_slot)
 
-    def get_image(self) -> np.ndarray | None:
-        """Return the full source image for this ROI, or ``None`` on error."""
+    def get_image(
+        self, should_cancel: Callable[[], bool] | None = None
+    ) -> np.ndarray | None:
+        """Return the full source image for this ROI, or ``None`` on error.
+
+        Args:
+            should_cancel: Passed through to
+                :meth:`RoiService.fetch_full_image` so a stale request can
+                stop retrying once it's no longer wanted.
+        """
         if self._roi_service is None:
             LOGGER.error("ROI service is not configured")
             return None
@@ -139,6 +148,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             image = self._roi_service.fetch_full_image(
                 self.source_url,
                 self.elapsed_time_millis if not self.is_image else None,
+                should_cancel=should_cancel,
             )
             if image is None:
                 return None

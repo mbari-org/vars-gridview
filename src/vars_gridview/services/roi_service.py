@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 
 import cv2
 import httpx
@@ -31,6 +32,17 @@ _log = logging.getLogger(__name__)
 _BUSY_MAX_RETRIES = 2
 _BUSY_DEFAULT_RETRY_SECONDS = 1.0
 _BUSY_MAX_RETRY_SECONDS = 5.0
+
+# Full-image fetches back a single interactive "click to view/edit" request
+# rather than one of many tiles competing for the same backend capacity, so
+# it's worth retrying much harder than the bulk path -- bounded only by an
+# overall deadline (a backend that's actually down, not just busy) and by the
+# caller telling us the request is stale (see fetch_full_image's should_cancel).
+_INTERACTIVE_MAX_WAIT_SECONDS = 120.0
+
+
+class _FetchCancelled(Exception):
+    """Raised internally when ``should_cancel`` reports the request is stale."""
 
 
 class RoiService:
@@ -152,28 +164,88 @@ class RoiService:
         self,
         image_url: str,
         elapsed_time_millis: int | None = None,
+        should_cancel: Callable[[], bool] | None = None,
     ) -> np.ndarray | None:
         """Fetch an entire frame image without cropping.
+
+        Unlike :meth:`fetch_roi`'s bulk tile path, this backs a single
+        interactive request with nothing else competing for the same backend
+        capacity, so a 503 (pool busy) is retried until *should_cancel* says
+        to give up (e.g. the user selected a different tile before this one
+        resolved) or ``_INTERACTIVE_MAX_WAIT_SECONDS`` elapses as a safety
+        net against a backend that's actually down rather than just busy.
 
         Args:
             image_url: URL of the source frame (or video reference URL).
             elapsed_time_millis: Optional frame offset for video references.
+            should_cancel: Optional callable checked between retries; once it
+                returns ``True`` the fetch is abandoned and ``None`` is
+                returned.
 
         Returns:
-            BGR uint8 NumPy array ``(H, W, 3)``, or ``None`` on error.
+            BGR uint8 NumPy array ``(H, W, 3)``, or ``None`` on error/cancellation.
         """
         try:
             if elapsed_time_millis is not None:
-                raw_bytes = self._beholder.capture_raw(image_url, elapsed_time_millis)
-                arr = np.frombuffer(raw_bytes, np.uint8)
+                raw_bytes = self._capture_raw_with_unbounded_retry(
+                    image_url, elapsed_time_millis, should_cancel
+                )
             else:
-                response = requests.get(image_url, timeout=30)
+                response = self._get_with_unbounded_retry(image_url, should_cancel)
                 response.raise_for_status()
-                arr = np.frombuffer(response.content, np.uint8)
+                raw_bytes = response.content
+            arr = np.frombuffer(raw_bytes, np.uint8)
             return cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        except _FetchCancelled:
+            return None
         except Exception as exc:  # noqa: BLE001
             _log.error(f"Error fetching full image {image_url}: {exc}")
             return None
+
+    def _capture_raw_with_unbounded_retry(
+        self,
+        url: str,
+        elapsed_time_millis: int,
+        should_cancel: Callable[[], bool] | None,
+    ) -> bytes:
+        """Like :meth:`_capture_raw_with_busy_retry`, but keeps retrying a 503
+        past the bulk-load retry budget -- see :meth:`fetch_full_image`."""
+        deadline = time.monotonic() + _INTERACTIVE_MAX_WAIT_SECONDS
+        while True:
+            try:
+                return self._beholder.capture_raw(url, elapsed_time_millis)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code != 503:
+                    raise
+                if should_cancel is not None and should_cancel():
+                    raise _FetchCancelled from None
+                if time.monotonic() >= deadline:
+                    raise
+                wait_seconds = self._retry_after_seconds(exc.response.headers)
+                _log.warning(
+                    f"Beholder busy (503) for {url}; retrying in {wait_seconds:.1f}s"
+                )
+                time.sleep(wait_seconds)
+
+    def _get_with_unbounded_retry(
+        self, url: str, should_cancel: Callable[[], bool] | None
+    ) -> requests.Response:
+        """Like :meth:`_crop_with_busy_retry`, but for the interactive
+        full-image path -- see :meth:`_capture_raw_with_unbounded_retry`."""
+        deadline = time.monotonic() + _INTERACTIVE_MAX_WAIT_SECONDS
+        while True:
+            response = requests.get(url, timeout=30)
+            if response.status_code != 503:
+                return response
+            if should_cancel is not None and should_cancel():
+                raise _FetchCancelled
+            if time.monotonic() >= deadline:
+                return response
+            wait_seconds = self._retry_after_seconds(response.headers)
+            _log.warning(
+                f"Source busy (503) for {url}; retrying in {wait_seconds:.1f}s"
+            )
+            time.sleep(wait_seconds)
 
 
 __all__ = ["RoiService"]

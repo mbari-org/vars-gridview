@@ -51,6 +51,9 @@ class DetailPaneCoordinator(QtCore.QObject):
         self._detail_request_generation += 1
         generation = self._detail_request_generation
 
+        def should_cancel() -> bool:
+            return generation != self._detail_request_generation
+
         worker = Worker(
             self._load_detail_image_worker,
             rect,
@@ -59,6 +62,7 @@ class DetailPaneCoordinator(QtCore.QObject):
             rect.is_image,
             rect.scale_x,
             rect.scale_y,
+            should_cancel,
         )
         worker.signals.result.connect(self._on_detail_worker_result)
         worker.signals.error.connect(
@@ -90,10 +94,16 @@ class DetailPaneCoordinator(QtCore.QObject):
         is_image: bool,
         scale_x: float,
         scale_y: float,
+        should_cancel: Callable[[], bool],
     ):
-        image = rect.get_image()
+        image = rect.get_image(should_cancel=should_cancel)
         if image is None:
-            LOGGER.error(f"Could not load detail image from {rect.source_url}")
+            if should_cancel():
+                LOGGER.debug(
+                    f"Detail image load for {rect.source_url} superseded before completion"
+                )
+            else:
+                LOGGER.error(f"Could not load detail image from {rect.source_url}")
             return (
                 generation,
                 needs_autorange,
