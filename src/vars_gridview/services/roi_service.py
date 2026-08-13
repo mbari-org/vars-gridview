@@ -11,6 +11,7 @@ responsive.
 from __future__ import annotations
 
 import logging
+import time
 
 import cv2
 import numpy as np
@@ -21,6 +22,13 @@ from vars_gridview.lib.annotation.association import BoundingBoxAssociation
 from vars_gridview.lib.m3.clients import SkimmerClient
 
 _log = logging.getLogger(__name__)
+
+# Skimmer returns 503 + Retry-After when its crop pool is shedding load
+# rather than queuing indefinitely; a couple of short retries lets a tile
+# recover instead of going permanently blank for what's usually a brief dip.
+_CROP_BUSY_MAX_RETRIES = 2
+_CROP_BUSY_DEFAULT_RETRY_SECONDS = 1.0
+_CROP_BUSY_MAX_RETRY_SECONDS = 5.0
 
 
 class RoiService:
@@ -74,7 +82,7 @@ class RoiService:
                     return None
                 return full_image[y:yf, x:xf]
             else:
-                response = self._skimmer.crop(image_url, x, y, xf, yf)
+                response = self._crop_with_busy_retry(image_url, x, y, xf, yf)
                 response.raise_for_status()
                 arr = np.frombuffer(response.content, np.uint8)
                 return cv2.imdecode(arr, cv2.IMREAD_COLOR)
@@ -84,6 +92,38 @@ class RoiService:
         except Exception as exc:  # noqa: BLE001
             _log.error(f"Unexpected error fetching ROI for {assoc.uuid}: {exc}")
             return None
+
+    def _crop_with_busy_retry(
+        self, url: str, left: int, top: int, right: int, bottom: int
+    ) -> requests.Response:
+        """Call :meth:`SkimmerClient.crop`, retrying a 503 (crop pool busy).
+
+        Honors the response's ``Retry-After`` header, capped to a sane
+        range. Any other status or error is returned/raised immediately for
+        the caller's own handling -- only 503 is retried here.
+        """
+        response = self._skimmer.crop(url, left, top, right, bottom)
+        for _ in range(_CROP_BUSY_MAX_RETRIES):
+            if response.status_code != 503:
+                return response
+            wait_seconds = self._retry_after_seconds(response)
+            _log.warning(
+                f"Skimmer busy (503) for {url}; retrying in {wait_seconds:.1f}s"
+            )
+            time.sleep(wait_seconds)
+            response = self._skimmer.crop(url, left, top, right, bottom)
+        return response
+
+    @staticmethod
+    def _retry_after_seconds(response: requests.Response) -> float:
+        header = response.headers.get("Retry-After")
+        if header is None:
+            return _CROP_BUSY_DEFAULT_RETRY_SECONDS
+        try:
+            seconds = float(header)
+        except ValueError:
+            return _CROP_BUSY_DEFAULT_RETRY_SECONDS
+        return max(0.0, min(seconds, _CROP_BUSY_MAX_RETRY_SECONDS))
 
     def fetch_full_image(
         self,

@@ -12,22 +12,37 @@ class _FakeAssoc:
 
 
 class _FakeResponse:
-    def __init__(self, content: bytes = b"img") -> None:
+    def __init__(
+        self,
+        content: bytes = b"img",
+        status_code: int = 200,
+        headers: dict | None = None,
+    ) -> None:
         self.content = content
+        self.status_code = status_code
+        self.headers = headers or {}
 
     def raise_for_status(self) -> None:
-        return None
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"{self.status_code} error")
 
 
 class _FakeSkimmer:
-    def __init__(self, *, raise_http_error: bool = False) -> None:
+    def __init__(
+        self, *, raise_http_error: bool = False, responses: list | None = None
+    ) -> None:
         self.raise_http_error = raise_http_error
         self.calls = []
+        # If given, one queued response is returned per call (in order),
+        # letting tests script a sequence like [503, 503, 200].
+        self._responses = list(responses) if responses is not None else None
 
     def crop(self, image_url, x, y, xf, yf):
         self.calls.append((image_url, x, y, xf, yf))
         if self.raise_http_error:
             raise requests.HTTPError("crop failed")
+        if self._responses is not None:
+            return self._responses.pop(0)
         return _FakeResponse(b"skimmer")
 
 
@@ -175,3 +190,67 @@ def test_fetch_full_image_returns_none_when_decode_fails(monkeypatch) -> None:
     result = service.fetch_full_image("https://example/image.jpg")
 
     assert result is None
+
+
+def test_fetch_roi_retries_skimmer_503_then_succeeds(monkeypatch) -> None:
+    sleeps = []
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.time.sleep", lambda s: sleeps.append(s)
+    )
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.np.frombuffer",
+        lambda *_args, **_kwargs: b"arr",
+    )
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.cv2.imdecode",
+        lambda *_args, **_kwargs: "decoded",
+    )
+
+    skimmer = _FakeSkimmer(
+        responses=[
+            _FakeResponse(status_code=503, headers={"Retry-After": "0.5"}),
+            _FakeResponse(status_code=503, headers={"Retry-After": "0.5"}),
+            _FakeResponse(b"skimmer", status_code=200),
+        ]
+    )
+    service = RoiService(skimmer=skimmer, beholder=_FakeBeholder())
+
+    result = service.fetch_roi(_FakeAssoc(), "https://example/image.jpg")
+
+    assert result == "decoded"
+    assert len(skimmer.calls) == 3
+    assert sleeps == [0.5, 0.5]
+
+
+def test_fetch_roi_gives_up_after_max_retries_on_persistent_503(monkeypatch) -> None:
+    monkeypatch.setattr("vars_gridview.services.roi_service.time.sleep", lambda s: None)
+    skimmer = _FakeSkimmer(
+        responses=[_FakeResponse(status_code=503) for _ in range(10)]
+    )
+    service = RoiService(skimmer=skimmer, beholder=_FakeBeholder())
+
+    result = service.fetch_roi(_FakeAssoc(), "https://example/image.jpg")
+
+    assert result is None
+    # Initial attempt plus the configured number of retries, no more.
+    assert len(skimmer.calls) == 3
+
+
+def test_fetch_roi_retry_after_header_is_capped(monkeypatch) -> None:
+    sleeps = []
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.time.sleep", lambda s: sleeps.append(s)
+    )
+    skimmer = _FakeSkimmer(
+        responses=[
+            _FakeResponse(status_code=503, headers={"Retry-After": "9999"}),
+            _FakeResponse(status_code=503, headers={"Retry-After": "not-a-number"}),
+            _FakeResponse(status_code=503),
+        ]
+    )
+    service = RoiService(skimmer=skimmer, beholder=_FakeBeholder())
+
+    service.fetch_roi(_FakeAssoc(), "https://example/image.jpg")
+
+    assert sleeps[0] == 5.0  # capped
+    assert sleeps[1] == 1.0  # unparsable -> default
