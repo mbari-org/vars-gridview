@@ -247,6 +247,12 @@ class RectInteractionCoordinator(QtCore.QObject):
         if ctrl is None or shift is None:
             ctrl, shift = self._selection_modifiers(event)
 
+        if not rect.roi_loaded:
+            # Give a tile that lost the race against backpressure during
+            # bulk loading another shot as soon as a user shows interest in
+            # it, rather than making them wait for a full mosaic reload.
+            rect.request_roi_refresh(debounce=False)
+
         previous_rect = self._last_selected_getter()
         same_image = False
         if previous_rect is not None:
