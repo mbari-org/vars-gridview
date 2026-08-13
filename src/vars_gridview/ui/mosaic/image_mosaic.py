@@ -236,9 +236,13 @@ class ImageMosaic(QtCore.QObject):
         self._current_build_stage_key: str | None = None
         self._load_coordinator = MosaicLoadCoordinator(parent=self)
         self._load_coordinator.stage_progress.connect(self._on_load_stage_progress)
+        # Was 4, which combined with the per-tile debounce created a hard
+        # ~20-30 tiles/s ceiling regardless of backend speed. Higher than
+        # ~20 stops helping on typical hardware -- gridview's worker threads
+        # share one process/GIL, so more of them mostly adds contention.
         self._roi_loading = MosaicRoiLoadingCoordinator(
             parent=self,
-            max_concurrency=4,
+            max_concurrency=16,
         )
         self._roi_loading.progress.connect(self._on_roi_loading_progress)
         self._similarity = MosaicSimilarityCoordinator(
