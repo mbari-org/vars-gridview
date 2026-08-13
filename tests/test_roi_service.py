@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+import httpx
 import requests
 
 from vars_gridview.services.roi_service import RoiService
+
+
+def _httpx_status_error(
+    status_code: int, headers: dict | None = None
+) -> httpx.HTTPStatusError:
+    """Build a realistic httpx.HTTPStatusError, as beholder_client raises on non-2xx."""
+    request = httpx.Request("POST", "https://beholder.example/capture")
+    response = httpx.Response(status_code, headers=headers or {}, request=request)
+    return httpx.HTTPStatusError("busy", request=request, response=response)
 
 
 class _FakeAssoc:
@@ -47,12 +57,23 @@ class _FakeSkimmer:
 
 
 class _FakeBeholder:
-    def __init__(self, payload: bytes = b"frame") -> None:
+    def __init__(
+        self, payload: bytes = b"frame", responses: list | None = None
+    ) -> None:
         self.payload = payload
         self.calls = []
+        # If given, one queued item is consumed per call, in order: bytes on
+        # success, or an exception instance to raise (e.g. an
+        # httpx.HTTPStatusError for a 503).
+        self._responses = list(responses) if responses is not None else None
 
     def capture_raw(self, image_url, elapsed_time_millis):
         self.calls.append((image_url, elapsed_time_millis))
+        if self._responses is not None:
+            item = self._responses.pop(0)
+            if isinstance(item, Exception):
+                raise item
+            return item
         return self.payload
 
 
@@ -254,3 +275,64 @@ def test_fetch_roi_retry_after_header_is_capped(monkeypatch) -> None:
 
     assert sleeps[0] == 5.0  # capped
     assert sleeps[1] == 1.0  # unparsable -> default
+
+
+def test_fetch_roi_retries_beholder_503_then_succeeds(monkeypatch) -> None:
+    sleeps = []
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.time.sleep", lambda s: sleeps.append(s)
+    )
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.np.frombuffer",
+        lambda *_args, **_kwargs: b"arr",
+    )
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.cv2.imdecode",
+        lambda *_args, **_kwargs: _FakeArray(),
+    )
+
+    beholder = _FakeBeholder(
+        responses=[
+            _httpx_status_error(503, headers={"Retry-After": "0.5"}),
+            _httpx_status_error(503, headers={"Retry-After": "0.5"}),
+            b"frame",
+        ]
+    )
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
+
+    result = service.fetch_roi(
+        _FakeAssoc(), "https://example/video.mp4", elapsed_time_millis=123
+    )
+
+    assert result == "roi-slice"
+    assert len(beholder.calls) == 3
+    assert sleeps == [0.5, 0.5]
+
+
+def test_fetch_roi_gives_up_after_max_retries_on_persistent_beholder_503(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr("vars_gridview.services.roi_service.time.sleep", lambda s: None)
+    beholder = _FakeBeholder(responses=[_httpx_status_error(503) for _ in range(10)])
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
+
+    result = service.fetch_roi(
+        _FakeAssoc(), "https://example/video.mp4", elapsed_time_millis=123
+    )
+
+    assert result is None
+    # Initial attempt plus the configured number of retries, no more.
+    assert len(beholder.calls) == 3
+
+
+def test_fetch_roi_does_not_retry_non_503_beholder_errors(monkeypatch) -> None:
+    monkeypatch.setattr("vars_gridview.services.roi_service.time.sleep", lambda s: None)
+    beholder = _FakeBeholder(responses=[_httpx_status_error(500)])
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
+
+    result = service.fetch_roi(
+        _FakeAssoc(), "https://example/video.mp4", elapsed_time_millis=123
+    )
+
+    assert result is None
+    assert len(beholder.calls) == 1

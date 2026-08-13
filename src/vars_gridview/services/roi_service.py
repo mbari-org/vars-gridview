@@ -14,6 +14,7 @@ import logging
 import time
 
 import cv2
+import httpx
 import numpy as np
 import requests
 from beholder_client import BeholderClient
@@ -23,12 +24,13 @@ from vars_gridview.lib.m3.clients import SkimmerClient
 
 _log = logging.getLogger(__name__)
 
-# Skimmer returns 503 + Retry-After when its crop pool is shedding load
-# rather than queuing indefinitely; a couple of short retries lets a tile
-# recover instead of going permanently blank for what's usually a brief dip.
-_CROP_BUSY_MAX_RETRIES = 2
-_CROP_BUSY_DEFAULT_RETRY_SECONDS = 1.0
-_CROP_BUSY_MAX_RETRY_SECONDS = 5.0
+# Skimmer and Beholder both return 503 + Retry-After when their respective
+# work pools are shedding load rather than queuing indefinitely; a couple of
+# short retries lets a tile recover instead of going permanently blank for
+# what's usually a brief dip.
+_BUSY_MAX_RETRIES = 2
+_BUSY_DEFAULT_RETRY_SECONDS = 1.0
+_BUSY_MAX_RETRY_SECONDS = 5.0
 
 
 class RoiService:
@@ -71,7 +73,7 @@ class RoiService:
         x, y, xf, yf = assoc.box
         try:
             if elapsed_time_millis is not None:
-                raw_bytes: bytes = self._beholder.capture_raw(
+                raw_bytes = self._capture_raw_with_busy_retry(
                     image_url, elapsed_time_millis
                 )
                 full_image = cv2.imdecode(
@@ -86,7 +88,7 @@ class RoiService:
                 response.raise_for_status()
                 arr = np.frombuffer(response.content, np.uint8)
                 return cv2.imdecode(arr, cv2.IMREAD_COLOR)
-        except requests.HTTPError as exc:
+        except (requests.HTTPError, httpx.HTTPStatusError) as exc:
             _log.error(f"HTTP error fetching ROI for {assoc.uuid}: {exc}")
             return None
         except Exception as exc:  # noqa: BLE001
@@ -103,10 +105,10 @@ class RoiService:
         the caller's own handling -- only 503 is retried here.
         """
         response = self._skimmer.crop(url, left, top, right, bottom)
-        for _ in range(_CROP_BUSY_MAX_RETRIES):
+        for _ in range(_BUSY_MAX_RETRIES):
             if response.status_code != 503:
                 return response
-            wait_seconds = self._retry_after_seconds(response)
+            wait_seconds = self._retry_after_seconds(response.headers)
             _log.warning(
                 f"Skimmer busy (503) for {url}; retrying in {wait_seconds:.1f}s"
             )
@@ -114,16 +116,37 @@ class RoiService:
             response = self._skimmer.crop(url, left, top, right, bottom)
         return response
 
+    def _capture_raw_with_busy_retry(self, url: str, elapsed_time_millis: int) -> bytes:
+        """Call :meth:`BeholderClient.capture_raw`, retrying a 503 (capture pool busy).
+
+        ``beholder_client`` raises ``httpx.HTTPStatusError`` (with the
+        response, including headers, attached) rather than returning an
+        error response like :class:`SkimmerClient.crop` does. Only 503 is
+        retried here; any other status or error propagates immediately.
+        """
+        for _ in range(_BUSY_MAX_RETRIES):
+            try:
+                return self._beholder.capture_raw(url, elapsed_time_millis)
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code != 503:
+                    raise
+                wait_seconds = self._retry_after_seconds(exc.response.headers)
+                _log.warning(
+                    f"Beholder busy (503) for {url}; retrying in {wait_seconds:.1f}s"
+                )
+                time.sleep(wait_seconds)
+        return self._beholder.capture_raw(url, elapsed_time_millis)
+
     @staticmethod
-    def _retry_after_seconds(response: requests.Response) -> float:
-        header = response.headers.get("Retry-After")
+    def _retry_after_seconds(headers) -> float:
+        header = headers.get("Retry-After")
         if header is None:
-            return _CROP_BUSY_DEFAULT_RETRY_SECONDS
+            return _BUSY_DEFAULT_RETRY_SECONDS
         try:
             seconds = float(header)
         except ValueError:
-            return _CROP_BUSY_DEFAULT_RETRY_SECONDS
-        return max(0.0, min(seconds, _CROP_BUSY_MAX_RETRY_SECONDS))
+            return _BUSY_DEFAULT_RETRY_SECONDS
+        return max(0.0, min(seconds, _BUSY_MAX_RETRY_SECONDS))
 
     def fetch_full_image(
         self,
