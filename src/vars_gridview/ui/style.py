@@ -70,7 +70,6 @@ class ActionButtonPalette:
 
 
 ACTION_BUTTON_PALETTE = ActionButtonPalette()
-DEFAULT_SELECTION_HIGHLIGHT_COLOR = "#34a1eb"
 
 
 def action_button_style(hex_color: str) -> str:

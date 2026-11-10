@@ -19,9 +19,9 @@ from typing import Generic, TypeVar
 
 from PyQt6 import QtCore
 
-from vars_gridview.ui.style import DEFAULT_SELECTION_HIGHLIGHT_COLOR
-
 T = TypeVar("T")
+
+DEFAULT_SELECTION_HIGHLIGHT_COLOR = "#34a1eb"
 
 
 class SettingProxy(QtCore.QObject, Generic[T]):
