@@ -294,6 +294,7 @@ class ImageMosaic(QtCore.QObject):
         self._annosaurus_client = annosaurus_client
         self._vampire_squid_client = vampire_squid_client
         self._roi_service = roi_service
+        self._roi_loading.set_throttle(roi_service.throttle)
 
     @property
     def image_reference_urls(self) -> dict[UUID | None, str | None]:

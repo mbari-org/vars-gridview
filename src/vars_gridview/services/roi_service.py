@@ -22,16 +22,24 @@ from beholder_client import BeholderClient
 
 from vars_gridview.lib.annotation.association import BoundingBoxAssociation
 from vars_gridview.lib.m3.clients import SkimmerClient
+from vars_gridview.lib.net import BackpressureThrottle
 
 _log = logging.getLogger(__name__)
 
 # Skimmer and Beholder both return 503 + Retry-After when their respective
 # work pools are shedding load rather than queuing indefinitely; a couple of
 # short retries lets a tile recover instead of going permanently blank for
-# what's usually a brief dip.
+# what's usually a brief dip. Every 503 seen (regardless of which backend or
+# which of the two retry paths below) feeds one shared BackpressureThrottle
+# per RoiService, so a storm of busy signals across many concurrently
+# fetching tiles backs off the *guessed* delay (used when a response has no
+# Retry-After) and reports reduced concurrency to callers like
+# MosaicRoiLoadingCoordinator -- not just the one tile that happened to hit it.
 _BUSY_MAX_RETRIES = 2
-_BUSY_DEFAULT_RETRY_SECONDS = 1.0
-_BUSY_MAX_RETRY_SECONDS = 5.0
+# A server-provided Retry-After is trusted outright but still clamped against
+# a bad/huge value; the throttle's own (larger) cap only applies to the
+# exponential fallback used when no header is present.
+_MAX_RETRY_AFTER_SECONDS = 5.0
 
 # Full-image fetches back a single interactive "click to view/edit" request
 # rather than one of many tiles competing for the same backend capacity, so
@@ -63,6 +71,12 @@ class RoiService:
     def __init__(self, skimmer: SkimmerClient, beholder: BeholderClient) -> None:
         self._skimmer = skimmer
         self._beholder = beholder
+        self._throttle = BackpressureThrottle(max_delay_seconds=30.0)
+
+    @property
+    def throttle(self) -> BackpressureThrottle:
+        """Shared backpressure signal fed by every 503 this service sees."""
+        return self._throttle
 
     def fetch_roi(
         self,
@@ -119,8 +133,12 @@ class RoiService:
         response = self._skimmer.crop(url, left, top, right, bottom)
         for _ in range(_BUSY_MAX_RETRIES):
             if response.status_code != 503:
+                self._throttle.record_success()
                 return response
-            wait_seconds = self._retry_after_seconds(response.headers)
+            self._throttle.record_busy()
+            wait_seconds = self._throttle.next_delay_seconds(
+                self._parsed_retry_after(response.headers)
+            )
             _log.warning(
                 f"Skimmer busy (503) for {url}; retrying in {wait_seconds:.1f}s"
             )
@@ -138,27 +156,40 @@ class RoiService:
         """
         for _ in range(_BUSY_MAX_RETRIES):
             try:
-                return self._beholder.capture_raw(url, elapsed_time_millis)
+                result = self._beholder.capture_raw(url, elapsed_time_millis)
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code != 503:
                     raise
-                wait_seconds = self._retry_after_seconds(exc.response.headers)
+                self._throttle.record_busy()
+                wait_seconds = self._throttle.next_delay_seconds(
+                    self._parsed_retry_after(exc.response.headers)
+                )
                 _log.warning(
                     f"Beholder busy (503) for {url}; retrying in {wait_seconds:.1f}s"
                 )
                 time.sleep(wait_seconds)
-        return self._beholder.capture_raw(url, elapsed_time_millis)
+            else:
+                self._throttle.record_success()
+                return result
+        result = self._beholder.capture_raw(url, elapsed_time_millis)
+        self._throttle.record_success()
+        return result
 
     @staticmethod
-    def _retry_after_seconds(headers) -> float:
+    def _parsed_retry_after(headers) -> float | None:
+        """Parse and clamp a Retry-After header, or ``None`` if absent/invalid.
+
+        ``None`` tells the throttle to fall back to its own exponential
+        guess instead of a server-provided value.
+        """
         header = headers.get("Retry-After")
         if header is None:
-            return _BUSY_DEFAULT_RETRY_SECONDS
+            return None
         try:
             seconds = float(header)
         except ValueError:
-            return _BUSY_DEFAULT_RETRY_SECONDS
-        return max(0.0, min(seconds, _BUSY_MAX_RETRY_SECONDS))
+            return None
+        return max(0.0, min(seconds, _MAX_RETRY_AFTER_SECONDS))
 
     def fetch_full_image(
         self,
@@ -213,19 +244,25 @@ class RoiService:
         deadline = time.monotonic() + _INTERACTIVE_MAX_WAIT_SECONDS
         while True:
             try:
-                return self._beholder.capture_raw(url, elapsed_time_millis)
+                result = self._beholder.capture_raw(url, elapsed_time_millis)
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code != 503:
                     raise
+                self._throttle.record_busy()
                 if should_cancel is not None and should_cancel():
                     raise _FetchCancelled from None
                 if time.monotonic() >= deadline:
                     raise
-                wait_seconds = self._retry_after_seconds(exc.response.headers)
+                wait_seconds = self._throttle.next_delay_seconds(
+                    self._parsed_retry_after(exc.response.headers)
+                )
                 _log.warning(
                     f"Beholder busy (503) for {url}; retrying in {wait_seconds:.1f}s"
                 )
                 time.sleep(wait_seconds)
+            else:
+                self._throttle.record_success()
+                return result
 
     def _get_with_unbounded_retry(
         self, url: str, should_cancel: Callable[[], bool] | None
@@ -236,12 +273,16 @@ class RoiService:
         while True:
             response = requests.get(url, timeout=30)
             if response.status_code != 503:
+                self._throttle.record_success()
                 return response
+            self._throttle.record_busy()
             if should_cancel is not None and should_cancel():
                 raise _FetchCancelled
             if time.monotonic() >= deadline:
                 return response
-            wait_seconds = self._retry_after_seconds(response.headers)
+            wait_seconds = self._throttle.next_delay_seconds(
+                self._parsed_retry_after(response.headers)
+            )
             _log.warning(
                 f"Source busy (503) for {url}; retrying in {wait_seconds:.1f}s"
             )

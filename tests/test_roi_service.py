@@ -273,8 +273,58 @@ def test_fetch_roi_retry_after_header_is_capped(monkeypatch) -> None:
 
     service.fetch_roi(_FakeAssoc(), "https://example/image.jpg")
 
-    assert sleeps[0] == 5.0  # capped
-    assert sleeps[1] == 1.0  # unparsable -> default
+    assert sleeps[0] == 5.0  # header capped
+    # Unparsable header falls back to the shared throttle's exponential
+    # guess; this is the second busy signal in a row, so it's already grown
+    # past the throttle's base delay.
+    assert sleeps[1] == 2.0
+
+
+def test_fetch_roi_shared_throttle_grows_across_independent_fetches(
+    monkeypatch,
+) -> None:
+    sleeps = []
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.time.sleep", lambda s: sleeps.append(s)
+    )
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.np.frombuffer",
+        lambda *_args, **_kwargs: b"arr",
+    )
+    monkeypatch.setattr(
+        "vars_gridview.services.roi_service.cv2.imdecode",
+        lambda *_args, **_kwargs: "decoded",
+    )
+
+    skimmer = _FakeSkimmer(
+        responses=[
+            # Tile A: persistently busy, never recovers within its own budget.
+            _FakeResponse(status_code=503),
+            _FakeResponse(status_code=503),
+            _FakeResponse(status_code=503),
+            # Tile B: busy once, then recovers -- but its first wait already
+            # reflects tile A's leftover backpressure, not a fresh 1.0s guess.
+            _FakeResponse(status_code=503),
+            _FakeResponse(b"skimmer", status_code=200),
+        ]
+    )
+    service = RoiService(skimmer=skimmer, beholder=_FakeBeholder())
+
+    assert service.fetch_roi(_FakeAssoc("a"), "https://example/a.jpg") is None
+    assert service.fetch_roi(_FakeAssoc("b"), "https://example/b.jpg") == "decoded"
+
+    assert sleeps == [1.0, 2.0, 4.0]
+
+
+def test_fetch_roi_success_decays_shared_throttle() -> None:
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=_FakeBeholder())
+
+    for _ in range(3):
+        service.throttle.record_busy()
+    assert service.throttle.next_delay_seconds(None) == 4.0
+
+    service.throttle.record_success()
+    assert service.throttle.next_delay_seconds(None) == 2.0
 
 
 def test_fetch_roi_retries_beholder_503_then_succeeds(monkeypatch) -> None:

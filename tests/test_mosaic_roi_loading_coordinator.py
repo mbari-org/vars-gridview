@@ -99,9 +99,65 @@ def test_sweep_gives_up_after_configured_attempts() -> None:
     )
 
     assert widgets[0].roi_loaded is False
-    expected_attempts = 1 + len(mrc._SWEEP_RETRY_DELAYS_SECONDS)
+    expected_attempts = 1 + mrc._SWEEP_MAX_ATTEMPTS
     assert widgets[0].refresh_calls == expected_attempts
     assert on_complete_calls == [True] * expected_attempts
+
+
+def test_sweep_delay_grows_exponentially() -> None:
+    coordinator = mrc.MosaicRoiLoadingCoordinator(parent=None, max_concurrency=4)
+    delays = []
+    coordinator._schedule_retry = lambda delay, callback: (
+        delays.append(delay),
+        callback(),
+    )
+
+    widgets = [_FakeRectWidget(fail_times=1000)]  # never recovers
+    coordinator.start_loading(
+        rect_widgets=widgets, on_complete=lambda: None, cancel_event=Event()
+    )
+
+    assert delays == [3.0, 6.0, 12.0]
+
+
+class _FakeThrottle:
+    def __init__(self, scale: float) -> None:
+        self._scale = scale
+
+    def concurrency_scale(self) -> float:
+        return self._scale
+
+
+def test_throttle_scale_reduces_effective_concurrency() -> None:
+    coordinator = mrc.MosaicRoiLoadingCoordinator(parent=None, max_concurrency=4)
+    coordinator.set_throttle(_FakeThrottle(0.5))
+
+    widgets = [_FakeRectWidget() for _ in range(4)]
+
+    # Freeze widgets mid-flight (never emit roiRefreshed) so we can observe
+    # how many were dispatched by the initial _pump() call alone.
+    for widget in widgets:
+        widget.request_roi_refresh = lambda *, debounce=True: None
+
+    coordinator.start_loading(
+        rect_widgets=widgets, on_complete=lambda: None, cancel_event=Event()
+    )
+
+    assert coordinator._inflight == 2  # 4 * 0.5, not the full max_concurrency=4
+
+
+def test_no_throttle_set_uses_full_concurrency() -> None:
+    coordinator = mrc.MosaicRoiLoadingCoordinator(parent=None, max_concurrency=4)
+
+    widgets = [_FakeRectWidget() for _ in range(4)]
+    for widget in widgets:
+        widget.request_roi_refresh = lambda *, debounce=True: None
+
+    coordinator.start_loading(
+        rect_widgets=widgets, on_complete=lambda: None, cancel_event=Event()
+    )
+
+    assert coordinator._inflight == 4
 
 
 def test_no_sweep_scheduled_when_nothing_failed() -> None:

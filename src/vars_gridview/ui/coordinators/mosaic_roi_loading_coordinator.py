@@ -11,6 +11,7 @@ from PyQt6 import QtCore
 from vars_gridview.lib.runtime.log import LOGGER
 
 if TYPE_CHECKING:
+    from vars_gridview.lib.net import BackpressureThrottle
     from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 # Tiles that still fail after the initial pass (e.g. caught in a cold-cache
@@ -19,8 +20,12 @@ if TYPE_CHECKING:
 # reproduce the overload that caused the failures. These run silently (no
 # `progress` signal) since they're a background repair, not something the
 # user needs a progress bar for -- affected tiles still visibly flip from
-# placeholder to loaded as they succeed.
-_SWEEP_RETRY_DELAYS_SECONDS = (3.0, 8.0)
+# placeholder to loaded as they succeed. The delay between sweeps grows the
+# same way the throttle's own per-request retry delay does, rather than being
+# a separate hardcoded schedule.
+_SWEEP_BASE_DELAY_SECONDS = 3.0
+_SWEEP_MAX_DELAY_SECONDS = 30.0
+_SWEEP_MAX_ATTEMPTS = 3
 _SWEEP_MAX_CONCURRENCY = 4
 
 
@@ -54,6 +59,17 @@ class MosaicRoiLoadingCoordinator(QtCore.QObject):
         self._pass_finished = True
         self._top_level_on_complete: Callable[[], None] | None = None
         self._cancel_event: Event | None = None
+        self._throttle: BackpressureThrottle | None = None
+
+    def set_throttle(self, throttle: BackpressureThrottle | None) -> None:
+        """Share a backpressure signal used to scale down dispatch concurrency.
+
+        When set, :meth:`_pump` reads the throttle's current concurrency
+        scale on every dispatch cycle, so a burst of 503s from any tile fetch
+        (not just ones this coordinator dispatched) slows new dispatches down,
+        and recovery ramps concurrency back up gradually.
+        """
+        self._throttle = throttle
 
     def cancel_pending(self) -> None:
         """Invalidate in-flight ROI refreshes."""
@@ -108,10 +124,17 @@ class MosaicRoiLoadingCoordinator(QtCore.QObject):
             self.progress.emit(self._done, self._total)
         self._pump(generation)
 
+    def _effective_max_concurrency(self) -> int:
+        if self._throttle is None:
+            return self._current_max_concurrency
+        scale = self._throttle.concurrency_scale()
+        scaled = round(self._current_max_concurrency * scale)
+        return max(1, min(self._current_max_concurrency, scaled))
+
     def _pump(self, generation: int) -> None:
         while (
             generation == self._generation
-            and self._inflight < self._current_max_concurrency
+            and self._inflight < self._effective_max_concurrency()
             and self._pending
             and not (self._cancel_event is not None and self._cancel_event.is_set())
         ):
@@ -171,16 +194,19 @@ class MosaicRoiLoadingCoordinator(QtCore.QObject):
 
         if (
             not failed
-            or self._sweep_attempt >= len(_SWEEP_RETRY_DELAYS_SECONDS)
+            or self._sweep_attempt >= _SWEEP_MAX_ATTEMPTS
             or (self._cancel_event is not None and self._cancel_event.is_set())
         ):
             return
 
-        delay_seconds = _SWEEP_RETRY_DELAYS_SECONDS[self._sweep_attempt]
+        delay_seconds = min(
+            _SWEEP_BASE_DELAY_SECONDS * (2**self._sweep_attempt),
+            _SWEEP_MAX_DELAY_SECONDS,
+        )
         self._sweep_attempt += 1
         LOGGER.info(
             f"{len(failed)} tile(s) failed to load; retrying in {delay_seconds:.0f}s "
-            f"(sweep {self._sweep_attempt}/{len(_SWEEP_RETRY_DELAYS_SECONDS)})"
+            f"(sweep {self._sweep_attempt}/{_SWEEP_MAX_ATTEMPTS})"
         )
 
         def _retry() -> None:
