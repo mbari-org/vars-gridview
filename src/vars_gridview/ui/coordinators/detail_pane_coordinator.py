@@ -13,7 +13,7 @@ from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.runtime.runnables import Worker
 
 if TYPE_CHECKING:
-    from vars_gridview.lib.annotation.box_handler import BoxHandler
+    from vars_gridview.ui.mosaic.box_handler import BoxHandler
     from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 

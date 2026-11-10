@@ -10,7 +10,6 @@ from sharktopoda_client.client import SharktopodaClient
 from vars_gridview.controllers.annotation_controller import AnnotationController
 from vars_gridview.controllers.query_controller import QueryController
 from vars_gridview.controllers.session_controller import SessionController
-from vars_gridview.lib.annotation.box_handler import BoxHandler
 from vars_gridview.lib.common.filesystem import open_file_browser
 from vars_gridview.lib.config.constants import (
     APP_NAME,
@@ -67,6 +66,7 @@ from vars_gridview.ui.dialogs.login_dialog import LoginDialog
 from vars_gridview.ui.dialogs.query_dialog import QueryDialog
 from vars_gridview.ui.dialogs.sort_dialog import SortDialog
 from vars_gridview.ui.layout.main_window_layout import MainWindowLayout
+from vars_gridview.ui.mosaic.box_handler import BoxHandler
 from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
 from vars_gridview.ui.mosaic.rect_widget import RectWidget
 from vars_gridview.ui.settings.SettingsDialog import SettingsDialog

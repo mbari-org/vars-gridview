@@ -7,10 +7,10 @@ from threading import Event
 
 from PyQt6 import QtWidgets
 
-from vars_gridview.lib.annotation.box_handler import BoxHandler
 from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.sorting.sort_methods import RecordedTimestampSort
+from vars_gridview.ui.mosaic.box_handler import BoxHandler
 from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
 from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
