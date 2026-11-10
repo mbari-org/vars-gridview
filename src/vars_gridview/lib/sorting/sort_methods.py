@@ -1,7 +1,7 @@
 """Grid sort methods for the image mosaic.
 
 Each :class:`SortMethod` defines a ``key`` static method that derives a
-comparable value from a :class:`~vars_gridview.ui.mosaic.rect_widget.RectWidget`.  The
+comparable value from a :class:`SortableTile` (e.g. a mosaic ``RectWidget``).  The
 base :meth:`SortMethod.sort` in-place-sorts a list using that key.
 
 :class:`SortMethodGroup` composes multiple methods into a stable multi-key sort.
@@ -16,12 +16,37 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
 import cv2
 import numpy as np
 
-from vars_gridview.ui.mosaic.rect_widget import RectWidget
+if TYPE_CHECKING:
+    from uuid import UUID
+
+    from vars_gridview.lib.annotation.association import BoundingBoxAssociation
+
+
+class SortableTile(Protocol):
+    """What sort keys read from a mosaic tile; satisfied by ``RectWidget``.
+
+    Keeps this module independent of the UI layer.
+    """
+
+    roi: np.ndarray | None
+    text_label: str
+    ancillary_data: dict
+
+    @property
+    def association(self) -> BoundingBoxAssociation: ...
+
+    @property
+    def association_uuid(self) -> UUID: ...
+
+    @property
+    def observation_uuid(self) -> UUID: ...
+
+    def annotation_datetime(self) -> datetime | None: ...
 
 
 class SortMethod(ABC):
@@ -35,7 +60,7 @@ class SortMethod(ABC):
 
     @staticmethod
     @abstractmethod
-    def key(rect: RectWidget) -> Any:
+    def key(rect: SortableTile) -> Any:
         """Derive a comparable sort key from *rect*.
 
         Args:
@@ -47,7 +72,7 @@ class SortMethod(ABC):
         raise NotImplementedError
 
     @classmethod
-    def sort(cls, rect_widgets: list[RectWidget], **kwargs: Any) -> None:
+    def sort(cls, rect_widgets: list[SortableTile], **kwargs: Any) -> None:
         """In-place sort *rect_widgets* by :meth:`key`.
 
         Args:
@@ -68,7 +93,7 @@ class SortMethodGroup:
     def __init__(self, *methods: type[SortMethod]) -> None:
         self.methods = methods
 
-    def key(self, rect: RectWidget) -> tuple[Any, ...]:
+    def key(self, rect: SortableTile) -> tuple[Any, ...]:
         """Return a tuple of per-method keys for *rect*.
 
         Args:
@@ -79,7 +104,7 @@ class SortMethodGroup:
         """
         return tuple(method.key(rect) for method in self.methods)
 
-    def sort(self, rect_widgets: list[RectWidget], **kwargs: Any) -> None:
+    def sort(self, rect_widgets: list[SortableTile], **kwargs: Any) -> None:
         """In-place sort *rect_widgets* using the composite key.
 
         Args:
@@ -95,7 +120,7 @@ class NoopSort(SortMethod):
     NAME = "No-op"
 
     @staticmethod
-    def key(rect: RectWidget) -> None:
+    def key(rect: SortableTile) -> None:
         return None
 
 
@@ -105,7 +130,7 @@ class RecordedTimestampSort(SortMethod):
     NAME = "Recorded timestamp"
 
     @staticmethod
-    def key(rect: RectWidget) -> datetime:
+    def key(rect: SortableTile) -> datetime:
         return rect.annotation_datetime() or datetime.min.replace(tzinfo=UTC)
 
 
@@ -115,7 +140,7 @@ class AssociationUUIDSort(SortMethod):
     NAME = "Association UUID"
 
     @staticmethod
-    def key(rect: RectWidget) -> str:
+    def key(rect: SortableTile) -> str:
         return rect.association_uuid or ""
 
 
@@ -125,7 +150,7 @@ class ObservationUUIDSort(SortMethod):
     NAME = "Observation UUID"
 
     @staticmethod
-    def key(rect: RectWidget) -> str:
+    def key(rect: SortableTile) -> str:
         return rect.observation_uuid or ""
 
 
@@ -135,7 +160,7 @@ class ImageReferenceUUIDSort(SortMethod):
     NAME = "Image reference UUID"
 
     @staticmethod
-    def key(rect: RectWidget) -> str:
+    def key(rect: SortableTile) -> str:
         return rect.association.image_reference_uuid or ""
 
 
@@ -145,7 +170,7 @@ class LabelSort(SortMethod):
     NAME = "Label"
 
     @staticmethod
-    def key(rect: RectWidget) -> str:
+    def key(rect: SortableTile) -> str:
         return rect.text_label
 
 
@@ -155,7 +180,7 @@ class WidthSort(SortMethod):
     NAME = "Width"
 
     @staticmethod
-    def key(rect: RectWidget) -> int:
+    def key(rect: SortableTile) -> int:
         return rect.association.width
 
 
@@ -165,7 +190,7 @@ class HeightSort(SortMethod):
     NAME = "Height"
 
     @staticmethod
-    def key(rect: RectWidget) -> int:
+    def key(rect: SortableTile) -> int:
         return rect.association.height
 
 
@@ -175,7 +200,7 @@ class AreaSort(SortMethod):
     NAME = "Area"
 
     @staticmethod
-    def key(rect: RectWidget) -> int:
+    def key(rect: SortableTile) -> int:
         return WidthSort.key(rect) * HeightSort.key(rect)
 
 
@@ -189,7 +214,7 @@ class AspectRatioSort(SortMethod):
     NAME = "Aspect ratio"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         height = HeightSort.key(rect)
         width = WidthSort.key(rect)
         return width / height if height > 0 else 0.0
@@ -201,7 +226,7 @@ class IntensityMeanSort(SortMethod):
     NAME = "Intensity mean"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         return float(np.mean(rect.roi))
 
 
@@ -211,7 +236,7 @@ class IntensityVarianceSort(SortMethod):
     NAME = "Intensity variance"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         return float(np.var(rect.roi))
 
 
@@ -221,7 +246,7 @@ class HueMeanSort(SortMethod):
     NAME = "Hue mean"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         roi_hsv = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2HSV)
         return float(np.mean(roi_hsv[:, :, 0].ravel()))
 
@@ -232,7 +257,7 @@ class HueVarianceSort(SortMethod):
     NAME = "Hue variance"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         roi_hsv = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2HSV)
         return float(np.var(roi_hsv[:, :, 0].ravel()))
 
@@ -243,7 +268,7 @@ class HueMeanCenterRegion(SortMethod):
     NAME = "Hue mean (center region)"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         h, w = rect.association.height, rect.association.width
         sub_roi = rect.roi[h // 3 : h * 2 // 3, w // 3 : w * 2 // 3]
         roi_hsv = cv2.cvtColor(sub_roi, cv2.COLOR_BGR2HSV)
@@ -256,7 +281,7 @@ class DepthSort(SortMethod):
     NAME = "Depth"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         return float(rect.ancillary_data.get("depth_meters") or 0.0)
 
 
@@ -266,7 +291,7 @@ class LaplacianVarianceSort(SortMethod):
     NAME = "Sharpness - Laplacian"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
         return float(cv2.Laplacian(roi_gray, cv2.CV_64F).var())
 
@@ -277,7 +302,7 @@ class LaplacianOfGaussianSort(SortMethod):
     NAME = "Sharpness - Laplacian of Gaussian"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
         blurred = cv2.GaussianBlur(roi_gray, (5, 5), 0)
         return float(cv2.Laplacian(blurred, cv2.CV_64F).var())
@@ -289,7 +314,7 @@ class SobelSort(SortMethod):
     NAME = "Sharpness - Sobel"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
         gx = cv2.Sobel(roi_gray, cv2.CV_64F, 1, 0, ksize=3)
         gy = cv2.Sobel(roi_gray, cv2.CV_64F, 0, 1, ksize=3)
@@ -302,7 +327,7 @@ class CannySort(SortMethod):
     NAME = "Sharpness - Canny"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
         return float(cv2.Canny(roi_gray, 100, 200).var())
 
@@ -313,7 +338,7 @@ class FrequencyDomainSort(SortMethod):
     NAME = "Sharpness - Frequency Domain"
 
     @staticmethod
-    def key(rect: RectWidget) -> float:
+    def key(rect: SortableTile) -> float:
         roi_gray = cv2.cvtColor(rect.roi, cv2.COLOR_BGR2GRAY)
         f = np.fft.fft2(roi_gray)
         fshift = np.fft.fftshift(f)
@@ -347,7 +372,7 @@ def association_data_sort(
             NAME = cls.NAME  # type: ignore[assignment]
 
             @staticmethod
-            def key(rect: RectWidget) -> Any:
+            def key(rect: SortableTile) -> Any:
                 return rect.association.data.get(data_key, default)
 
         _AssocDataSort.__name__ = cls.__name__
@@ -395,6 +420,7 @@ __all__ = [
     "SobelSort",
     "SortMethod",
     "SortMethodGroup",
+    "SortableTile",
     "VerifierSort",
     "WidthSort",
     "association_data_sort",
