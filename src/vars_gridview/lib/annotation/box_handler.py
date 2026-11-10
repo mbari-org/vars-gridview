@@ -12,10 +12,10 @@ from vars_gridview.lib.config.constants import get_settings
 from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.ui.mosaic.bounding_box import BoundingBox
-from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 if TYPE_CHECKING:
     from vars_gridview.ui.mosaic.image_mosaic import ImageMosaic
+    from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
 class BoxHandler:
