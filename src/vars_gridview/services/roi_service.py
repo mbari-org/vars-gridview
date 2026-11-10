@@ -130,12 +130,14 @@ class RoiService:
         range. Any other status or error is returned/raised immediately for
         the caller's own handling -- only 503 is retried here.
         """
-        response = self._skimmer.crop(url, left, top, right, bottom)
-        for _ in range(_BUSY_MAX_RETRIES):
+        for attempt in range(_BUSY_MAX_RETRIES + 1):
+            response = self._skimmer.crop(url, left, top, right, bottom)
             if response.status_code != 503:
                 self._throttle.record_success()
                 return response
             self._throttle.record_busy()
+            if attempt == _BUSY_MAX_RETRIES:
+                break
             wait_seconds = self._throttle.next_delay_seconds(
                 self._parsed_retry_after(response.headers)
             )
@@ -143,7 +145,6 @@ class RoiService:
                 f"Skimmer busy (503) for {url}; retrying in {wait_seconds:.1f}s"
             )
             time.sleep(wait_seconds)
-            response = self._skimmer.crop(url, left, top, right, bottom)
         return response
 
     def _capture_raw_with_busy_retry(self, url: str, elapsed_time_millis: int) -> bytes:
@@ -154,13 +155,15 @@ class RoiService:
         error response like :class:`SkimmerClient.crop` does. Only 503 is
         retried here; any other status or error propagates immediately.
         """
-        for _ in range(_BUSY_MAX_RETRIES):
+        for attempt in range(_BUSY_MAX_RETRIES + 1):
             try:
                 result = self._beholder.capture_raw(url, elapsed_time_millis)
             except httpx.HTTPStatusError as exc:
                 if exc.response.status_code != 503:
                     raise
                 self._throttle.record_busy()
+                if attempt == _BUSY_MAX_RETRIES:
+                    raise
                 wait_seconds = self._throttle.next_delay_seconds(
                     self._parsed_retry_after(exc.response.headers)
                 )
@@ -171,9 +174,7 @@ class RoiService:
             else:
                 self._throttle.record_success()
                 return result
-        result = self._beholder.capture_raw(url, elapsed_time_millis)
-        self._throttle.record_success()
-        return result
+        raise AssertionError("unreachable")
 
     @staticmethod
     def _parsed_retry_after(headers) -> float | None:

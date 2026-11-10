@@ -255,6 +255,8 @@ def test_fetch_roi_gives_up_after_max_retries_on_persistent_503(monkeypatch) -> 
     assert result is None
     # Initial attempt plus the configured number of retries, no more.
     assert len(skimmer.calls) == 3
+    # Every 503, including the final one, fed the shared throttle.
+    assert service.throttle.next_delay_seconds(None) == 4.0
 
 
 def test_fetch_roi_retry_after_header_is_capped(monkeypatch) -> None:
@@ -303,7 +305,8 @@ def test_fetch_roi_shared_throttle_grows_across_independent_fetches(
             _FakeResponse(status_code=503),
             _FakeResponse(status_code=503),
             # Tile B: busy once, then recovers -- but its first wait already
-            # reflects tile A's leftover backpressure, not a fresh 1.0s guess.
+            # reflects tile A's leftover backpressure (all 3 of A's 503s,
+            # including the final one), not a fresh 1.0s guess.
             _FakeResponse(status_code=503),
             _FakeResponse(b"skimmer", status_code=200),
         ]
@@ -313,7 +316,7 @@ def test_fetch_roi_shared_throttle_grows_across_independent_fetches(
     assert service.fetch_roi(_FakeAssoc("a"), "https://example/a.jpg") is None
     assert service.fetch_roi(_FakeAssoc("b"), "https://example/b.jpg") == "decoded"
 
-    assert sleeps == [1.0, 2.0, 4.0]
+    assert sleeps == [1.0, 2.0, 8.0]
 
 
 def test_fetch_roi_success_decays_shared_throttle() -> None:
@@ -373,6 +376,8 @@ def test_fetch_roi_gives_up_after_max_retries_on_persistent_beholder_503(
     assert result is None
     # Initial attempt plus the configured number of retries, no more.
     assert len(beholder.calls) == 3
+    # Every 503, including the final one, fed the shared throttle.
+    assert service.throttle.next_delay_seconds(None) == 4.0
 
 
 def test_fetch_roi_does_not_retry_non_503_beholder_errors(monkeypatch) -> None:
