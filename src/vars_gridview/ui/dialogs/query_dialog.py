@@ -353,21 +353,35 @@ class UUIDListFilter(BaseFilter):
             return UUIDInConstraintResult(self.name, uuids, self.key)
 
 
-class BulkConceptFilter(BaseFilter):
+class BulkValueFilter(BaseFilter):
     """
-    A filter that allows the user to input multiple concepts at once.
+    A filter that allows the user to input multiple values from a known set at once.
     """
 
-    def __init__(self, parent, name: str, concepts_getter: Callable[[], list[str]]):
+    def __init__(
+        self,
+        parent,
+        name: str,
+        values_getter: Callable[[], list[str]],
+        key: str,
+        item_label: str,
+        result_cls: type[InConstraintResult] = InConstraintResult,
+    ):
         super().__init__(parent, name)
-        self._concepts_getter = concepts_getter
+        self._values_getter = values_getter
+        self.key = key
+        self.item_label = item_label
+        self.result_cls = result_cls
 
-    def __call__(self) -> ConceptInConstraintResult | None:
-        concepts, ok = BulkConceptInputDialog.get_concepts(
-            "Select Concepts", self.parent, concepts_getter=self._concepts_getter
+    def __call__(self) -> InConstraintResult | None:
+        values, ok = BulkValidatedInputDialog.get_values(
+            f"Select {self.name}",
+            self.parent,
+            values_getter=self._values_getter,
+            item_label=self.item_label,
         )
-        if ok and concepts:
-            return ConceptInConstraintResult("Concepts", concepts, "concept")
+        if ok and values:
+            return self.result_cls(self.name, values, self.key)
 
 
 class ConceptDescFilter(BaseFilter):
@@ -383,7 +397,7 @@ class ConceptDescFilter(BaseFilter):
         descendants_getter: Callable[[str], list[str]],
     ):
         super().__init__(parent, name)
-        self._concepts_getter = concepts_getter
+        self._values_getter = concepts_getter
         self._descendants_getter = descendants_getter
 
     def __call__(self) -> ConceptDescInConstraintResult | None:
@@ -391,7 +405,7 @@ class ConceptDescFilter(BaseFilter):
             self.parent,
             "Concept",
             "Concept",
-            self._concepts_getter(),
+            self._values_getter(),
             0,
             True,
         )
@@ -628,46 +642,52 @@ class BulkUUIDInputDialog(BulkInputDialog):
         return [], False
 
 
-class BulkConceptInputDialog(BulkInputDialog):
+class BulkValidatedInputDialog(BulkInputDialog):
     """
-    Dialog that allows the user to input multiple concepts at once.
+    Dialog that allows the user to input multiple values from a known set at once.
+
+    Supports autocomplete, selection from a list, and drag+drop of newline- or
+    comma-delimited text. Values not in the known set are rejected.
     """
 
     def __init__(
         self,
         parent: QWidget | None = None,
-        concepts_getter: Callable[[], list[str]] | None = None,
+        values_getter: Callable[[], list[str]] | None = None,
+        item_label: str = "Value",
     ) -> None:
         super().__init__(
             parent,
-            placeholder_text="Enter concept",
+            placeholder_text=f"Enter {item_label.lower()}",
         )
-        # Cache concepts list
+        self._item_label = item_label
+
+        # Cache values list
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            getter = concepts_getter or (list)
-            self._concepts = getter()
+            getter = values_getter or (list)
+            self._values = getter()
         finally:
             QApplication.restoreOverrideCursor()
 
         # Configure the input field with autocomplete
-        self._completer = QCompleter(self._concepts)
+        self._completer = QCompleter(self._values)
         self._completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self._input.setCompleter(self._completer)
 
-        # Configure auto-completion behavior to add concepts when selected
-        self._completer.activated.connect(self._add_current_concept)
+        # Configure auto-completion behavior to add values when selected
+        self._completer.activated.connect(self._add_current_value)
 
         # Rename button
-        self._add_button.setText("Add Concept")
+        self._add_button.setText(f"Add {item_label}")
         self._add_button.clicked.disconnect()  # Disconnect the parent's implementation
-        self._add_button.clicked.connect(self._add_current_concept)
-        self._input.returnPressed.connect(self._add_current_concept)
+        self._add_button.clicked.connect(self._add_current_value)
+        self._input.returnPressed.connect(self._add_current_value)
 
-        # Add a button to select from existing concepts
+        # Add a button to select from existing values
         self._select_button = QPushButton("Select from List")
         self.layout().itemAt(1).layout().addWidget(self._select_button)
-        self._select_button.clicked.connect(self._select_concept)
+        self._select_button.clicked.connect(self._select_value)
 
         # Enable drag and drop
         self.setAcceptDrops(True)
@@ -681,66 +701,66 @@ class BulkConceptInputDialog(BulkInputDialog):
         if mime_data.hasText():
             text = mime_data.text()
             if "\n" in text:
-                # Split by newlines if the text contains multiple lines
-                concepts = [item.strip() for item in text.splitlines() if item.strip()]
+                # Split by newlines if multi-line (not spaces; names may contain them)
+                values = [item.strip() for item in text.splitlines() if item.strip()]
             else:
                 # Split by commas
-                concepts = [item.strip() for item in text.split(",") if item.strip()]
-            invalid_concepts = []
-            for concept in concepts:
-                # Guard against invalid concepts
-                if concept not in self._concepts:
-                    invalid_concepts.append(concept)
+                values = [item.strip() for item in text.split(",") if item.strip()]
+            invalid_values = []
+            for value in values:
+                # Guard against invalid values
+                if value not in self._values:
+                    invalid_values.append(value)
                     continue
 
-                # Add the concept if it does not already exist in the list
-                if concept and not self._list.findItems(
-                    concept, Qt.MatchFlag.MatchExactly
-                ):
-                    self._list.addItem(concept)
+                # Add the value if it does not already exist in the list
+                if value and not self._list.findItems(value, Qt.MatchFlag.MatchExactly):
+                    self._list.addItem(value)
 
-            # Show a warning for any invalid concepts
-            if invalid_concepts:
+            # Show a warning for any invalid values
+            if invalid_values:
                 QMessageBox.warning(
                     self,
-                    "Invalid Concepts",
-                    "The following concepts were not recognized and were not added:\n"
-                    + ", ".join(invalid_concepts),
+                    f"Invalid {self._item_label}s",
+                    f"The following {self._item_label.lower()}s were not recognized "
+                    "and were not added:\n" + ", ".join(invalid_values),
                 )
 
             event.acceptProposedAction()
 
-    def _add_current_concept(self):
-        concept = self._input.text().strip()
-        if concept and not self._list.findItems(concept, Qt.MatchFlag.MatchExactly):
-            self._list.addItem(concept)
+    def _add_current_value(self):
+        value = self._input.text().strip()
+        if value and not self._list.findItems(value, Qt.MatchFlag.MatchExactly):
+            self._list.addItem(value)
             # Use a zero-timer to clear after the current event is processed
             QTimer.singleShot(0, self._input.clear)
 
-    def _select_concept(self):
-        concept, ok = QInputDialog.getItem(
-            self, "Select Concept", "Concept", self._concepts, 0, True
+    def _select_value(self):
+        value, ok = QInputDialog.getItem(
+            self,
+            f"Select {self._item_label}",
+            self._item_label,
+            self._values,
+            0,
+            True,
         )
-        if (
-            ok
-            and concept
-            and not self._list.findItems(concept, Qt.MatchFlag.MatchExactly)
-        ):
-            self._list.addItem(concept)
+        if ok and value and not self._list.findItems(value, Qt.MatchFlag.MatchExactly):
+            self._list.addItem(value)
 
     def add_items(self):
         # This is intentionally empty to prevent splitting by spaces
-        # Concepts are added through _add_current_concept method
+        # Values are added through _add_current_value method
         pass
 
     @classmethod
-    def get_concepts(
+    def get_values(
         cls,
-        title: str = "Enter Concepts",
+        title: str,
         parent: QWidget | None = None,
-        concepts_getter: Callable[[], list[str]] | None = None,
+        values_getter: Callable[[], list[str]] | None = None,
+        item_label: str = "Value",
     ) -> tuple[list[str], bool]:
-        dialog = cls(parent, concepts_getter=concepts_getter)
+        dialog = cls(parent, values_getter=values_getter, item_label=item_label)
         dialog.setWindowTitle(title)
         dialog.resize(450, 300)
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -895,7 +915,14 @@ class QueryDialog(QDialog):
                 "concept",
                 editable=True,
             ),
-            BulkConceptFilter(self, "Concepts", self._kb_concepts_getter),
+            BulkValueFilter(
+                self,
+                "Concepts",
+                self._kb_concepts_getter,
+                "concept",
+                "Concept",
+                result_cls=ConceptInConstraintResult,
+            ),
             ConceptDescFilter(
                 self,
                 "Concept (+ descendants)",
@@ -908,6 +935,13 @@ class QueryDialog(QDialog):
                 self._video_sequence_names_getter,
                 "video_sequence_name",
                 editable=True,
+            ),
+            BulkValueFilter(
+                self,
+                "Video sequence names",
+                self._video_sequence_names_getter,
+                "video_sequence_name",
+                "Video sequence name",
             ),
             SimpleTextFilter(self, "Chief scientist", "chief_scientist"),
             SimpleTextFilter(self, "Platform", "camera_platform"),

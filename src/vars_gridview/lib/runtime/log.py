@@ -53,7 +53,7 @@ class AppLogger:
         # File handler - everything (DEBUG+)
         # Local wall-clock date on purpose, to match the local timestamps
         # (`%(asctime)s`) written inside the file.
-        log_file = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.txt"  # noqa: DTZ005
+        log_file = log_dir / f"{datetime.now().strftime('%Y-%m-%d')}.txt"
         self._file_handler = logging.FileHandler(str(log_file))
         self._file_handler.setLevel(logging.DEBUG)
         self._file_handler.setFormatter(fmt)
