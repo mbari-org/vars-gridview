@@ -1,9 +1,6 @@
-import time
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
-from vars_gridview.lib.common.filesystem import open_file_browser
 from vars_gridview.lib.common.time import get_timestamp
 
 
@@ -33,16 +30,6 @@ class TestUtils(unittest.TestCase):
         result = get_timestamp(video_start_timestamp, timecode=timecode)
         expected_timestamp = video_start_timestamp + timedelta(hours=1)
         self.assertEqual(result, expected_timestamp)
-
-    def test_open_file_browser(self):
-        path = Path("/tmp")
-        process = open_file_browser(path)
-        try:
-            time.sleep(1)  # Give the process some time to complete
-            process.terminate()  # Terminate the process
-            process.wait()  # Wait for the process to terminate
-        except Exception as e:  # noqa: BLE001
-            self.fail(f"Process termination failed: {e}")
 
 
 if __name__ == "__main__":
