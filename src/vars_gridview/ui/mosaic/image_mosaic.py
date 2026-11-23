@@ -783,6 +783,11 @@ class ImageMosaic(QtCore.QObject):
             rw for rw in self._rect_widgets if id(rw) not in seen
         ]
         self.render_mosaic()
+        # The best matches are at the top: show them. The view used to stay
+        # where the user had scrolled to right-click, i.e. on middling ones.
+        scroll_bar = self._graphics_view.verticalScrollBar()
+        if scroll_bar is not None:
+            scroll_bar.setValue(scroll_bar.minimum())
 
     def _on_similarity_unavailable(self, message: str) -> None:
         if self._dialog_parent is None:

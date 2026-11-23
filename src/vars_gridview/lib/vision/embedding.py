@@ -189,7 +189,14 @@ class HttpEmbedding(Embedding):
 
     @staticmethod
     def _encode_png_bytes(image: np.ndarray) -> bytes:
-        """Return PNG-encoded bytes for an image array."""
+        """Return PNG-encoded bytes for an RGB image array.
+
+        ``cv2.imencode`` takes BGR, so the channels are reversed first.
+        Encoding the RGB array as it was swapped red and blue in every image
+        sent: an orange animal reached the model blue. Those vectors matched
+        the VARS vector database's vector of the same box at a median cosine
+        of only 0.82 (DINOv3), against 0.993 with the colours right.
+        """
         array = np.asarray(image)
         if array.ndim != 3 or array.shape[2] != 3:
             raise RuntimeError(
@@ -197,7 +204,7 @@ class HttpEmbedding(Embedding):
             )
         if array.dtype != np.uint8:
             array = np.clip(array, 0, 255).astype(np.uint8)
-        array = np.ascontiguousarray(array)
+        array = np.ascontiguousarray(array[:, :, ::-1])  # RGB -> BGR for OpenCV
         ok, encoded = cv2.imencode(".png", array)
         if not ok:
             raise RuntimeError("Failed to PNG-encode image for embedding request")

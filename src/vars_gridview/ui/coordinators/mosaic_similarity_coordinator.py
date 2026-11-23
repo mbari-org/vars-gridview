@@ -153,10 +153,12 @@ class MosaicSimilarityCoordinator(QtCore.QObject):
         )
         self._apply_order([rect_widgets[i] for i in order])
         if self._status_callback is not None:
+            ranked = len(rect_widgets) - missing
             self._status_callback(
-                f"{missing:,} tiles without an embedding yet were placed last"
+                f"Sorted by similarity: {ranked:,} of {len(rect_widgets):,} tiles "
+                f"ranked; {missing:,} without an embedding yet are after them"
                 if missing
-                else "Sorted by similarity"
+                else f"Sorted by similarity: all {ranked:,} tiles ranked"
             )
 
     def _unavailable(self, message: str) -> None:
