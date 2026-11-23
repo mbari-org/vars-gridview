@@ -191,6 +191,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._detail_pane = DetailPaneCoordinator(
             box_handler_getter=lambda: self.box_handler,
             selected_rect_getter=lambda: self.last_selected_rect,
+            display_context_getter=lambda: self.image_mosaic.display_context,
+            frame_loaded_callback=self.image_mosaic.remember_frame_colour,
         )
         self._rect_interaction = RectInteractionCoordinator(
             parent=self,
@@ -235,6 +237,10 @@ class MainWindow(QtWidgets.QMainWindow):
             delete_callback=self._delete_from_box,
         )
         self.image_mosaic.stats_changed.connect(self._on_mosaic_stats_changed)
+        controls = self.ui.mosaicControlsBar
+        controls.filtersChanged.connect(self.image_mosaic.set_filters)
+        controls.displayChanged.connect(self._on_display_adjustment_changed)
+        self.image_mosaic.filter_status_changed.connect(controls.set_filter_status)
         self.image_mosaic.mosaic_stage_started.connect(self._query_progress.begin_stage)
         self.image_mosaic.mosaic_stage_progress.connect(
             self._query_progress.on_stage_progress
@@ -313,6 +319,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self._settings.embedding_model_name.valueChanged.connect(
             self._embedding_lifecycle.on_embedding_config_changed
         )
+        # Stored vectors don't need the embedding service: refetch whenever
+        # what they depend on changes, even while the service is down.
+        for setting in (
+            self._settings.embeddings_enabled,
+            self._settings.embedding_model_name,
+            self._settings.vector_db_enabled,
+            self._settings.vector_db_url,
+            self._settings.vector_db_collection,
+        ):
+            setting.valueChanged.connect(
+                lambda _value: self.image_mosaic.fetch_stored_embeddings()
+            )
 
     def _build_settings_dialog(self) -> SettingsDialog:
         """Create and register all settings tabs."""
@@ -715,7 +733,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Status": "Ready",
             }
         )
+        self._refresh_filter_labels()
         self._query_progress.mark_done()
+
+    def _refresh_filter_labels(self) -> None:
+        """Offer the labels now in the results (with counts) in the filter."""
+        self.ui.mosaicControlsBar.set_labels(self.image_mosaic.label_counts())
+
+    def _on_display_adjustment_changed(self, adjustment) -> None:
+        self.image_mosaic.set_display_adjustment(adjustment)
+        self._detail_pane.refresh_display()
 
     def _change_concept_from_box(
         self,
@@ -761,10 +788,12 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot(str)
     def _on_annotation_operation_finished(self, _description: str) -> None:
         self._annotation_presenter.on_finished()
+        self._refresh_filter_labels()  # labels or tiles may have changed
 
     @QtCore.pyqtSlot(str)
     def _on_annotation_operation_failed(self, message: str) -> None:
         self._annotation_presenter.on_failed(message)
+        self._refresh_filter_labels()
 
     @QtCore.pyqtSlot(dict)
     def _on_mosaic_stats_changed(self, stats: dict[str, str]) -> None:
@@ -1047,6 +1076,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def _apply_embedding_model(self, model: "Embedding | None") -> None:
         if self.image_mosaic is not None:
             self.image_mosaic.update_embedding_model(model)
+            self.image_mosaic.fetch_stored_embeddings()
             if model is not None:
                 self.image_mosaic.precompute_embeddings_async()
 

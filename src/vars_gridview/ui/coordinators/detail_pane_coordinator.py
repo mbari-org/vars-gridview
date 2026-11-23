@@ -11,10 +11,11 @@ from PyQt6 import QtCore
 
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.runtime.runnables import Worker
+from vars_gridview.lib.vision.display_adjust import brightness_contrast
 
 if TYPE_CHECKING:
     from vars_gridview.lib.annotation.box_handler import BoxHandler
-    from vars_gridview.ui.mosaic.rect_widget import RectWidget
+    from vars_gridview.ui.mosaic.rect_widget import DisplayContext, RectWidget
 
 
 class DetailPaneCoordinator(QtCore.QObject):
@@ -25,12 +26,64 @@ class DetailPaneCoordinator(QtCore.QObject):
         *,
         box_handler_getter: Callable[[], BoxHandler | None],
         selected_rect_getter: Callable[[], RectWidget | None],
+        display_context_getter: Callable[[], DisplayContext | None] | None = None,
+        frame_loaded_callback: Callable[[RectWidget, np.ndarray], None] | None = None,
     ) -> None:
         super().__init__()
         self._box_handler_getter = box_handler_getter
         self._selected_rect_getter = selected_rect_getter
+        self._display_context_getter = display_context_getter or (lambda: None)
+        # Told about every real (not placeholder) frame shown, e.g. so tiles
+        # from that frame can use its whole-frame colour correction.
+        self._frame_loaded_callback = frame_loaded_callback
         self._detail_request_generation = 0
         self._current_detail_image: np.ndarray | None = None
+        # The frame as loaded (BGR, unadjusted), to redraw when the view
+        # adjustments change.
+        self._raw_detail_image: np.ndarray | None = None
+        self._raw_detail_rect: RectWidget | None = None
+
+    def _displayed(self, bgr: np.ndarray, rect: RectWidget | None) -> np.ndarray:
+        """*bgr* with the current view adjustments that make sense on a whole
+        frame: colour correction (with the frame's own measurement) and
+        brightness/contrast. Fringes and sharpening are tile-scale and left
+        out here."""
+        context = self._display_context_getter()
+        if context is None or rect is None:
+            return bgr
+        adjustment = context.adjustment
+        if adjustment.colour_correct:
+            try:
+                bgr = context.corrector.apply(bgr, rect.frame_key)
+            except Exception as exc:  # noqa: BLE001 -- show the original instead
+                LOGGER.error(f"Colour correction failed for the image view: {exc}")
+        return brightness_contrast(bgr, adjustment.brightness, adjustment.contrast)
+
+    def _set_detail_image(self, box_handler: BoxHandler, bgr: np.ndarray) -> None:
+        rgb_image = np.ascontiguousarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+        # pyqtgraph's ImageItem wraps this buffer via a raw pointer
+        # (pyqtgraph.functions.ndarray_to_qimage) and depends on a dynamic
+        # `qimage.data = arr` attribute to keep it alive Qt-side. Hold our own
+        # strong reference too so that mechanism failing (or a repaint
+        # queued against a since-replaced image) can't leave Qt painting from
+        # freed memory.
+        self._current_detail_image = rgb_image
+        box_handler.roi_detail.setImage(rgb_image)
+
+    def refresh_display(self) -> None:
+        """Redraw the shown frame after the view adjustments changed."""
+        box_handler = self._box_handler_getter()
+        if box_handler is None or self._raw_detail_image is None:
+            return
+        selected = self._selected_rect_getter()
+        # Another tile from the same frame reuses the loaded image.
+        if selected is None or self._raw_detail_rect is None:
+            return
+        if selected.frame_key != self._raw_detail_rect.frame_key:
+            return
+        self._set_detail_image(
+            box_handler, self._displayed(self._raw_detail_image, self._raw_detail_rect)
+        )
 
     @staticmethod
     def rect_source_key(
@@ -166,17 +219,19 @@ class DetailPaneCoordinator(QtCore.QObject):
         if box_handler is None:
             return
 
-        rgb_image = np.ascontiguousarray(
-            cv2.cvtColor(rect_full_image, cv2.COLOR_BGR2RGB)
-        )
-        # pyqtgraph's ImageItem wraps this buffer via a raw pointer
-        # (pyqtgraph.functions.ndarray_to_qimage) and depends on a dynamic
-        # `qimage.data = arr` attribute to keep it alive Qt-side. Hold our own
-        # strong reference too so that mechanism failing (or a repaint
-        # queued against a since-replaced image) can't leave Qt painting from
-        # freed memory.
-        self._current_detail_image = rgb_image
-        box_handler.roi_detail.setImage(rgb_image)
+        if is_placeholder:
+            self._raw_detail_image = None
+            self._raw_detail_rect = None
+            self._set_detail_image(box_handler, rect_full_image)
+        else:
+            self._raw_detail_image = rect_full_image
+            self._raw_detail_rect = rect
+            if self._frame_loaded_callback is not None:
+                try:
+                    self._frame_loaded_callback(rect, rect_full_image)
+                except Exception as exc:  # noqa: BLE001
+                    LOGGER.error(f"Frame-loaded callback failed: {exc}")
+            self._set_detail_image(box_handler, self._displayed(rect_full_image, rect))
         if needs_autorange:
             box_handler.view_box.autoRange()
 

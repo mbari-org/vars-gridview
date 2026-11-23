@@ -121,6 +121,16 @@ class EmbeddingLifecycleCoordinator(QtCore.QObject):
     def _on_embedding_model_error(self, err: tuple) -> None:
         message = str(err[1]) if len(err) > 1 else "Unknown error"
         LOGGER.error(f"Could not initialize embedding service: {message}")
+        if self._settings.vector_db_enabled.value:
+            # Not fatal: most tiles' embeddings come from the vector database.
+            QtWidgets.QMessageBox.warning(
+                self._dialog_parent,
+                "Embedding service unavailable",
+                f"Could not connect to the embedding service: {message}\n\n"
+                "Embeddings stored in the VARS vector database will still be "
+                "used for Find similar; tiles without one are placed last.",
+            )
+            return
         QtWidgets.QMessageBox.critical(
             self._dialog_parent,
             "Error",

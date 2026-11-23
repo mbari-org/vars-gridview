@@ -22,6 +22,7 @@ from vars_gridview.lib.annotation.association import BoundingBoxAssociation
 from vars_gridview.lib.config.constants import get_settings
 from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.lib.sorting.sort_methods import SortMethod, SortMethodGroup
 from vars_gridview.services.localization_store import LocalizationStore
 from vars_gridview.services.mosaic_pipeline import MosaicPipeline
@@ -33,6 +34,7 @@ from vars_gridview.ui.coordinators.mosaic_load_coordinator import MosaicLoadCoor
 from vars_gridview.ui.coordinators.mosaic_roi_loading_coordinator import (
     MosaicRoiLoadingCoordinator,
 )
+from vars_gridview.ui.coordinators.mosaic_rubber_band import MosaicRubberBandSelector
 from vars_gridview.ui.coordinators.mosaic_selection_coordinator import (
     MosaicSelectionCoordinator,
 )
@@ -43,11 +45,14 @@ from vars_gridview.ui.coordinators.mosaic_tile_action_coordinator import (
     MosaicTileActionCoordinator,
 )
 from vars_gridview.ui.mosaic.mosaic_view import MosaicView, MosaicVisibilityFilters
-from vars_gridview.ui.mosaic.rect_widget import RectWidget
+from vars_gridview.ui.mosaic.rect_widget import DisplayContext, RectWidget
 from vars_gridview.ui.mosaic.rect_widget_factory import RectWidgetFactory
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from vars_gridview.lib.m3.clients import AnnosaurusClient, VampireSquidClient
+    from vars_gridview.lib.vision.display_adjust import DisplayAdjustment
     from vars_gridview.lib.vision.embedding import Embedding
     from vars_gridview.services.roi_service import RoiService
 
@@ -173,6 +178,8 @@ class ImageMosaic(QtCore.QObject):
         str, int, int
     )  # stage key, current, maximum
     rect_widgets_removed = QtCore.pyqtSignal(list)  # widgets removed from the mosaic
+    # shown, total, {label: tiles hidden by the confidence range}
+    filter_status_changed = QtCore.pyqtSignal(int, int, dict)
 
     def __init__(
         self,
@@ -225,6 +232,30 @@ class ImageMosaic(QtCore.QObject):
         self.hide_unlabeled = False
         self.hide_training = False
         self.hide_nontraining = False
+        # Filter bar: show only this label (None = all) / confidence range.
+        self.label_filter: str | None = None
+        self.min_confidence = 0.0
+        self.max_confidence = 1.0
+
+        # How tiles are drawn (colour correction etc.), shared by all tiles.
+        self._display_context = DisplayContext()
+
+        # Drag a rectangle to select / deselect tiles.
+        self._rubber_band = MosaicRubberBandSelector(
+            parent=self,
+            graphics_view=graphics_view,
+            selection_model=self.selection_model,
+            visible_widgets_getter=lambda: self._visible_widgets,
+        )
+
+        # Load on-screen tiles first: re-prioritise shortly after scrolling.
+        self._prioritize_timer = QtCore.QTimer(self)
+        self._prioritize_timer.setSingleShot(True)
+        self._prioritize_timer.setInterval(100)
+        self._prioritize_timer.timeout.connect(self._prioritize_visible_loading)
+        scroll_bar = graphics_view.verticalScrollBar()
+        if scroll_bar is not None:
+            scroll_bar.valueChanged.connect(lambda _v: self._prioritize_timer.start())
 
         # Non-Qt data store backing metadata and association groups.
         self.store = LocalizationStore()
@@ -235,6 +266,14 @@ class ImageMosaic(QtCore.QObject):
         self.n_images = 0
         self.n_localizations = 0
         self._embedding_generation = 0
+        # Which model's vectors the tiles hold (a vector-database vector name
+        # == embedding-service model name). Embeddings are cleared only when
+        # this changes, not each time the service connection is re-made.
+        self._embedding_space: str | None = None
+        self._results_generation = 0  # bumped per populate()
+        self._all_rois_loaded = False
+        self._vector_store = None
+        self._vector_store_config: tuple[str, str] | None = None
         self._current_build_stage_key: str | None = None
         self._load_coordinator = MosaicLoadCoordinator(parent=self)
         self._load_coordinator.stage_progress.connect(self._on_load_stage_progress)
@@ -251,8 +290,9 @@ class ImageMosaic(QtCore.QObject):
             parent=self,
             dialog_parent=self._dialog_parent,
             rect_widgets_getter=lambda: self._rect_widgets,
-            apply_sorted_indices=self._apply_sorted_indices,
+            apply_order=self._apply_order,
             sort_unavailable_callback=self._on_similarity_unavailable,
+            status_callback=lambda text: self.stats_changed.emit({"Status": text}),
         )
         self._embedding = MosaicEmbeddingCoordinator(parent=self)
         self._embedding_precompute_total = 0
@@ -351,6 +391,8 @@ class ImageMosaic(QtCore.QObject):
                 build stage; also passed on to ROI image loading.
         """
         # Clear existing widgets
+        self._results_generation += 1
+        self._all_rois_loaded = False
         self._roi_loading.cancel_pending()
         self._selection.reset()
         old_widgets = list(self._rect_widgets)
@@ -503,6 +545,8 @@ class ImageMosaic(QtCore.QObject):
             on_complete=self._on_all_roi_loaded,
             cancel_event=cancel_event,
         )
+        # Stored embeddings need no images: fetch them while tiles load.
+        self.fetch_stored_embeddings()
 
         self._show_roi_creation_failures(failed_association_uuids)
 
@@ -520,6 +564,7 @@ class ImageMosaic(QtCore.QObject):
                     embedding_model=self._embedding_model,
                     roi_service=self._roi_service,
                 )
+                rw.set_display_context(self._display_context)
                 rect_widgets.append(rw)
             except Exception as exc:  # noqa: BLE001
                 assoc = spec.associations[spec.association_index]
@@ -594,18 +639,113 @@ class ImageMosaic(QtCore.QObject):
         self.mosaic_stage_progress.emit("embeddings", total, total)
 
     def update_embedding_model(self, embedding_model: Embedding | None) -> None:
-        """Replace the active embedding model and invalidate cached embeddings."""
+        """Replace the active embedding model. Cached embeddings are cleared
+        only if the model *name* changed: reconnecting to the same model (or
+        the service going away) keeps them, including ones from the VARS
+        vector database."""
         model_changed = self._embedding_model is not embedding_model
         self._embedding_model = embedding_model
-        if model_changed:
-            self._embedding_generation += 1
         self._embedding.on_model_changed(
             model_changed=model_changed,
             has_model=embedding_model is not None,
         )
         for rect_widget in self._rect_widgets:
             rect_widget.update_embedding_model(embedding_model)
-            rect_widget.invalidate_embedding_cache()
+        name = getattr(embedding_model, "model_name", None)
+        if name is not None:
+            self._set_embedding_space(name)
+
+    def _set_embedding_space(self, name: str) -> None:
+        if name == self._embedding_space:
+            return
+        if self._embedding_space is not None:
+            for rect_widget in self._rect_widgets:
+                rect_widget.invalidate_embedding_cache()
+        self._embedding_space = name
+        self._embedding_generation += 1
+
+    def _vector_store_for(self, url: str, collection: str):
+        from vars_gridview.lib.vision.vector_store import VarsVectorStore
+
+        if self._vector_store is None or self._vector_store_config != (url, collection):
+            self._vector_store = VarsVectorStore(url, collection)
+            self._vector_store_config = (url, collection)
+        return self._vector_store
+
+    def fetch_stored_embeddings(self) -> None:
+        """Give tiles the embeddings the VARS vector database already holds
+        for them (see :mod:`vars_gridview.lib.vision.vector_store`); the rest
+        are computed by the embedding service as before."""
+        from vars_gridview.lib.vision.vector_store import BoxQuery
+
+        settings = self._settings
+        # Independent of "embeddings enabled", which only controls computing
+        # embeddings with the embedding service: stored ones need no service,
+        # so they're used whenever the vector database option is on.
+        if not settings.vector_db_enabled.value:
+            return
+        name = settings.embedding_model_name.value.strip()
+        url = settings.vector_db_url.value.strip()
+        collection = settings.vector_db_collection.value.strip()
+        if not (name and url and collection):
+            return
+        self._set_embedding_space(name)
+        queries = []
+        for rect_widget in self._rect_widgets:
+            if rect_widget.has_cached_embedding:
+                continue
+            association = rect_widget.association
+            queries.append(
+                BoxQuery(
+                    rect_widget.association_uuid,
+                    association.x,
+                    association.y,
+                    association.width,
+                    association.height,
+                )
+            )
+        if not queries:
+            return
+        store = self._vector_store_for(url, collection)
+        stamp = (self._embedding_generation, self._results_generation)
+        asked = len(queries)
+        worker = Worker(store.fetch, queries, name)  # plain data only
+        worker.signals.result.connect(
+            lambda result, stamp=stamp, asked=asked: self._on_stored_embeddings(
+                result, stamp, asked, store.description
+            )
+        )
+        worker.signals.error.connect(
+            lambda err, where=store.description: self._on_stored_embeddings_failed(
+                err, where
+            )
+        )
+        QtCore.QThreadPool.globalInstance().start(worker)
+
+    def _on_stored_embeddings(
+        self, result: tuple, stamp: tuple[int, int], asked: int, where: str
+    ) -> None:
+        if stamp != (self._embedding_generation, self._results_generation):
+            return  # another page or model since
+        vectors, stale = result
+        used = 0
+        for rect_widget in self._rect_widgets:
+            vector = vectors.get(rect_widget.association_uuid)
+            if vector is not None and not rect_widget.has_cached_embedding:
+                rect_widget.cache_embedding(vector)
+                used += 1
+        LOGGER.info(
+            f"Embeddings from the VARS vector database {where}: {used:,} of {asked:,} "
+            f"tiles ({stale:,} skipped: box edited since it was stored)"
+        )
+        self.stats_changed.emit({"Stored embeddings": f"{used:,} / {asked:,}"})
+        if self._all_rois_loaded and self._embedding_model is not None:
+            self.precompute_embeddings_async()  # only the ones still missing
+
+    def _on_stored_embeddings_failed(self, err: tuple, where: str) -> None:
+        message = str(err[1]) if len(err) > 1 else "Unknown error"
+        LOGGER.warning(f"VARS vector database {where} unavailable: {message}")
+        self.stats_changed.emit({"Stored embeddings": "unavailable"})
 
     def precompute_embeddings_async(self) -> None:
         """Warm tile embeddings in the background to avoid on-demand UI stalls."""
@@ -618,13 +758,20 @@ class ImageMosaic(QtCore.QObject):
         )
 
     def _on_all_roi_loaded(self) -> None:
+        self._all_rois_loaded = True
         if self._embedding_model is not None:
             # Compute embeddings in a single worker after all ROI images are ready.
             self.precompute_embeddings_async()
 
-    def _apply_sorted_indices(self, sorted_indices: list[int]) -> None:
-        current = list(self._rect_widgets)
-        self._rect_widgets = [current[idx] for idx in sorted_indices]
+    def _apply_order(self, ordered: list[RectWidget]) -> None:
+        """Reorder tiles to *ordered*, onto whatever the grid holds now: tiles
+        gone since are dropped, any not in *ordered* keep their place after."""
+        present = {id(rw) for rw in self._rect_widgets}
+        head = [rw for rw in ordered if id(rw) in present]
+        seen = {id(rw) for rw in head}
+        self._rect_widgets = head + [
+            rw for rw in self._rect_widgets if id(rw) not in seen
+        ]
         self.render_mosaic()
 
     def _on_similarity_unavailable(self, message: str) -> None:
@@ -689,15 +836,26 @@ class ImageMosaic(QtCore.QObject):
         """
         Load images + annotations and populate the mosaic
         """
-        rect_widgets_to_render = self._mosaic_view.select_visible_widgets(
+        filtered = self._mosaic_view.apply_filters(
             all_widgets=self._rect_widgets,
             filters=MosaicVisibilityFilters(
                 hide_labeled=self.hide_labeled,
                 hide_unlabeled=self.hide_unlabeled,
                 hide_training=self.hide_training,
                 hide_nontraining=self.hide_nontraining,
+                label=self.label_filter,
+                min_confidence=self.min_confidence,
+                max_confidence=self.max_confidence,
             ),
         )
+        rect_widgets_to_render = filtered.visible
+        # A tile that is filtered out can't stay selected: the next action
+        # would change it unseen.
+        if self.selection_model.count:
+            shown = {id(w) for w in rect_widgets_to_render}
+            kept = [w for w in self.selection_model.selected if id(w) in shown]
+            if len(kept) != self.selection_model.count:
+                self.selection_model.set_selection(kept)
 
         self._visible_widgets = rect_widgets_to_render
         render_result = self._mosaic_view.render(
@@ -706,6 +864,13 @@ class ImageMosaic(QtCore.QObject):
         )
         self._n_columns = render_result.columns
 
+        self.filter_status_changed.emit(
+            len(rect_widgets_to_render),
+            len(self._rect_widgets),
+            filtered.hidden_by_confidence,
+        )
+        self._prioritize_timer.start()
+
         # Update the stats
         self.stats_changed.emit(
             {
@@ -713,6 +878,56 @@ class ImageMosaic(QtCore.QObject):
                 "Images": str(self.n_images),
             }
         )
+
+    # -- filter bar / view adjustments ----------------------------------------
+
+    def set_filters(
+        self, label: str | None, min_confidence: float, max_confidence: float
+    ) -> None:
+        """Show only tiles with *label* (None = all) whose confidence is in
+        [min_confidence, max_confidence]; nothing is re-queried."""
+        self.label_filter = label
+        self.min_confidence = float(min_confidence)
+        self.max_confidence = float(max_confidence)
+        self.render_mosaic()
+
+    def label_counts(self) -> dict[str, int]:
+        """Tiles per label in the loaded results."""
+        counts: dict[str, int] = {}
+        for rect_widget in self._rect_widgets:
+            label = rect_widget.association.text_label
+            counts[label] = counts.get(label, 0) + 1
+        return counts
+
+    @property
+    def display_context(self) -> DisplayContext:
+        return self._display_context
+
+    def set_display_adjustment(self, adjustment: DisplayAdjustment) -> None:
+        """Redraw tiles with *adjustment*; only on-screen tiles are redone now,
+        the rest as they're scrolled to (see DisplayContext)."""
+        if self._display_context.set_adjustment(adjustment):
+            viewport = self._graphics_view.viewport()
+            if viewport is not None:
+                viewport.update()
+
+    def remember_frame_colour(
+        self, rect_widget: RectWidget, full_image: np.ndarray
+    ) -> None:
+        """Measure colour correction on a whole frame (just loaded for the
+        image view) and redraw every tile cropped from it with that."""
+        key = rect_widget.frame_key
+        if self._display_context.corrector.has_frame(key):
+            return
+        self._display_context.corrector.remember_frame(key, full_image)
+        if self._display_context.adjustment.colour_correct:
+            for other in self._rect_widgets:
+                if other.frame_key == key:
+                    other.set_display_context(self._display_context)
+
+    def _prioritize_visible_loading(self) -> None:
+        near = self._mosaic_view.widgets_near_viewport(self._visible_widgets, 1.0)
+        self._roi_loading.prioritize(near)
 
     def get_selected(self) -> list[RectWidget]:
         """Return the list of currently selected tiles."""

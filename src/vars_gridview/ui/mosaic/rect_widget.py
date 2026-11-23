@@ -20,11 +20,76 @@ from vars_gridview.lib.config.constants import ICONS_DIR, get_settings
 from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.runtime.log import LOGGER
 from vars_gridview.lib.runtime.runnables import Worker
+from vars_gridview.lib.vision.display_adjust import (
+    ColourCorrector,
+    DisplayAdjustment,
+    adjust_source,
+    adjust_thumbnail,
+)
 from vars_gridview.lib.vision.image_utils import color_for_concept
 from vars_gridview.services.roi_service import RoiService
 
 if TYPE_CHECKING:
     from vars_gridview.lib.vision.embedding import Embedding
+
+
+class DisplayContext:
+    """How tiles are drawn, shared by every tile of a mosaic.
+
+    Changing it bumps :attr:`version`; a tile whose pixmap was built for an
+    older version rebuilds it the next time it is *painted*. Qt only paints
+    tiles that are on screen, so turning on colour correction for a page of
+    thousands of tiles costs only the visible ones, and the rest are done as
+    they're scrolled to.
+    """
+
+    def __init__(self) -> None:
+        self.adjustment = DisplayAdjustment()
+        self.corrector = ColourCorrector()
+        self.version = 0
+
+    def set_adjustment(self, adjustment: DisplayAdjustment) -> bool:
+        """Apply *adjustment*; True if anything changed."""
+        if adjustment == self.adjustment:
+            return False
+        self.adjustment = adjustment
+        self.corrector.set_local_contrast(adjustment.local_contrast)
+        self.version += 1
+        return True
+
+    def invalidate(self) -> None:
+        """Rebuild every tile on its next paint (e.g. new frame colour data)."""
+        self.version += 1
+
+
+_DEFAULT_DISPLAY_CONTEXT = DisplayContext()
+_BLANK_PIXMAPS: dict[tuple[int, int], QtGui.QPixmap] = {}
+_CHECKMARK_PIXMAPS: dict[tuple[int, int], QtGui.QPixmap] = {}
+
+
+def _blank_pixmap(width: int, height: int) -> QtGui.QPixmap:
+    """One shared placeholder per size, instead of building (resize, pad,
+    convert) a black image for every tile of a large page."""
+    key = (max(1, int(width)), max(1, int(height)))
+    pixmap = _BLANK_PIXMAPS.get(key)
+    if pixmap is None:
+        pixmap = QtGui.QPixmap(*key)
+        pixmap.fill(QtGui.QColor(25, 35, 45))
+        _BLANK_PIXMAPS[key] = pixmap
+    return pixmap
+
+
+def _checkmark_pixmap(width: int, height: int) -> QtGui.QPixmap:
+    """The training checkmark, loaded and scaled once per size rather than on
+    every paint of every training tile."""
+    key = (max(1, int(width)), max(1, int(height)))
+    pixmap = _CHECKMARK_PIXMAPS.get(key)
+    if pixmap is None:
+        pixmap = QtGui.QPixmap(str(ICONS_DIR / "checkmark.png")).scaled(
+            key[0], key[1], QtCore.Qt.AspectRatioMode.KeepAspectRatio
+        )
+        _CHECKMARK_PIXMAPS[key] = pixmap
+    return pixmap
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
@@ -96,15 +161,21 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         self.roi = None
         self.pic = None
+        self._display = _DEFAULT_DISPLAY_CONTEXT
+        # Pixmap needs (re)building from self.roi at the next paint; and the
+        # display version it was built for.
+        self._pic_dirty = False
+        self._pic_version = -1
         self._roi_loaded = False
         self._embedding = None
+        self._embedding_box: tuple | None = None  # box the embedding was made for
         self._embedding_refresh_generation = 0
         if preload_roi:
             self.update_roi_pic()
         else:
             # Paint a cheap placeholder immediately, then fetch ROI asynchronously.
             self.roi = np.zeros((self.picdims[1], self.picdims[0], 3), dtype=np.uint8)
-            self.pic = self.getpic(self.roi)
+            self.pic = _blank_pixmap(self.picdims[0], self.picdims[1])
 
         self._clicked_slot = clicked_slot
         self._similarity_sort_slot = similarity_sort_slot
@@ -260,10 +331,26 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def invalidate_embedding_cache(self) -> None:
         """Clear any cached embedding so it can be recomputed lazily."""
         self._embedding = None
+        self._embedding_box = None
 
     def cache_embedding(self, embedding) -> None:
         """Store an externally computed embedding payload for this tile."""
         self._embedding = embedding
+        self._embedding_box = self._current_box()
+
+    def _current_box(self) -> tuple | None:
+        try:
+            return tuple(self.association.box)
+        except Exception:  # noqa: BLE001
+            return None
+
+    def _invalidate_embedding_if_box_changed(self) -> None:
+        """A newly loaded image only makes the embedding stale if the box
+        moved: the first load of a tile whose embedding came from the vector
+        database (or was computed earlier) must not throw it away."""
+        if self._embedding is not None and self._embedding_box == self._current_box():
+            return
+        self.invalidate_embedding_cache()
 
     @property
     def roi_batch_generation(self) -> int:
@@ -289,9 +376,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         if not self._roi_loaded or self.roi is None:
             raise RuntimeError("ROI image is not loaded yet; cannot compute embedding")
 
-        self._embedding = self._embedding_model.embed(
-            self.roi[:, :, ::-1],
-        )
+        self.cache_embedding(self._embedding_model.embed(self.roi[:, :, ::-1]))
 
     @staticmethod
     def _embed_roi(embedding_model: Embedding, roi: np.ndarray):
@@ -315,12 +400,28 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             raise RuntimeError("Failed to fetch ROI image")
         return image
 
+    def set_display_context(self, context: DisplayContext) -> None:
+        """Share *context* (see :class:`DisplayContext`) with this tile."""
+        self._display = context
+        self._pic_dirty = True
+        self.update()
+
+    @property
+    def frame_key(self) -> tuple:
+        """Identifies the frame this tile was cropped from (for per-frame
+        colour correction)."""
+        return (self.source_url, None if self.is_image else self.elapsed_time_millis)
+
+    def _mark_pic_dirty(self) -> None:
+        self._pic_dirty = True
+        self.update()
+
     def update_roi_pic(self):
         self.roi = self.get_roi()
         self._roi_loaded = True
-        self.pic = self.getpic(self.roi)
-        # Invalidate cached embedding; bulk precompute is coordinated by ImageMosaic.
-        self.invalidate_embedding_cache()
+        self._mark_pic_dirty()
+        # Bulk precompute is coordinated by ImageMosaic.
+        self._invalidate_embedding_if_box_changed()
         self.update()
 
     def request_roi_refresh(self, *, debounce: bool = True) -> None:
@@ -373,10 +474,11 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             return
         self.roi = roi
         self._roi_loaded = True
-        self.pic = self.getpic(roi)
-        # Invalidate cached embedding; bulk precompute is coordinated by ImageMosaic.
-        self.invalidate_embedding_cache()
-        self.update()
+        # Built at the next paint: tiles that load off screen cost nothing
+        # until they're scrolled to.
+        self._mark_pic_dirty()
+        # Bulk precompute is coordinated by ImageMosaic.
+        self._invalidate_embedding_if_box_changed()
         self.roiRefreshed.emit(self)
 
     @QtCore.pyqtSlot(tuple)
@@ -388,8 +490,10 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         placeholder = self._make_placeholder_roi()
         self.roi = placeholder
         self._roi_loaded = False
-        self.pic = self.getpic(placeholder)
-        self.invalidate_embedding_cache()
+        self._pic_dirty = False
+        self.pic = self.getpic(placeholder, adjust=False)
+        # A stored (vector database) embedding doesn't need the image; keep it.
+        self._invalidate_embedding_if_box_changed()
         self.update()
         self.roiRefreshed.emit(self)
 
@@ -432,7 +536,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def _apply_async_embedding_refresh(self, generation: int, embedding) -> None:
         if generation != self._embedding_refresh_generation:
             return
-        self._embedding = embedding
+        self.cache_embedding(embedding)
 
     def embedding_distance(self, other: RectWidget) -> float:
         """
@@ -654,15 +758,19 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def sizeHint(self, which, constraint=None):
         return self.boundingRect().size()
 
-    def getpic(self, roi: np.ndarray) -> QtGui.QPixmap:
+    def getpic(self, roi: np.ndarray, *, adjust: bool = True) -> QtGui.QPixmap:
         """
         Get the scaled and padded pixmap for the given ROI.
 
         Fits the ROI into a square of size picdims, scaling it up or down as necessary.
-        Then, pads the ROI with a border to fit the square.
+        Then, pads the ROI with a border to fit the square. With *adjust*, the
+        display adjustments (colour correction, fringes, sharpen,
+        brightness/contrast -- see :class:`DisplayContext`) are applied on the
+        way; the ROI itself is never modified.
 
         Args:
             roi: The ROI to get the pixmap for.
+            adjust: Apply the current display adjustments.
 
         Returns:
             The scaled and padded pixmap.
@@ -686,7 +794,34 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         # Scale the ROI to fit the square
         scale = min(max_width / roi_width, max_height / roi_height)
-        roi = cv2.resize(roi, (0, 0), fx=scale, fy=scale)
+        adjustment = self._display.adjustment if adjust else DisplayAdjustment()
+        if adjustment.needs_source_pixels:
+            # Colour / fringes work on the crop at no more than the tile's
+            # resolution: full detail for a small crop, and a large crop is
+            # shrunk first so the work stays per-tile cheap.
+            if scale < 1:
+                roi = cv2.resize(
+                    roi, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA
+                )
+                upscale = 1.0
+            else:
+                upscale = scale
+            roi = adjust_source(
+                np.ascontiguousarray(roi),
+                adjustment,
+                self._display.corrector,
+                self.frame_key,
+            )
+            if upscale != 1.0:
+                roi = cv2.resize(roi, (0, 0), fx=upscale, fy=upscale)
+        elif scale < 1:
+            roi = cv2.resize(
+                roi, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA
+            )
+        else:
+            roi = cv2.resize(roi, (0, 0), fx=scale, fy=scale)
+        if not adjustment.is_neutral:
+            roi = adjust_thumbnail(roi, adjustment, enlargement=max(scale, 1.0))
 
         # Pad the image with a border
         pad_x = (max_width - roi.shape[1]) // 2
@@ -757,6 +892,19 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             color_for_concept_local(self.text_label),
         )
 
+        # (Re)build the pixmap if the ROI or the display settings changed
+        # since it was made -- only ever for tiles actually being painted.
+        if self._roi_loaded and (
+            self._pic_dirty or self._pic_version != self._display.version
+        ):
+            try:
+                self.pic = self.getpic(self.roi)
+            except Exception as exc:  # noqa: BLE001 -- never fail a paint
+                LOGGER.error(f"Could not render tile {self.association.uuid}: {exc}")
+                self.pic = self.getpic(self.roi, adjust=False)
+            self._pic_dirty = False
+            self._pic_version = self._display.version
+
         # Draw image
         painter.setBackgroundMode(QtCore.Qt.BGMode.TransparentMode)
         painter.drawPixmap(
@@ -767,14 +915,10 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
         # Draw green check mark if marked for training
         if self.is_training:
-            check_mark = QtGui.QPixmap(str(ICONS_DIR / "checkmark.png"))
             check_rect = self.checkmark_rect
-            check_mark = check_mark.scaled(
-                check_rect.width(),
-                check_rect.height(),
-                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+            painter.drawPixmap(
+                check_rect, _checkmark_pixmap(check_rect.width(), check_rect.height())
             )
-            painter.drawPixmap(check_rect, check_mark)
 
         # Set font
         font = QtGui.QFont(

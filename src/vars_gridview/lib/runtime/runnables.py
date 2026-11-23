@@ -103,11 +103,16 @@ class Worker(QRunnable):
             self.signals.result.emit(result)
             del result
         finally:
-            payload = (self._fn, self._args, self._kwargs)
+            signals = self.signals
+            signals.finished.emit()
+            # The signals object goes too: the slots connected to it are often
+            # lambdas that capture a tile, and it would otherwise be freed with
+            # the runnable, here on the pool thread.
+            payload = (self._fn, self._args, self._kwargs, signals)
             self._fn, self._args, self._kwargs = None, (), {}
-            self.signals.release.emit(payload)
-            del payload
-            self.signals.finished.emit()
+            self.signals = None
+            signals.release.emit(payload)
+            del payload, signals
 
 
 __all__ = ["Worker", "WorkerSignals", "enqueue", "start"]

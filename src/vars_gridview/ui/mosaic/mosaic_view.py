@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 from PyQt6 import QtCore, QtWidgets
@@ -19,12 +20,49 @@ class MosaicRenderResult:
 
 @dataclass
 class MosaicVisibilityFilters:
-    """Visibility toggles used to choose which widgets are rendered."""
+    """Visibility toggles used to choose which widgets are rendered.
+
+    ``label`` keeps only tiles showing that label (``None`` = all labels).
+    ``min_confidence``/``max_confidence`` keep only tiles whose association
+    ``confidence`` is in the inclusive range; while the range is narrowed
+    (anything but 0-1), tiles with no confidence at all -- typically
+    human-drawn boxes -- are hidden too.
+    """
 
     hide_labeled: bool = False
     hide_unlabeled: bool = False
     hide_training: bool = False
     hide_nontraining: bool = False
+    label: str | None = None
+    min_confidence: float = 0.0
+    max_confidence: float = 1.0
+
+    @property
+    def confidence_active(self) -> bool:
+        return self.min_confidence > 0.0 or self.max_confidence < 1.0
+
+
+def association_confidence(association: object) -> float | None:
+    """The association's ``confidence`` as a float, or None if absent/invalid."""
+    data = getattr(association, "data", None)
+    if not isinstance(data, dict):
+        return None
+    value = data.get("confidence")
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if math.isnan(number) else number
+
+
+@dataclass
+class VisibilityResult:
+    """Tiles to show, plus what the confidence range alone hid, per label."""
+
+    visible: list
+    hidden_by_confidence: dict[str, int]
 
 
 class MosaicView:
@@ -152,6 +190,9 @@ class MosaicView:
                 rows * rect_widget_height,
             )
             self._graphics_scene.setSceneRect(self._graphics_widget.boundingRect())
+            # Lay out now, so tiles have scene positions straight away (the
+            # on-screen-first loader asks which tiles are in view).
+            self._layout.activate()
         finally:
             self._graphics_view.setUpdatesEnabled(True)
 
@@ -168,7 +209,20 @@ class MosaicView:
         filters: MosaicVisibilityFilters,
     ) -> list:
         """Return widgets that pass current visibility filter toggles."""
+        return self.apply_filters(all_widgets=all_widgets, filters=filters).visible
+
+    @staticmethod
+    def apply_filters(
+        *,
+        all_widgets: list,
+        filters: MosaicVisibilityFilters,
+    ) -> VisibilityResult:
+        """Visible widgets, and per label how many passed every other filter
+        but fell outside the confidence range (so the user can see what the
+        range is hiding)."""
         visible_widgets = []
+        hidden: dict[str, int] = {}
+        lo, hi = filters.min_confidence, filters.max_confidence
         for widget in all_widgets:
             association = getattr(widget, "association", None)
             if association is None:
@@ -183,8 +237,41 @@ class MosaicView:
                 association, "is_training", False
             ):
                 continue
+            label = getattr(association, "text_label", None)
+            if filters.label is not None and label != filters.label:
+                continue
+            if filters.confidence_active:
+                confidence = association_confidence(association)
+                if confidence is None or not (lo <= confidence <= hi):
+                    key = str(label)
+                    hidden[key] = hidden.get(key, 0) + 1
+                    continue
             visible_widgets.append(widget)
-        return visible_widgets
+        return VisibilityResult(visible=visible_widgets, hidden_by_confidence=hidden)
+
+    def widgets_near_viewport(
+        self, visible_widgets: list, margin_screens: float = 1.0
+    ) -> list:
+        """Laid-out widgets on screen first, then those within *margin_screens*
+        screen heights above/below, nearest first."""
+        viewport = self._graphics_view.viewport()
+        if viewport is None or not visible_widgets:
+            return []
+        view_rect = self._graphics_view.mapToScene(viewport.rect()).boundingRect()
+        margin = view_rect.height() * margin_screens
+        top, bottom = view_rect.top(), view_rect.bottom()
+        near = []
+        for widget in visible_widgets:
+            rect = widget.sceneBoundingRect()
+            if rect.bottom() < top - margin or rect.top() > bottom + margin:
+                continue
+            if rect.bottom() >= top and rect.top() <= bottom:
+                distance = 0.0
+            else:
+                distance = min(abs(rect.top() - bottom), abs(top - rect.bottom()))
+            near.append((distance, widget))
+        near.sort(key=lambda pair: pair[0])
+        return [widget for _distance, widget in near]
 
     def ensure_widget_visible_if_needed(self, rect_widget: object) -> None:
         """Scroll view only when `rect_widget` is outside current viewport."""

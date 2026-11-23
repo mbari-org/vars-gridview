@@ -69,6 +69,18 @@ class MosaicRoiLoadingCoordinator(QtCore.QObject):
         self._top_level_on_complete = None
         self._cancel_event = None
 
+    def prioritize(self, rect_widgets: list[RectWidget]) -> None:
+        """Load *rect_widgets* (still waiting) next, in the given order --
+        e.g. the tiles now on screen, so they fill in before ones far away."""
+        if not self._pending or not rect_widgets:
+            return
+        pending_ids = {id(rw) for rw in self._pending}
+        first = [rw for rw in rect_widgets if id(rw) in pending_ids]
+        if not first:
+            return
+        first_ids = {id(rw) for rw in first}
+        self._pending = first + [rw for rw in self._pending if id(rw) not in first_ids]
+
     def start_loading(
         self,
         *,
