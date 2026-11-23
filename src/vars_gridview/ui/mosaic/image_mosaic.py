@@ -180,6 +180,7 @@ class ImageMosaic(QtCore.QObject):
     rect_widgets_removed = QtCore.pyqtSignal(list)  # widgets removed from the mosaic
     # shown, total, {label: tiles hidden by the confidence range}
     filter_status_changed = QtCore.pyqtSignal(int, int, dict)
+    tile_delete_requested = QtCore.pyqtSignal(object)  # RectWidget (right-click)
 
     def __init__(
         self,
@@ -565,6 +566,7 @@ class ImageMosaic(QtCore.QObject):
                     roi_service=self._roi_service,
                 )
                 rw.set_display_context(self._display_context)
+                rw.deleteRequested.connect(self.tile_delete_requested)
                 rect_widgets.append(rw)
             except Exception as exc:  # noqa: BLE001
                 assoc = spec.associations[spec.association_index]

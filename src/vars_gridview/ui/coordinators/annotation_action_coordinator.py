@@ -384,8 +384,31 @@ class AnnotationActionCoordinator:
         )
         return part
 
+    def delete_from_tile(self, rect_widget: RectWidget) -> None:
+        """A tile's right-click "Delete...": the whole selection if that tile
+        is part of it (as in a file browser), otherwise just that tile."""
+        if not self._ensure_annotation_ready() or self._busy():
+            return
+        selected = self._image_mosaic.get_selected()
+        if rect_widget in selected:
+            targets = list(selected)
+        else:
+            self._image_mosaic.select(rect_widget)
+            targets = [rect_widget]
+        count = len(targets)
+        what = "this localization" if count == 1 else f"{count} localizations"
+        confirm = QtWidgets.QMessageBox.question(
+            self._parent,
+            "Confirm Deletion",
+            f"Delete {what}?\nThis operation cannot be undone.",
+            defaultButton=QtWidgets.QMessageBox.StandardButton.No,
+        )
+        if confirm != QtWidgets.QMessageBox.StandardButton.Yes:
+            return
+        self._dispatch_delete(targets)
+
     def delete_from_box(self, rect_widget: RectWidget) -> None:
-        if not self._ensure_annotation_ready():
+        if not self._ensure_annotation_ready() or self._busy():
             return
         self._image_mosaic.select(rect_widget)
         confirm = QtWidgets.QMessageBox.question(
@@ -404,7 +427,7 @@ class AnnotationActionCoordinator:
         concept: str,
         part: str,
     ) -> None:
-        if not self._ensure_annotation_ready():
+        if not self._ensure_annotation_ready() or self._busy():
             return
         controller = self._controller()
         if controller is None:
@@ -419,7 +442,7 @@ class AnnotationActionCoordinator:
         )
 
     def verify_single_from_tile(self, rect_widget: RectWidget) -> None:
-        if not self._ensure_annotation_ready():
+        if not self._ensure_annotation_ready() or self._busy():
             return
         controller = self._controller()
         if controller is None:
@@ -433,7 +456,7 @@ class AnnotationActionCoordinator:
         )
 
     def mark_training_single_from_tile(self, rect_widget: RectWidget) -> None:
-        if not self._ensure_annotation_ready():
+        if not self._ensure_annotation_ready() or self._busy():
             return
         controller = self._controller()
         if controller is None:

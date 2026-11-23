@@ -241,6 +241,9 @@ class MainWindow(QtWidgets.QMainWindow):
         controls.filtersChanged.connect(self.image_mosaic.set_filters)
         controls.displayChanged.connect(self._on_display_adjustment_changed)
         self.image_mosaic.filter_status_changed.connect(controls.set_filter_status)
+        self.image_mosaic.tile_delete_requested.connect(
+            self._annotation_actions.delete_from_tile
+        )
         self.image_mosaic.mosaic_stage_started.connect(self._query_progress.begin_stage)
         self.image_mosaic.mosaic_stage_progress.connect(
             self._query_progress.on_stage_progress

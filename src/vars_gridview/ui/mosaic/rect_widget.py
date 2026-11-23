@@ -101,6 +101,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     label = QtCore.pyqtSignal(object)  # self
     verify = QtCore.pyqtSignal(object)  # self
     markForTraining = QtCore.pyqtSignal(object)  # self
+    deleteRequested = QtCore.pyqtSignal(object)  # self
 
     def __init__(
         self,
@@ -973,9 +974,25 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             lambda: self.similaritySort.emit(self, True)
         )
 
-        # Disable similarity sort options if no embedding model is available
-        no_embedding_model = self._embedding_model is None
-        similarity_sort.setDisabled(no_embedding_model)
-        similarity_sort_same_label.setDisabled(no_embedding_model)
+        # Available when this tile has an embedding (e.g. from the VARS
+        # vector database) or one can be computed: the embedding service is
+        # connected and the image has loaded.
+        can_find_similar = self.has_cached_embedding or (
+            self._embedding_model is not None and self._roi_loaded
+        )
+        similarity_sort.setEnabled(can_find_similar)
+        similarity_sort_same_label.setEnabled(can_find_similar)
+        if not can_find_similar:
+            similarity_sort.setToolTip(
+                "This tile has no embedding: it isn't in the VARS vector "
+                "database and the embedding service isn't on."
+            )
 
+        # Delete: the whole selection if this tile is part of it (as in a
+        # file browser), otherwise just this tile. Asks before deleting.
+        menu.addSeparator()
+        delete_action = menu.addAction("Delete...")
+        delete_action.triggered.connect(lambda: self.deleteRequested.emit(self))
+
+        menu.setToolTipsVisible(True)
         menu.exec(event.screenPos())
