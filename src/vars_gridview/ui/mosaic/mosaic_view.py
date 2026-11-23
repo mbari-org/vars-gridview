@@ -43,7 +43,13 @@ class MosaicVisibilityFilters:
 
 
 def association_confidence(association: object) -> float | None:
-    """The association's ``confidence`` as a float, or None if absent/invalid."""
+    """The association's ``confidence`` on a 0-1 scale, or None if absent/invalid.
+
+    VARS has both scales: ML uploads such as the Piscivore detector store a
+    percentage (``"confidence": 71.0``), others a fraction (0.71). A value
+    above 1 can only be a percentage, so it is divided by 100. (Exactly 1 is
+    read as 1.0; a 1% box is far below any detector's cut-off.)
+    """
     data = getattr(association, "data", None)
     if not isinstance(data, dict):
         return None
@@ -54,7 +60,11 @@ def association_confidence(association: object) -> float | None:
         number = float(value)
     except (TypeError, ValueError):
         return None
-    return None if math.isnan(number) else number
+    if math.isnan(number) or number < 0:
+        return None
+    if number > 1.0:
+        number /= 100.0
+    return min(number, 1.0)
 
 
 @dataclass

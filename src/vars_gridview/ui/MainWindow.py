@@ -294,6 +294,14 @@ class MainWindow(QtWidgets.QMainWindow):
         """Connect UI button and checkbox signals to MainWindow actions."""
         self.ui.discardButton.clicked.connect(self.delete)
         self.ui.clearSelections.clicked.connect(self.clear_selected)
+        # Cmd+A (Ctrl+A on Windows/Linux) selects every tile shown. A text
+        # field with focus (concept box, label filter) keeps Cmd+A for itself:
+        # Qt gives the focused widget first claim on standard shortcuts.
+        self._select_all_shortcut = QtGui.QShortcut(
+            QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.SelectAll), self
+        )
+        self._select_all_shortcut.setContext(QtCore.Qt.ShortcutContext.WindowShortcut)
+        self._select_all_shortcut.activated.connect(self.select_all)
         self.ui.labelSelectedButton.clicked.connect(self.label_selected)
         self.ui.saveFavoriteButton.clicked.connect(self._save_quick_label_favorite)
         self.ui.verifySelectedButton.clicked.connect(self.verify_selected)
@@ -1054,6 +1062,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._annotation_actions.delete_selected()
 
     @QtCore.pyqtSlot()
+    def select_all(self) -> None:
+        if not self.loaded:
+            return
+
+        self.image_mosaic.select_all()
+
     def clear_selected(self):
         if not self.loaded:
             return

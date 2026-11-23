@@ -995,6 +995,10 @@ class ImageMosaic(QtCore.QObject):
         """
         self._selection.select_range(first, last, add=add)
 
+    def select_all(self) -> None:
+        """Select every tile currently shown (filters respected)."""
+        self._selection.select_all()
+
     def clear_selected(self):
         """
         Clear the selection of rect widgets.

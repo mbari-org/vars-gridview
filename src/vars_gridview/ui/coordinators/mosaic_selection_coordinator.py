@@ -63,6 +63,15 @@ class MosaicSelectionCoordinator(QtCore.QObject):
     def clear_selected(self) -> None:
         self._selection_model.clear()
 
+    def select_all(self) -> None:
+        """Select every tile currently shown. Tiles hidden by the hide/label/
+        confidence filters are left out, so the next action can't change
+        anything the user can't see."""
+        visible = list(self._visible_widgets_getter())
+        self._selection_model.set_selection(visible)
+        self._anchor = visible[0] if visible else None
+        self._nav_cursor = visible[-1] if visible else None
+
     def reset(self) -> None:
         """Forget the selection and the Shift anchor (new results loaded)."""
         self._selection_model.clear()
