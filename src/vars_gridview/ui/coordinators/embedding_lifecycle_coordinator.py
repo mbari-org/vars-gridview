@@ -110,11 +110,18 @@ class EmbeddingLifecycleCoordinator(QtCore.QObject):
 
     @QtCore.pyqtSlot(object)
     def _on_embedding_model_ready(self, model) -> None:
-        self._embedding_model = model
-        self._loaded_embedding_config = (
-            self._settings.embedding_service_url.value.strip().rstrip("/"),
-            self._settings.embedding_model_name.value.strip(),
+        # Label the model with the settings it was built from: the settings
+        # may have changed again while it was connecting, and calling it by
+        # the new name would mix two models' vectors under one name.
+        built_from = (
+            str(getattr(model, "base_url", "")).strip().rstrip("/"),
+            str(getattr(model, "model_name", "")).strip(),
         )
+        if built_from != self._current_embedding_config():
+            self._pending_embedding_reload = True  # load the current one next
+            return
+        self._embedding_model = model
+        self._loaded_embedding_config = built_from
         self._apply_model_callback(model)
 
     @QtCore.pyqtSlot(tuple)

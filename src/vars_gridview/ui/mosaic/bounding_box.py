@@ -225,7 +225,11 @@ class BoundingBox(pg.RectROI):
         """
         x, y, w, h = self.get_box()
         self.association.update_data(x=x, y=y, width=w, height=h)
-        self.rect_widget.request_roi_refresh()
+        # The box dragged may belong to another tile of this frame than the
+        # one clicked: refresh the tile(s) actually showing it.
+        refresh = getattr(self.image_mosaic, "refresh_tiles_for_association", None)
+        if refresh is None or not refresh(self.association):
+            self.rect_widget.request_roi_refresh()
 
     def update_label(self) -> None:
         """

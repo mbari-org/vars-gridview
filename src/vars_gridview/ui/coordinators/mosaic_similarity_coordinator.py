@@ -83,6 +83,7 @@ class MosaicSimilarityCoordinator(QtCore.QObject):
         apply_order: Callable[[list[RectWidget]], None],
         sort_unavailable_callback: Callable[[str], None] | None = None,
         status_callback: Callable[[str], None] | None = None,
+        space_getter: Callable[[], str | None] | None = None,
     ) -> None:
         super().__init__(parent)
         self._dialog_parent = dialog_parent
@@ -90,29 +91,45 @@ class MosaicSimilarityCoordinator(QtCore.QObject):
         self._apply_order = apply_order
         self._sort_unavailable_callback = sort_unavailable_callback
         self._status_callback = status_callback
+        # The model whose vectors the grid uses now; vectors of any other
+        # model live in another space and are never ranked against them.
+        self._space_getter = space_getter or (lambda: None)
         self._request = 0
+
+    def _usable(self, rect_widget: RectWidget, space: str | None) -> bool:
+        """The tile has an embedding of its current box, from the current model."""
+        if not rect_widget.has_cached_embedding:
+            return False
+        return space is None or rect_widget.embedding_space == space
 
     def start(self, clicked_rect: RectWidget, same_class_only: bool) -> None:
         """Sort by similarity to *clicked_rect*; embeds it first if needed."""
         self._request += 1
         request = self._request
-        if clicked_rect.has_cached_embedding:
+        space = self._space_getter()
+        if self._usable(clicked_rect, space):
             self._sort(clicked_rect, same_class_only)
             return
         model = getattr(clicked_rect, "_embedding_model", None)
-        if model is None or not clicked_rect.roi_loaded or clicked_rect.roi is None:
+        model_name = getattr(model, "model_name", None)
+        if (
+            model is None
+            or (space is not None and model_name != space)
+            or not clicked_rect.roi_loaded
+            or clicked_rect.roi is None
+        ):
             self._unavailable(
                 "This tile has no embedding: it isn't in the VARS vector "
                 "database and the embedding service isn't available (or the "
                 "image hasn't loaded yet)."
             )
             return
-        box = clicked_rect.association.box
+        box = clicked_rect.roi_box  # the box its image was cropped from
         roi = clicked_rect.roi[:, :, ::-1].copy()  # plain data for the worker
         worker = Worker(model.embed, roi)
         worker.signals.result.connect(
             lambda embedding: self._on_clicked_embedded(
-                request, clicked_rect, tuple(box), embedding, same_class_only
+                request, clicked_rect, box, model_name, embedding, same_class_only
             )
         )
         worker.signals.error.connect(
@@ -121,14 +138,16 @@ class MosaicSimilarityCoordinator(QtCore.QObject):
         QtCore.QThreadPool.globalInstance().start(worker)
 
     def _on_clicked_embedded(
-        self, request, clicked_rect, box, embedding, same_class_only
+        self, request, clicked_rect, box, model_name, embedding, same_class_only
     ) -> None:
         if request != self._request:
             return  # a newer Find similar replaced this one
         if clicked_rect not in self._rect_widgets_getter():
             return  # tile gone (new page, deleted)
-        if tuple(clicked_rect.association.box) == box:
-            clicked_rect.cache_embedding(embedding)
+        space = self._space_getter()
+        if space is not None and model_name != space:
+            return  # the model changed while it was embedding
+        clicked_rect.cache_embedding(embedding, box=box, space=model_name)
         self._sort(clicked_rect, same_class_only, query=embedding)
 
     def _sort(
@@ -140,26 +159,37 @@ class MosaicSimilarityCoordinator(QtCore.QObject):
         rect_widgets = list(self._rect_widgets_getter())
         if not rect_widgets:
             return
+        space = self._space_getter()
         embeddings = [
-            rw._embedding if rw.has_cached_embedding else None for rw in rect_widgets
+            rw._embedding if self._usable(rw, space) else None for rw in rect_widgets
         ]
         query = clicked_rect._embedding if query is None else query
+        labels = [rw.text_label for rw in rect_widgets]
         order, missing = rank_by_similarity(
-            query,
-            embeddings,
-            [rw.text_label for rw in rect_widgets],
-            clicked_rect.text_label,
-            same_class_only,
+            query, embeddings, labels, clicked_rect.text_label, same_class_only
         )
         self._apply_order([rect_widgets[i] for i in order])
-        if self._status_callback is not None:
-            ranked = len(rect_widgets) - missing
-            self._status_callback(
-                f"Sorted by similarity: {ranked:,} of {len(rect_widgets):,} tiles "
-                f"ranked; {missing:,} without an embedding yet are after them"
-                if missing
-                else f"Sorted by similarity: all {ranked:,} tiles ranked"
+        if self._status_callback is None:
+            return
+        total = len(rect_widgets)
+        if same_class_only:
+            ranked = sum(
+                1
+                for e, label in zip(embeddings, labels, strict=True)
+                if e is not None and label == clicked_rect.text_label
             )
+            self._status_callback(
+                f"Sorted by similarity: {ranked:,} '{clicked_rect.text_label}' "
+                f"tiles ranked; the other {total - ranked:,} of {total:,} "
+                "(other labels, or no embedding yet) are after them"
+            )
+        elif missing:
+            self._status_callback(
+                f"Sorted by similarity: {total - missing:,} of {total:,} tiles "
+                f"ranked; {missing:,} without an embedding yet are after them"
+            )
+        else:
+            self._status_callback(f"Sorted by similarity: all {total:,} tiles ranked")
 
     def _unavailable(self, message: str) -> None:
         LOGGER.warning(f"Find similar: {message}")

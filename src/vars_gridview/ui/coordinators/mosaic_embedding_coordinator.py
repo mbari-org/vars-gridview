@@ -29,8 +29,9 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
     precompute_started = QtCore.pyqtSignal(int)  # total
     precompute_progress = QtCore.pyqtSignal(int, int)  # current, total
     precompute_finished = QtCore.pyqtSignal()
-    # (generation, [(association_uuid, embedding), ...]) for each finished
-    # chunk, emitted from the worker thread and delivered on the GUI thread.
+    # (generation, model_name, [(association_uuid, embedding, box), ...]) for
+    # each finished chunk, emitted from the worker thread and delivered on
+    # the GUI thread. *box* is the box the embedded image was cropped from.
     precompute_batch = QtCore.pyqtSignal(object)
 
     # Embeddings are handed over every CHUNK tiles rather than all at the
@@ -49,7 +50,7 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
                 list[RectWidget],
                 Embedding | None,
                 int,
-                Callable[[tuple[int, list[tuple[UUID, object]]]], None],
+                Callable[[tuple], None],
                 Callable[[str], None],
             ]
             | None
@@ -69,7 +70,7 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
         rect_widgets: list[RectWidget],
         embedding_model: Embedding | None,
         generation: int,
-        on_result: Callable[[tuple[int, list[tuple[UUID, object]]]], None],
+        on_result: Callable[[tuple], None],
         on_unavailable: Callable[[str], None],
     ) -> None:
         """Start precompute, or queue a restart if one is already running."""
@@ -92,12 +93,17 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
             self._pending = True
             return
 
+        # Snapshot on the GUI thread: the worker gets plain data, never the
+        # tiles (whose image and box the GUI thread may replace meanwhile).
+        items = self.snapshot(targets)
+        if not items:
+            return
         self._in_progress = True
-        self.precompute_started.emit(len(targets))
+        self.precompute_started.emit(len(items))
 
         worker = Worker(
             self.compute_embeddings_payload,
-            targets,
+            items,
             embedding_model,
             generation,
             self.precompute_progress.emit,
@@ -115,64 +121,80 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
         pool.start(worker)
 
     @QtCore.pyqtSlot(object)
-    def _deliver_batch(self, payload: tuple[int, list[tuple[UUID, object]]]) -> None:
+    def _deliver_batch(self, payload: tuple) -> None:
         # The receiver checks the generation, so a chunk of an old page is
         # ignored even if a newer request has replaced it.
         if self._latest_request is not None:
             self._latest_request[3](payload)
 
+    @staticmethod
+    def snapshot(
+        rect_widgets: list[RectWidget],
+    ) -> list[tuple[UUID, np.ndarray, tuple]]:
+        """``(association_uuid, RGB image, box it was cropped from)`` for each
+        tile whose image has loaded."""
+        items = []
+        for rect_widget in rect_widgets:
+            try:
+                if not rect_widget.roi_loaded or rect_widget.roi is None:
+                    continue
+                items.append(
+                    (
+                        rect_widget.association_uuid,
+                        rect_widget.roi[:, :, ::-1],
+                        rect_widget.roi_box,
+                    )
+                )
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.debug(f"Skipping ROI for embedding, failed to read: {exc}")
+        return items
+
     @classmethod
     def compute_embeddings_payload(
         cls,
-        rect_widgets: list[RectWidget],
+        items: list[tuple[UUID, np.ndarray, tuple]],
         embedding_model: Embedding,
         generation: int,
         progress_callback: Callable[[int, int], None] | None = None,
-        batch_callback: Callable[[tuple[int, list[tuple[UUID, object]]]], None]
-        | None = None,
-    ) -> tuple[int, list[tuple[UUID, object]]]:
-        """Embed the tiles' images in chunks. Each finished chunk goes to
-        *batch_callback* (when given) instead of into the returned payload,
-        so results arrive as they're made. A failed chunk is logged and
-        skipped; only "model not available" stops the run."""
-        uuids: list[UUID] = []
-        roi_images: list[np.ndarray] = []
-        for rect_widget in rect_widgets:
-            try:
-                if not rect_widget.roi_loaded:
-                    continue
-                roi = rect_widget.roi
-                if roi is None:
-                    continue
-                uuids.append(rect_widget.association_uuid)
-                roi_images.append(roi[:, :, ::-1])
-            except Exception as exc:  # noqa: BLE001
-                LOGGER.debug(f"Skipping ROI for embedding, failed to read: {exc}")
-                continue
-        if not roi_images:
-            return generation, []
+        batch_callback: Callable[[tuple], None] | None = None,
+    ) -> tuple[int, str | None, list[tuple[UUID, object, tuple]]]:
+        """Embed *items* (from :meth:`snapshot`) in chunks.
 
-        total = len(roi_images)
+        Each finished chunk goes to *batch_callback* (when given) instead of
+        into the returned payload, so results arrive as they're made. Every
+        payload names the model, so results of a model replaced meanwhile
+        can be told apart. A failed chunk is logged and skipped; only "model
+        not available" stops the run.
+        """
+        model_name = getattr(embedding_model, "model_name", None)
+        if not items:
+            return generation, model_name, []
+        total = len(items)
         if progress_callback is not None:
             progress_callback(0, total)
-        kept: list[tuple[UUID, object]] = []
+        kept: list[tuple[UUID, object, tuple]] = []
         failed = 0
         for start in range(0, total, cls.CHUNK):
-            chunk_uuids = uuids[start : start + cls.CHUNK]
+            chunk = items[start : start + cls.CHUNK]
             try:
-                vectors = embedding_model.embed_many(
-                    roi_images[start : start + cls.CHUNK]
-                )
+                vectors = embedding_model.embed_many([image for _u, image, _b in chunk])
             except Exception as exc:
                 if "not available" in str(exc).lower():
                     raise
-                failed += len(chunk_uuids)
-                LOGGER.warning(f"Embedding {len(chunk_uuids)} tiles failed: {exc}")
+                failed += len(chunk)
+                LOGGER.warning(f"Embedding {len(chunk)} tiles failed: {exc}")
                 vectors = []
-            rows = list(zip(chunk_uuids, vectors, strict=True)) if vectors else []
+            rows = (
+                [
+                    (uuid, vector, box)
+                    for (uuid, _image, box), vector in zip(chunk, vectors, strict=True)
+                ]
+                if vectors
+                else []
+            )
             if rows:
                 if batch_callback is not None:
-                    batch_callback((generation, rows))
+                    batch_callback((generation, model_name, rows))
                 else:
                     kept.extend(rows)
             if progress_callback is not None:
@@ -181,7 +203,7 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
             LOGGER.warning(
                 f"{failed:,} of {total:,} tile embeddings could not be computed"
             )
-        return generation, kept
+        return generation, model_name, kept
 
     def _on_error(self, err: tuple, on_unavailable: Callable[[str], None]) -> None:
         message = str(err[1]) if len(err) > 1 else "Unknown error"

@@ -171,6 +171,12 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self._roi_loaded = False
         self._embedding = None
         self._embedding_box: tuple | None = None  # box the embedding was made for
+        self._embedding_space: str | None = None  # model that made it
+        # Box the current ROI image was cropped from (embeddings computed from
+        # the image are only valid for that box), and the box asked for by the
+        # refresh in flight, per generation.
+        self._roi_box: tuple | None = None
+        self._pending_roi_box: tuple[int, tuple | None] | None = None
         self._embedding_refresh_generation = 0
         if preload_roi:
             self.update_roi_pic()
@@ -322,8 +328,26 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     @property
     def has_cached_embedding(self) -> bool:
-        """Whether this tile already has a computed embedding."""
-        return self._embedding is not None
+        """Whether this tile has an embedding of its *current* box.
+
+        An embedding records the box it was made from; once the box changes
+        (edited here, or in the image view through another tile of the same
+        frame) the embedding no longer counts, and the tile is ranked last
+        until a new one is computed.
+        """
+        return (
+            self._embedding is not None and self._embedding_box == self._current_box()
+        )
+
+    @property
+    def embedding_space(self) -> str | None:
+        """Name of the model that made the cached embedding (None if unknown)."""
+        return self._embedding_space
+
+    @property
+    def roi_box(self) -> tuple | None:
+        """The box the current ROI image was cropped from."""
+        return self._roi_box if self._roi_box is not None else self._current_box()
 
     @property
     def roi_loaded(self) -> bool:
@@ -334,11 +358,24 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """Clear any cached embedding so it can be recomputed lazily."""
         self._embedding = None
         self._embedding_box = None
+        self._embedding_space = None
 
-    def cache_embedding(self, embedding) -> None:
-        """Store an externally computed embedding payload for this tile."""
+    def cache_embedding(
+        self, embedding, *, box: tuple | None = None, space: str | None = None
+    ) -> None:
+        """Store an embedding for this tile.
+
+        Args:
+            embedding: The vector.
+            box: The box it was computed from: the box the image was cropped
+                from, or the box sent to the vector database. Defaults to the
+                current box. A vector of an older box is then never mistaken
+                for one of the current box.
+            space: Name of the model that made it.
+        """
         self._embedding = embedding
-        self._embedding_box = self._current_box()
+        self._embedding_box = tuple(box) if box is not None else self._current_box()
+        self._embedding_space = space
 
     def _current_box(self) -> tuple | None:
         try:
@@ -378,7 +415,12 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         if not self._roi_loaded or self.roi is None:
             raise RuntimeError("ROI image is not loaded yet; cannot compute embedding")
 
-        self.cache_embedding(self._embedding_model.embed(self.roi[:, :, ::-1]))
+        box = self.roi_box
+        self.cache_embedding(
+            self._embedding_model.embed(self.roi[:, :, ::-1]),
+            box=box,
+            space=getattr(self._embedding_model, "model_name", None),
+        )
 
     @staticmethod
     def _embed_roi(embedding_model: Embedding, roi: np.ndarray):
@@ -419,6 +461,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.update()
 
     def update_roi_pic(self):
+        self._roi_box = self._current_box()
         self.roi = self.get_roi()
         self._roi_loaded = True
         self._mark_pic_dirty()
@@ -448,6 +491,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """Start an async ROI refresh worker for the latest request."""
         self._roi_refresh_generation += 1
         generation = self._roi_refresh_generation
+        self._pending_roi_box = (generation, self._current_box())
 
         worker = Worker(self._fetch_roi_with_generation, generation)
         worker.signals.result.connect(self._on_async_roi_refresh_result)
@@ -474,6 +518,12 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def _apply_async_roi_refresh(self, generation: int, roi) -> None:
         if generation != self._roi_refresh_generation:
             return
+        pending = self._pending_roi_box
+        self._roi_box = (
+            pending[1]
+            if pending is not None and pending[0] == generation
+            else self._current_box()
+        )
         self.roi = roi
         self._roi_loaded = True
         # Built at the next paint: tiles that load off screen cost nothing
@@ -507,6 +557,10 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self._embedding_refresh_generation += 1
         generation = self._embedding_refresh_generation
         roi_copy = self.roi.copy()
+        self._embedding_refresh_stamp = (
+            self.roi_box,
+            getattr(self._embedding_model, "model_name", None),
+        )
 
         worker = Worker(
             self._embed_roi_with_generation,
@@ -538,7 +592,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def _apply_async_embedding_refresh(self, generation: int, embedding) -> None:
         if generation != self._embedding_refresh_generation:
             return
-        self.cache_embedding(embedding)
+        box, space = self._embedding_refresh_stamp
+        self.cache_embedding(embedding, box=box, space=space)
 
     def embedding_distance(self, other: RectWidget) -> float:
         """

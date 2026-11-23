@@ -250,6 +250,12 @@ class ImageMosaic(QtCore.QObject):
             visible_widgets_getter=lambda: self._visible_widgets,
         )
 
+        # Embeddings of tiles whose box was edited: recomputed in one batch.
+        self._recompute_timer = QtCore.QTimer(self)
+        self._recompute_timer.setSingleShot(True)
+        self._recompute_timer.setInterval(500)
+        self._recompute_timer.timeout.connect(self.precompute_embeddings_async)
+
         # Load on-screen tiles first: re-prioritise shortly after scrolling.
         self._prioritize_timer = QtCore.QTimer(self)
         self._prioritize_timer.setSingleShot(True)
@@ -297,6 +303,7 @@ class ImageMosaic(QtCore.QObject):
             dialog_parent=self._dialog_parent,
             rect_widgets_getter=lambda: self._rect_widgets,
             apply_order=self._apply_order,
+            space_getter=lambda: self._embedding_space,
             sort_unavailable_callback=self._on_similarity_unavailable,
             status_callback=lambda text: self.stats_changed.emit({"Status": text}),
         )
@@ -572,6 +579,7 @@ class ImageMosaic(QtCore.QObject):
                 )
                 rw.set_display_context(self._display_context)
                 rw.deleteRequested.connect(self.tile_delete_requested)
+                rw.roiRefreshed.connect(self._on_tile_image_refreshed)
                 rw.verifyAndMarkTrainingRequested.connect(
                     self.tile_verify_and_mark_training_requested
                 )
@@ -701,10 +709,12 @@ class ImageMosaic(QtCore.QObject):
             return
         self._set_embedding_space(name)
         queries = []
+        boxes: dict[UUID, tuple] = {}
         for rect_widget in self._rect_widgets:
             if rect_widget.has_cached_embedding:
                 continue
             association = rect_widget.association
+            boxes[rect_widget.association_uuid] = tuple(association.box)
             queries.append(
                 BoxQuery(
                     rect_widget.association_uuid,
@@ -722,7 +732,7 @@ class ImageMosaic(QtCore.QObject):
         worker = Worker(store.fetch, queries, name)  # plain data only
         worker.signals.result.connect(
             lambda result, stamp=stamp, asked=asked: self._on_stored_embeddings(
-                result, stamp, asked, store.description
+                result, stamp, asked, store.description, boxes, name
             )
         )
         worker.signals.error.connect(
@@ -733,7 +743,13 @@ class ImageMosaic(QtCore.QObject):
         QtCore.QThreadPool.globalInstance().start(worker)
 
     def _on_stored_embeddings(
-        self, result: tuple, stamp: tuple[int, int], asked: int, where: str
+        self,
+        result: tuple,
+        stamp: tuple[int, int],
+        asked: int,
+        where: str,
+        boxes: dict[UUID, tuple] | None = None,
+        name: str | None = None,
     ) -> None:
         if stamp != (self._embedding_generation, self._results_generation):
             return  # another page or model since
@@ -742,7 +758,10 @@ class ImageMosaic(QtCore.QObject):
         for rect_widget in self._rect_widgets:
             vector = vectors.get(rect_widget.association_uuid)
             if vector is not None and not rect_widget.has_cached_embedding:
-                rect_widget.cache_embedding(vector)
+                # The box the database was asked about (and matched): a box
+                # edited while the request ran doesn't get this vector.
+                box = (boxes or {}).get(rect_widget.association_uuid)
+                rect_widget.cache_embedding(vector, box=box, space=name)
                 used += 1
         LOGGER.info(
             f"Embeddings from the VARS vector database {where}: {used:,} of {asked:,} "
@@ -799,19 +818,25 @@ class ImageMosaic(QtCore.QObject):
         )
 
     @QtCore.pyqtSlot(object)
-    def _on_embeddings_precomputed(
-        self, payload: tuple[int, list[tuple[UUID, object]]]
-    ) -> None:
-        generation, rows = payload
+    def _on_embeddings_precomputed(self, payload: tuple) -> None:
+        generation, model_name, rows = payload
         if generation != self._embedding_generation:
             return
-        embeddings_by_uuid = {
-            association_uuid: embedding for association_uuid, embedding in rows
+        if self._embedding_space is not None and model_name != self._embedding_space:
+            # Made by a model replaced since (the old one can still be
+            # running when the model setting changes): another space.
+            return
+        by_uuid = {
+            association_uuid: (vector, box) for association_uuid, vector, box in rows
         }
         for rect_widget in self._rect_widgets:
-            embedding = embeddings_by_uuid.get(rect_widget.association_uuid)
-            if embedding is not None:
-                rect_widget.cache_embedding(embedding)
+            found = by_uuid.get(rect_widget.association_uuid)
+            if found is not None:
+                vector, box = found
+                # Recorded against the box the image was cropped from: if the
+                # box has been edited since, the tile still counts as having
+                # no embedding and is computed again.
+                rect_widget.cache_embedding(vector, box=box, space=model_name)
 
     def _on_embedding_unavailable(self, message: str) -> None:
         if self._dialog_parent is None:
@@ -939,6 +964,29 @@ class ImageMosaic(QtCore.QObject):
             for other in self._rect_widgets:
                 if other.frame_key == key:
                     other.set_display_context(self._display_context)
+
+    @QtCore.pyqtSlot(object)
+    def _on_tile_image_refreshed(self, rect_widget: RectWidget) -> None:
+        """A tile's image changed after the page loaded (its box was edited):
+        compute its embedding again, batched with any others edited."""
+        if (
+            self._all_rois_loaded
+            and self._embedding_model is not None
+            and rect_widget.roi_loaded
+            and not rect_widget.has_cached_embedding
+        ):
+            self._recompute_timer.start()
+
+    def refresh_tiles_for_association(self, association: object) -> bool:
+        """Reload the image of every tile showing *association*'s box (the
+        image view shows all boxes of a frame, and the one dragged may belong
+        to another tile than the one clicked). Returns whether any did."""
+        found = False
+        for rect_widget in self._rect_widgets:
+            if rect_widget.association is association:
+                rect_widget.request_roi_refresh()
+                found = True
+        return found
 
     @QtCore.pyqtSlot(int)
     def _on_scrolled(self, _value: int) -> None:

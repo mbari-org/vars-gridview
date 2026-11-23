@@ -74,6 +74,10 @@ class HttpEmbedding(Embedding):
     def model_name(self) -> str:
         return self._model_name
 
+    @property
+    def base_url(self) -> str:
+        return self._base_url
+
     def health_check(self) -> None:
         """Raise if the embedding service is unreachable or unhealthy."""
         response = requests.get(

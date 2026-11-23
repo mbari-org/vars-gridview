@@ -15,6 +15,7 @@ class _Rect:
         self.roi_loaded = roi_loaded
         self.roi = roi
         self.association_uuid = association_uuid
+        self.roi_box = (0, 0, 2, 2)
 
 
 class _EmbeddingModel:
@@ -40,8 +41,9 @@ def test_compute_embeddings_payload_filters_unloaded_and_none_roi() -> None:
         ),
     ]
 
-    generation, rows = MosaicEmbeddingCoordinator.compute_embeddings_payload(
-        rect_widgets=cast(Any, rects),
+    items = MosaicEmbeddingCoordinator.snapshot(cast(Any, rects))
+    generation, _model, rows = MosaicEmbeddingCoordinator.compute_embeddings_payload(
+        items,
         embedding_model=cast(Any, _EmbeddingModel()),
         generation=7,
         progress_callback=None,
@@ -50,13 +52,15 @@ def test_compute_embeddings_payload_filters_unloaded_and_none_roi() -> None:
     assert generation == 7
     assert len(rows) == 1
     assert rows[0][0] == good_uuid
+    assert rows[0][2] == (0, 0, 2, 2)  # the box the image was cropped from
 
 
 def test_compute_embeddings_payload_returns_empty_when_no_candidates() -> None:
     rects = [_Rect(roi_loaded=False, roi=None, association_uuid=uuid4())]
 
-    generation, rows = MosaicEmbeddingCoordinator.compute_embeddings_payload(
-        rect_widgets=cast(Any, rects),
+    items = MosaicEmbeddingCoordinator.snapshot(cast(Any, rects))
+    generation, _model, rows = MosaicEmbeddingCoordinator.compute_embeddings_payload(
+        items,
         embedding_model=cast(Any, _EmbeddingModel()),
         generation=3,
         progress_callback=None,
