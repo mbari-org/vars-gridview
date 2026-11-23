@@ -257,7 +257,11 @@ class ImageMosaic(QtCore.QObject):
         self._prioritize_timer.timeout.connect(self._prioritize_visible_loading)
         scroll_bar = graphics_view.verticalScrollBar()
         if scroll_bar is not None:
-            scroll_bar.valueChanged.connect(lambda _v: self._prioritize_timer.start())
+            # A slot of this object, not a lambda: Qt drops the connection when
+            # the mosaic is destroyed. The scroll bar belongs to the window and
+            # can outlive it at quit, and a lambda then hit the deleted timer
+            # ("wrapped C/C++ object of type QTimer has been deleted").
+            scroll_bar.valueChanged.connect(self._on_scrolled)
 
         # Non-Qt data store backing metadata and association groups.
         self.store = LocalizationStore()
@@ -930,6 +934,10 @@ class ImageMosaic(QtCore.QObject):
             for other in self._rect_widgets:
                 if other.frame_key == key:
                     other.set_display_context(self._display_context)
+
+    @QtCore.pyqtSlot(int)
+    def _on_scrolled(self, _value: int) -> None:
+        self._prioritize_timer.start()
 
     def _prioritize_visible_loading(self) -> None:
         near = self._mosaic_view.widgets_near_viewport(self._visible_widgets, 1.0)

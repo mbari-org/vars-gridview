@@ -61,6 +61,15 @@ def install_exception_hook() -> None:
     not yet saved to VARS. Logging and carrying on keeps the session alive.
     """
     showing = False
+    quitting = False
+
+    def on_about_to_quit() -> None:
+        nonlocal quitting
+        quitting = True
+
+    app = QtWidgets.QApplication.instance()
+    if app is not None:
+        app.aboutToQuit.connect(on_about_to_quit)
 
     def hook(exc_type, exc_value, exc_tb) -> None:
         nonlocal showing
@@ -70,7 +79,13 @@ def install_exception_hook() -> None:
         text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
         LOGGER.error(f"Unhandled exception:\n{text}")
         app = QtWidgets.QApplication.instance()
-        if app is None or showing or QtCore.QThread.currentThread() is not app.thread():
+        if (
+            app is None
+            or showing
+            or quitting  # a dialog now would stop the app from quitting
+            or app.closingDown()
+            or QtCore.QThread.currentThread() is not app.thread()
+        ):
             return
         showing = True  # one dialog at a time, not one per repeated failure
         try:
