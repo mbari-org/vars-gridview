@@ -114,21 +114,38 @@ class BoundingBox(pg.RectROI):
         """
         Connect signals and slots.
 
-        The slots below close over ``self``, which creates a reference cycle
-        (this object's own signal-connection list ends up holding a reference
-        back to itself). That cycle can only be broken by Python's cyclic GC,
-        which races with Qt's own C++-side teardown of the scene graph and can
-        segfault (same failure mode as pyqtgraph#1628). ``remove()``
-        disconnects everything below before dropping the item from the scene
-        so it is freed deterministically by refcounting instead.
+        The slots below close over ``self``, a reference cycle that only
+        Python's cyclic GC can break, and a GC-driven teardown racing Qt's own
+        can segfault (pyqtgraph#1628). ``remove()`` therefore disconnects them
+        and hands the items to Qt's ``deleteLater``, so the C++ objects are
+        destroyed on the GUI thread whenever Python frees the wrappers.
+
+        The connections are kept so ``remove()`` can undo exactly these. A
+        bare ``self.disconnect()`` also cut Qt's internal ``destroyed``
+        connection, which Qt warns about once per box ("wildcard call
+        disconnects from destroyed signal of BoundingBox").
         """
-        self.sigRemoveRequested.connect(lambda _: self.remove())
-        self.sigRegionChanged.connect(self.draw_name)
-        self.sigRegionChanged.connect(self._dirty)
-        self.sigRegionChangeFinished.connect(self.update_association_box)
-        self.sigClicked.connect(
-            lambda _, ev: self.rect_widget.clicked.emit(self.rect_widget, ev)
-        )
+        self._connections = [
+            (self.sigRemoveRequested, lambda _: self.remove()),
+            (self.sigRegionChanged, self.draw_name),
+            (self.sigRegionChanged, self._dirty),
+            (self.sigRegionChangeFinished, self.update_association_box),
+            (
+                self.sigClicked,
+                lambda _, ev: self.rect_widget.clicked.emit(self.rect_widget, ev),
+            ),
+        ]
+        for signal, slot in self._connections:
+            signal.connect(slot)
+
+    def _disconnect(self) -> None:
+        """Undo the connections made in :meth:`_connect`, and only those."""
+        connections, self._connections = self._connections, []
+        for signal, slot in connections:
+            try:
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass  # already disconnected
 
     def _setup_menu(self) -> None:
         """
@@ -221,7 +238,7 @@ class BoundingBox(pg.RectROI):
         """
         Remove the bounding box from the view.
         """
-        self.disconnect()
+        self._disconnect()
         self.view.removeItem(self.textItem)
         self.view.removeItem(self)
         # removeItem hands ownership back to Python; left to the garbage
