@@ -174,3 +174,15 @@ def test_label_with_unknown_concept_changes_nothing():
     assert failures and "not a concept" in failures[0]
     assert a.set_verified_concept_calls == []
     assert service.pushed == []
+
+
+def test_verify_and_mark_training_is_one_write_per_localization():
+    service = _FakeAnnotationService()
+    ctrl = _controller(service)
+    a1, a2 = _FakeAssoc("1"), _FakeAssoc("2")
+
+    ctrl._apply_verified_and_training([a1, a2], "observer")
+
+    assert (a1.verify_calls, a1.mark_calls) == (1, 1)
+    assert (a2.verify_calls, a2.mark_calls) == (1, 1)
+    assert sorted(service.pushed) == sorted([a1.uuid, a2.uuid])  # one PUT each

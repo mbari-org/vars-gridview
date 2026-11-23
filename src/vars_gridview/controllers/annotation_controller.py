@@ -182,6 +182,20 @@ class AnnotationController(QObject):
             desc, self._apply_training, list(associations), for_training, observer
         )
 
+    def verify_and_mark_training_selected(
+        self,
+        associations: Sequence[BoundingBoxAssociation],
+        observer: str | None = None,
+    ) -> None:
+        """Verify *associations* and mark them for training, as one operation
+        with one write per localization (both live in the box JSON)."""
+        if not associations:
+            return
+        desc = f"Verifying and marking {len(associations)} localizations for training"
+        self._dispatch(
+            desc, self._apply_verified_and_training, list(associations), observer
+        )
+
     # ── Bulk delete ────────────────────────────────────────────────────────────
 
     def delete_selected(
@@ -411,6 +425,27 @@ class AnnotationController(QObject):
         if failures:
             raise RuntimeError(
                 "Failed to update verification for "
+                f"{len(failures)} of {len(associations)} localizations:\n"
+                + "\n".join(failures)
+            )
+
+    def _apply_verified_and_training(
+        self,
+        associations: list[BoundingBoxAssociation],
+        observer: str | None,
+    ) -> None:
+        verifier = observer or self._annotations.observer
+
+        def write(assoc: BoundingBoxAssociation) -> None:
+            assoc.verify(verifier)
+            assoc.mark_for_training()
+            self._annotations.push_changes(assoc, observer)
+
+        failures = self._run_each(associations, write)
+
+        if failures:
+            raise RuntimeError(
+                "Failed to verify and mark for training "
                 f"{len(failures)} of {len(associations)} localizations:\n"
                 + "\n".join(failures)
             )

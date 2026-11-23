@@ -102,6 +102,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     verify = QtCore.pyqtSignal(object)  # self
     markForTraining = QtCore.pyqtSignal(object)  # self
     deleteRequested = QtCore.pyqtSignal(object)  # self
+    verifyAndMarkTrainingRequested = QtCore.pyqtSignal(object)  # self
 
     def __init__(
         self,
@@ -958,7 +959,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         )
         verify_and_mark_action = menu.addAction("Verify + Mark Training")
         verify_and_mark_action.triggered.connect(
-            lambda: (self.verify.emit(self), self.markForTraining.emit(self))
+            lambda: self.verifyAndMarkTrainingRequested.emit(self)
         )
 
         # Add separator

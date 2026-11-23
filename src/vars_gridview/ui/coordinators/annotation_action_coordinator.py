@@ -421,50 +421,97 @@ class AnnotationActionCoordinator:
             return
         self._dispatch_delete([rect_widget])
 
-    def label_single_from_tile(
+    def _tile_targets(self, rect_widget: RectWidget) -> list[RectWidget]:
+        """What a tile's right-click action applies to: the whole selection
+        when the clicked tile is part of it (as in a file browser), otherwise
+        just that tile, which then becomes the selection."""
+        selected = self._image_mosaic.get_selected()
+        if rect_widget in selected:
+            return list(selected)
+        self._image_mosaic.select(rect_widget)
+        return [rect_widget]
+
+    def _run_tile_action(
         self,
         rect_widget: RectWidget,
-        concept: str,
-        part: str,
+        *,
+        action_key: str,
+        confirm_title: str,
+        confirm_message: str,
+        run_action: Callable[[AnnotationController, list], None],
     ) -> None:
         if not self._ensure_annotation_ready() or self._busy():
             return
         controller = self._controller()
         if controller is None:
             return
-        self._image_mosaic.select(rect_widget)
-        self._pending_action = "label"
-        controller.label_selected(
-            [rect_widget.association],
-            concept,
-            part,
-            self._settings.username.value,
+        targets = self._tile_targets(rect_widget)
+        if not self._confirm_count_action(
+            self._parent, confirm_title, confirm_message, len(targets)
+        ):
+            return
+        self._pending_action = action_key
+        run_action(controller, [rw.association for rw in targets])
+
+    def label_single_from_tile(
+        self,
+        rect_widget: RectWidget,
+        concept: str,
+        part: str,
+    ) -> None:
+        """Right-click "Label": the selection if the tile is in it, else the tile."""
+        self._run_tile_action(
+            rect_widget,
+            action_key="label",
+            confirm_title="Confirm Label",
+            confirm_message=(
+                "Label {count} localizations as "
+                + f"'{concept}'"
+                + (f" with part '{part}'" if part != "self" else "")
+                + "?"
+            ),
+            run_action=lambda controller, associations: controller.label_selected(
+                associations, concept, part, self._settings.username.value
+            ),
         )
 
     def verify_single_from_tile(self, rect_widget: RectWidget) -> None:
-        if not self._ensure_annotation_ready() or self._busy():
-            return
-        controller = self._controller()
-        if controller is None:
-            return
-        self._image_mosaic.select(rect_widget)
-        self._pending_action = "verify"
-        controller.verify_selected(
-            [rect_widget.association],
-            True,
-            self._settings.username.value,
+        """Right-click "Verify": the selection if the tile is in it, else the tile."""
+        self._run_tile_action(
+            rect_widget,
+            action_key="verify",
+            confirm_title="Confirm Verification",
+            confirm_message="Verify {count} localizations?",
+            run_action=lambda controller, associations: controller.verify_selected(
+                associations, True, self._settings.username.value
+            ),
         )
 
     def mark_training_single_from_tile(self, rect_widget: RectWidget) -> None:
-        if not self._ensure_annotation_ready() or self._busy():
-            return
-        controller = self._controller()
-        if controller is None:
-            return
-        self._image_mosaic.select(rect_widget)
-        self._pending_action = "mark_training"
-        controller.mark_training_selected(
-            [rect_widget.association],
-            True,
-            self._settings.username.value,
+        """Right-click "Mark Training": the selection if the tile is in it."""
+        self._run_tile_action(
+            rect_widget,
+            action_key="mark_training",
+            confirm_title="Confirm Mark Training",
+            confirm_message="Mark {count} localizations for training?",
+            run_action=lambda controller, associations: (
+                controller.mark_training_selected(
+                    associations, True, self._settings.username.value
+                )
+            ),
+        )
+
+    def verify_and_mark_training_from_tile(self, rect_widget: RectWidget) -> None:
+        """Right-click "Verify + Mark Training", as one operation (it used to
+        start two, and the second was refused while the first ran)."""
+        self._run_tile_action(
+            rect_widget,
+            action_key="verify",
+            confirm_title="Confirm Verify + Mark Training",
+            confirm_message="Verify and mark {count} localizations for training?",
+            run_action=lambda controller, associations: (
+                controller.verify_and_mark_training_selected(
+                    associations, self._settings.username.value
+                )
+            ),
         )

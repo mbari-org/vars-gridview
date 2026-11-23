@@ -244,6 +244,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.image_mosaic.tile_delete_requested.connect(
             self._annotation_actions.delete_from_tile
         )
+        self.image_mosaic.tile_verify_and_mark_training_requested.connect(
+            self._annotation_actions.verify_and_mark_training_from_tile
+        )
         self.image_mosaic.mosaic_stage_started.connect(self._query_progress.begin_stage)
         self.image_mosaic.mosaic_stage_progress.connect(
             self._query_progress.on_stage_progress
