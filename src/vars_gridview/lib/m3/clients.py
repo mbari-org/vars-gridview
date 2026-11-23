@@ -8,6 +8,7 @@ re-authentication on 401/403 responses.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar
@@ -18,6 +19,12 @@ import requests.auth
 from vars_gridview.lib.m3.query import QueryRequest
 
 R = TypeVar("R")
+
+# (connect, read) seconds. Without a timeout a hung service holds a worker
+# thread forever, and the shared pool then starves saves and queries.
+DEFAULT_TIMEOUT = (10, 120)
+# Query/download endpoints can legitimately take minutes on large results.
+QUERY_TIMEOUT = (10, 900)
 
 
 class JWTAuth(requests.auth.AuthBase):
@@ -80,15 +87,27 @@ def reauth(
     @wraps(f)
     def wrapper(self: M3Client, *args: Any, **kwargs: Any) -> R:
         try:
-            return f(self, *args, **kwargs)
+            result = f(self, *args, **kwargs)
         except NotAuthenticated:
-            self.authenticate()
+            self.reauthenticate()
             return f(self, *args, **kwargs)
         except requests.HTTPError as exc:
             if exc.response is not None and exc.response.status_code in (401, 403):
-                self.authenticate()
+                self.reauthenticate()
                 return f(self, *args, **kwargs)
             raise
+        # The wrapped methods return the Response without raising, so an
+        # expired JWT shows up here as a 401/403 status rather than an
+        # exception. Writes are idempotent PUT/DELETEs (or a POST that the
+        # server rejected outright), so a single retry is safe.
+        if (
+            isinstance(result, requests.Response)
+            and result.status_code in (401, 403)
+            and self._api_key is not None
+        ):
+            self.reauthenticate()
+            return f(self, *args, **kwargs)
+        return result
 
     return wrapper
 
@@ -106,6 +125,7 @@ class M3Client:
 
     def __init__(self, base_url: str, api_key: str | None = None) -> None:
         self._session = requests.Session()
+        self._auth_lock = threading.Lock()
         self._api_key: str | None = api_key
         self.base_url = base_url  # uses the setter to strip trailing slash
         if api_key is not None:
@@ -147,18 +167,22 @@ class M3Client:
 
     def get(self, path: str, **kwargs) -> requests.Response:
         """Send a GET request to *path*."""
+        kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
         return self._session.get(self.url_to(path), **kwargs)
 
     def put(self, path: str, **kwargs) -> requests.Response:
         """Send a PUT request to *path*."""
+        kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
         return self._session.put(self.url_to(path), **kwargs)
 
     def post(self, path: str, **kwargs) -> requests.Response:
         """Send a POST request to *path*."""
+        kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
         return self._session.post(self.url_to(path), **kwargs)
 
     def delete(self, path: str, **kwargs) -> requests.Response:
         """Send a DELETE request to *path*."""
+        kwargs.setdefault("timeout", DEFAULT_TIMEOUT)
         return self._session.delete(self.url_to(path), **kwargs)
 
     # ── Authentication ──────────────────────────────────────────────────────────
@@ -187,6 +211,14 @@ class M3Client:
 
         token: str = response.json()["access_token"]
         self._session.auth = JWTAuth(token)
+
+    def reauthenticate(self) -> None:
+        """Get a fresh JWT; concurrent callers that all saw the old one
+        expire share a single re-authentication."""
+        stale = self._session.auth
+        with self._auth_lock:
+            if self._session.auth is stale or self._session.auth is None:
+                self.authenticate()
 
 
 class AnnosaurusClient(M3Client):
@@ -246,15 +278,21 @@ class AnnosaurusClient(M3Client):
 
     def query(self, query_request: QueryRequest) -> requests.Response:
         """Run a TSV query against ``/query/run``."""
-        return self.post("/query/run", json=query_request.to_dict())
+        return self.post(
+            "/query/run", json=query_request.to_dict(), timeout=QUERY_TIMEOUT
+        )
 
     def count(self, query_request: QueryRequest) -> requests.Response:
         """Return the row count for a query via ``/query/count``."""
-        return self.post("/query/count", json=query_request.to_dict())
+        return self.post(
+            "/query/count", json=query_request.to_dict(), timeout=QUERY_TIMEOUT
+        )
 
     def query_download(self, query_request: QueryRequest) -> requests.Response:
         """Run a full-download query against ``/query/download``."""
-        return self.post("/query/download", json=query_request.to_dict())
+        return self.post(
+            "/query/download", json=query_request.to_dict(), timeout=QUERY_TIMEOUT
+        )
 
     # Alias kept for callers that use query_count spelling.
     query_count = count

@@ -16,7 +16,8 @@ It is deliberately thin:
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -31,6 +32,11 @@ if TYPE_CHECKING:
     from vars_gridview.lib.annotation.association import BoundingBoxAssociation
 
 _LOG = logging.getLogger(__name__)
+
+# Per-box writes within one bulk operation run this many at a time: each is
+# an independent PUT/DELETE, and one after another a 2,000-box verify spent
+# minutes waiting on round trips.
+WRITE_CONCURRENCY = 6
 
 
 @dataclass(frozen=True)
@@ -81,6 +87,10 @@ class AnnotationController(QObject):
         super().__init__(parent)
         self._annotations = annotation_service
         self._kb = knowledge_base_service
+        # Operations run one at a time, in the order they were started, so a
+        # quick Verify-then-Unverify can't finish in the other order.
+        self._pool = QThreadPool(self)
+        self._pool.setMaxThreadCount(1)
 
     # ── Bulk label ─────────────────────────────────────────────────────────────
 
@@ -109,6 +119,13 @@ class AnnotationController(QObject):
             canonical = self._kb.get_concept_name(concept)
         except Exception as exc:  # noqa: BLE001
             self.operation_failed.emit(f"Could not resolve concept '{concept}': {exc}")
+            return
+        if not canonical:
+            # Unknown concept (typo) or knowledge base unreachable: labelling
+            # with None would keep the old concept but still mark it verified.
+            self.operation_failed.emit(
+                f"'{concept}' is not a concept in the knowledge base; nothing was changed."
+            )
             return
 
         if canonical != concept:
@@ -172,17 +189,21 @@ class AnnotationController(QObject):
         associations: Sequence[BoundingBoxAssociation],
         *,
         delete_dangling_observations: bool = False,
+        plan: DeletePlan | None = None,
     ) -> None:
         """Delete *associations* from VARS.
 
         Args:
             associations: Localizations to delete.
             delete_dangling_observations: Whether to delete observations that
-                would otherwise be left with no bounding-box associations.
+                would otherwise be left with no associations at all.
+            plan: The plan already shown to the user (from
+                :meth:`plan_delete`); computed here only if not given.
         """
         if not associations:
             return
-        plan = self.plan_delete(associations)
+        if plan is None:
+            plan = self.plan_delete(associations)
         desc = f"Deleting {len(associations)} localizations"
         if delete_dangling_observations and plan.dangling_count > 0:
             desc += f" and {plan.dangling_count} dangling observations"
@@ -199,12 +220,16 @@ class AnnotationController(QObject):
     ) -> DeletePlan:
         """Compute dangling observations for a proposed association delete.
 
+        Makes one request per observation: call it off the GUI thread.
+
         Args:
             associations: Candidate localizations to delete.
 
         Returns:
             A :class:`DeletePlan` containing observation UUIDs that would end up
-            with no remaining bounding-box associations.
+            with no remaining associations of any kind. (Deleting an
+            observation deletes all its associations -- comments, sample IDs
+            -- so one that keeps any of those is not offered for deletion.)
         """
         selected_assoc_uuids = {assoc.uuid for assoc in associations}
         selected_observation_uuids = {assoc.observation.uuid for assoc in associations}
@@ -214,10 +239,8 @@ class AnnotationController(QObject):
 
         for observation_uuid in selected_observation_uuids:
             try:
-                existing = (
-                    self._annotations.get_observation_bounding_box_association_uuids(
-                        observation_uuid
-                    )
+                existing = self._annotations.get_observation_association_uuids(
+                    observation_uuid
                 )
             except Exception as exc:  # noqa: BLE001
                 failures.append(f"{observation_uuid}: {exc}")
@@ -250,7 +273,31 @@ class AnnotationController(QObject):
             lambda _: self.operation_finished.emit(description)
         )
         worker.signals.error.connect(self._on_error)
-        QThreadPool.globalInstance().start(worker)
+        self._pool.start(worker)
+
+    @staticmethod
+    def _run_each(
+        associations: list[BoundingBoxAssociation],
+        write: Callable[[BoundingBoxAssociation], None],
+    ) -> list[str]:
+        """Apply *write* to every association, WRITE_CONCURRENCY at a time;
+        return one failure line per association that raised."""
+        failures: list[str] = []
+
+        def one(assoc: BoundingBoxAssociation) -> str | None:
+            try:
+                write(assoc)
+            except Exception as exc:  # noqa: BLE001
+                return f"{assoc.uuid}: {exc}"
+            return None
+
+        if len(associations) <= 1:
+            results = [one(a) for a in associations]
+        else:
+            with ThreadPoolExecutor(max_workers=WRITE_CONCURRENCY) as pool:
+                results = list(pool.map(one, associations))
+        failures.extend(r for r in results if r is not None)
+        return failures
 
     def _on_error(self, error: tuple) -> None:
         exc_type, exc_value, _tb = error
@@ -287,6 +334,11 @@ class AnnotationController(QObject):
                     f"Could not resolve concept '{concept}': {exc}"
                 )
                 return
+            if not canonical:
+                self.operation_failed.emit(
+                    f"'{concept}' is not a concept in the knowledge base; nothing was changed."
+                )
+                return
             if canonical != concept:
                 self.concept_remapped.emit(concept, canonical)
 
@@ -317,15 +369,13 @@ class AnnotationController(QObject):
             part: Body part, or None to leave unchanged.
             observer: VARS user name.
         """
-        failures: list[str] = []
-        for assoc in associations:
-            assoc.set_verified_concept(
-                concept, part, observer or self._annotations.observer
-            )
-            try:
-                self._annotations.push_changes(assoc, observer)
-            except Exception as exc:  # noqa: BLE001
-                failures.append(f"{assoc.uuid}: {exc}")
+        verifier = observer or self._annotations.observer
+
+        def write(assoc: BoundingBoxAssociation) -> None:
+            assoc.set_verified_concept(concept, part, verifier)
+            self._annotations.push_changes(assoc, observer)
+
+        failures = self._run_each(associations, write)
 
         if failures:
             raise RuntimeError(
@@ -347,16 +397,16 @@ class AnnotationController(QObject):
             verified: New verification state.
             observer: VARS user name.
         """
-        failures: list[str] = []
-        for assoc in associations:
+        verifier = observer or self._annotations.observer
+
+        def write(assoc: BoundingBoxAssociation) -> None:
             if verified:
-                assoc.verify(observer or self._annotations.observer)
+                assoc.verify(verifier)
             else:
                 assoc.unverify()
-            try:
-                self._annotations.push_changes(assoc, observer)
-            except Exception as exc:  # noqa: BLE001
-                failures.append(f"{assoc.uuid}: {exc}")
+            self._annotations.push_changes(assoc, observer)
+
+        failures = self._run_each(associations, write)
 
         if failures:
             raise RuntimeError(
@@ -378,16 +428,15 @@ class AnnotationController(QObject):
             for_training: New training state.
             observer: VARS user name.
         """
-        failures: list[str] = []
-        for assoc in associations:
+
+        def write(assoc: BoundingBoxAssociation) -> None:
             if for_training:
                 assoc.mark_for_training()
             else:
                 assoc.unmark_for_training()
-            try:
-                self._annotations.push_changes(assoc, observer)
-            except Exception as exc:  # noqa: BLE001
-                failures.append(f"{assoc.uuid}: {exc}")
+            self._annotations.push_changes(assoc, observer)
+
+        failures = self._run_each(associations, write)
 
         if failures:
             raise RuntimeError(

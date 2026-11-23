@@ -41,12 +41,25 @@ class AnnotationOperationPresenter:
         self._status_update_callback({"Status": description})
 
     def on_finished(self) -> None:
+        self._refresh_after_operation()
+        self._status_update_callback({"Status": "Ready"})
+        self._action_state.clear_pending()
+
+    def _refresh_after_operation(self) -> None:
+        """Show the operation's effect. Also runs after a failure, since a
+        bulk operation that fails part-way has still changed (and saved) the
+        localizations before the failing one."""
         if self._action_state.pending_action == "delete":
             scroll_bar = self._roi_graphics_view.verticalScrollBar()
             scroll_position = scroll_bar.value() if scroll_bar is not None else None
 
+            # Only what was actually deleted (all of it, unless it failed).
             self._image_mosaic.remove_rect_widgets(
-                self._action_state.consume_pending_deleted_rects()
+                [
+                    rect
+                    for rect in self._action_state.consume_pending_deleted_rects()
+                    if rect.association.deleted
+                ]
             )
 
             box_handler = self._box_handler_getter()
@@ -62,8 +75,11 @@ class AnnotationOperationPresenter:
         else:
             for rect in self._image_mosaic.get_all_rect_widgets():
                 rect.text_label = rect.association.text_label
-                rect.is_selected = False
                 rect.update()
+            # Through the selection model: setting is_selected on the tiles
+            # only made them *look* deselected, and the next action still
+            # applied to all of them.
+            self._image_mosaic.clear_selected()
 
             box_handler = self._box_handler_getter()
             if box_handler is not None:
@@ -71,10 +87,9 @@ class AnnotationOperationPresenter:
 
             self._image_mosaic.render_mosaic()
 
-        self._status_update_callback({"Status": "Ready"})
-        self._action_state.clear_pending()
-
     def on_failed(self, message: str) -> None:
+        if self._action_state.pending_action is not None:
+            self._refresh_after_operation()
         self._status_update_callback({"Status": "Action failed"})
-        QtWidgets.QMessageBox.critical(self._parent, "Operation Failed", message)
         self._action_state.clear_pending()
+        QtWidgets.QMessageBox.critical(self._parent, "Operation Failed", message)

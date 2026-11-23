@@ -874,7 +874,7 @@ class QueryDialog(QDialog):
         self.limit_offset_bar = QWidget()
         self.limit_offset_bar.setLayout(QFormLayout())
         self.limit_edit = QSpinBox()
-        self.limit_edit.setRange(0, 100000)
+        self.limit_edit.setRange(1, 100000)
         self.limit_edit.setValue(10000)
         self.offset_edit = QSpinBox()
         self.offset_edit.setRange(0, 1000000000)

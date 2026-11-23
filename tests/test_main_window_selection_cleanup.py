@@ -27,13 +27,21 @@ class _FakeImageMosaic:
         self.clear_selected_calls += 1
 
 
+class _FakeBoxHandler:
+    def __init__(self) -> None:
+        self.clear_calls = 0
+
+    def clear(self) -> None:
+        self.clear_calls += 1
+
+
 def _fake_main_window(
     image_mosaic: _FakeImageMosaic, last_selected_rect
 ) -> SimpleNamespace:
     fake_self = SimpleNamespace(
         image_mosaic=image_mosaic,
         last_selected_rect=last_selected_rect,
-        box_handler="stale-box-handler",
+        box_handler=_FakeBoxHandler(),
         clear_selected=lambda: None,
         _clear_detail_panels=lambda: None,
     )
@@ -72,6 +80,9 @@ def test_prepare_for_new_results_survives_stale_last_selected_rect() -> None:
     assert fake_self.last_selected_rect is None
     assert image_mosaic.deselect_calls == []  # skipped: widget already gone
     assert image_mosaic.clear_view_calls == 1
+    # The selection model itself is cleared (not a no-op once unloaded).
+    assert image_mosaic.clear_selected_calls == 1
+    assert fake_self.box_handler is None
 
 
 def test_prepare_for_new_results_still_deselects_live_rect() -> None:

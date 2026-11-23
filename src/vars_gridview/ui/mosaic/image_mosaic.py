@@ -208,6 +208,7 @@ class ImageMosaic(QtCore.QObject):
         self._part_provider = part_provider
 
         self._rect_widgets: list[RectWidget] = []
+        self._visible_widgets: list[RectWidget] = []  # as last laid out
         self._n_columns = 0
         self.selection_model = SelectionModel(parent=self)
         self.selection_model.selection_changed.connect(self._on_selection_changed)
@@ -216,6 +217,7 @@ class ImageMosaic(QtCore.QObject):
             selection_model=self.selection_model,
             mosaic_view=self._mosaic_view,
             all_widgets_getter=lambda: self._rect_widgets,
+            visible_widgets_getter=lambda: self._visible_widgets,
         )
 
         # Display flags
@@ -350,8 +352,11 @@ class ImageMosaic(QtCore.QObject):
         """
         # Clear existing widgets
         self._roi_loading.cancel_pending()
+        self._selection.reset()
+        old_widgets = list(self._rect_widgets)
         self._rect_widgets.clear()
-        self.selection_model.clear()
+        self._visible_widgets = []
+        self._mosaic_view.dispose(old_widgets)
 
         try:
             # Parse rows and build localization store off the UI thread.
@@ -694,6 +699,7 @@ class ImageMosaic(QtCore.QObject):
             ),
         )
 
+        self._visible_widgets = rect_widgets_to_render
         render_result = self._mosaic_view.render(
             all_widgets=self._rect_widgets,
             visible_widgets=rect_widgets_to_render,
@@ -735,15 +741,16 @@ class ImageMosaic(QtCore.QObject):
             return
 
         self.clear_selected()
-        removed = []
-        for rw in rect_widgets:
-            if rw in self._rect_widgets:
-                rw.hide()
-                self._rect_widgets.remove(rw)
-                removed.append(rw)
+        to_remove = {id(rw) for rw in rect_widgets}
+        removed = [rw for rw in self._rect_widgets if id(rw) in to_remove]
+        self._rect_widgets = [
+            rw for rw in self._rect_widgets if id(rw) not in to_remove
+        ]
 
         self.n_localizations = len(self._rect_widgets)
         self.render_mosaic()
+        # After the listeners below have dropped their references.
+        QtCore.QTimer.singleShot(0, lambda: self._mosaic_view.dispose(removed))
 
         if removed:
             self.rect_widgets_removed.emit(removed)

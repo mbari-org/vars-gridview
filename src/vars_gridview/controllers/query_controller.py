@@ -158,11 +158,28 @@ class QueryController(QObject):
                 "observation_group",
             ],
             where=[QueryConstraint("link_name", equals="bounding box"), *merged],
-            order_by=["index_recorded_timestamp"],
+            # Tie-breakers: many rows share a timestamp, and OFFSET/FETCH paging
+            # over a non-unique order can repeat or skip rows between pages.
+            order_by=[
+                "index_recorded_timestamp",
+                "association_uuid",
+                "image_reference_uuid",
+            ],
             limit=limit,
             offset=offset,
         )
         self._dispatch(request)
+
+    def has_next_page(self) -> bool:
+        """True when a later page of the last query exists."""
+        if self._last_request is None:
+            return False
+        limit = max(1, self._last_request.limit or 1)
+        return self._last_request.offset + limit < self._total_rows
+
+    def has_previous_page(self) -> bool:
+        """True when an earlier page of the last query exists."""
+        return self._last_request is not None and (self._last_request.offset or 0) > 0
 
     def next_page(self) -> None:
         """Fetch the next page of the last query.
@@ -222,7 +239,9 @@ class QueryController(QObject):
 
         worker = Worker(self._fetch_count, self._annosaurus_client, request, generation)
         worker.signals.result.connect(self._on_count_result)
-        worker.signals.error.connect(self._on_error)
+        worker.signals.error.connect(
+            lambda error, generation=generation: self._on_error(error, generation)
+        )
         QThreadPool.globalInstance().start(worker)
 
     @staticmethod
@@ -317,7 +336,9 @@ class QueryController(QObject):
             generation,
         )
         worker.signals.result.connect(self._on_download_result)
-        worker.signals.error.connect(self._on_error)
+        worker.signals.error.connect(
+            lambda error, generation=generation: self._on_error(error, generation)
+        )
         QThreadPool.globalInstance().start(worker)
 
     def _on_download_result(self, payload: tuple) -> None:
@@ -337,7 +358,9 @@ class QueryController(QObject):
             raw_tsv,
         )
         worker.signals.result.connect(self._on_result)
-        worker.signals.error.connect(self._on_error)
+        worker.signals.error.connect(
+            lambda error, generation=generation: self._on_error(error, generation)
+        )
         QThreadPool.globalInstance().start(worker)
 
     def _on_result(self, payload: tuple) -> None:
@@ -355,17 +378,22 @@ class QueryController(QObject):
 
         self._last_request = request
         self._total_rows = total
-        page = 1 + request.offset // request.limit
-        total_pages = total // request.limit + (1 if total % request.limit else 0)
+        limit = max(1, request.limit or 1)
+        page = 1 + request.offset // limit
+        total_pages = total // limit + (1 if total % limit else 0)
         _LOG.info("Query complete: %d total rows, page %d/%d", total, page, total_pages)
         self.results_ready.emit(headers, rows, page, total_pages, total)
 
-    def _on_error(self, error: tuple) -> None:
+    def _on_error(self, error: tuple, generation: int | None = None) -> None:
         """Handle a query failure.
 
         Args:
             error: ``(exc_type, exc_value, traceback)`` from the worker.
+            generation: Request generation the failing worker belonged to;
+                failures of superseded queries are ignored.
         """
+        if generation is not None and generation != self._request_generation:
+            return
         exc_type, exc_value, _tb = error
         msg = f"{exc_type.__name__}: {exc_value}"
         _LOG.error("Query failed: %s", msg)

@@ -27,7 +27,11 @@ def test_execute_builds_query_request_with_required_fields():
     req = captured["request"]
     assert req.limit == 25
     assert req.offset == 50
-    assert req.order_by == ["index_recorded_timestamp"]
+    assert req.order_by == [
+        "index_recorded_timestamp",
+        "association_uuid",
+        "image_reference_uuid",
+    ]
     assert req.select is not None
     assert "association_uuid" in req.select
     assert req.where is not None

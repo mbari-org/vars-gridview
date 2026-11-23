@@ -308,6 +308,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
             self.association,
             self.source_url,
             None if self.is_image else self.elapsed_time_millis,
+            scale_x=1.0 if self.is_image else self._scale_x,
+            scale_y=1.0 if self.is_image else self._scale_y,
         )
         if image is None:
             raise RuntimeError("Failed to fetch ROI image")
@@ -350,11 +352,20 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         QThreadPool.globalInstance().start(worker)
 
     def _fetch_roi_with_generation(self, generation: int):
-        return generation, self.get_roi()
+        # Failures come back as a result too, so they carry their generation:
+        # a late failure of an older request must not replace a newer image.
+        try:
+            return generation, self.get_roi(), None
+        except Exception as exc:  # noqa: BLE001
+            return generation, None, exc
 
     @QtCore.pyqtSlot(object)
     def _on_async_roi_refresh_result(self, payload) -> None:
-        generation, roi = payload
+        generation, roi, error = payload
+        if error is not None:
+            if generation == self._roi_refresh_generation:
+                self._on_async_roi_refresh_error((type(error), error, ""))
+            return
         self._apply_async_roi_refresh(generation, roi)
 
     def _apply_async_roi_refresh(self, generation: int, roi) -> None:

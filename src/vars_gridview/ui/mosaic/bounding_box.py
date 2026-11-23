@@ -224,6 +224,12 @@ class BoundingBox(pg.RectROI):
         self.disconnect()
         self.view.removeItem(self.textItem)
         self.view.removeItem(self)
+        # removeItem hands ownership back to Python; left to the garbage
+        # collector, the items (and their handles' menus) can be destroyed at
+        # an arbitrary time on an arbitrary thread -- the pyqtgraph segfault
+        # this module's docstring mentions. Let Qt delete them on its loop.
+        self.textItem.deleteLater()
+        self.deleteLater()
 
     def get_box(self) -> list[float]:
         """Return ``[x, y, width, height]`` coordinates of the bounding box, in

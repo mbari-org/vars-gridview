@@ -61,7 +61,7 @@ class _FakeAnnotationService:
     def delete_observation(self, observation_uuid):
         self.deleted_observations.append(observation_uuid)
 
-    def get_observation_bounding_box_association_uuids(self, observation_uuid):
+    def get_observation_association_uuids(self, observation_uuid):
         return self.observation_assoc_map.get(observation_uuid, set())
 
 
@@ -154,3 +154,23 @@ def test_apply_delete_can_delete_dangling_observations():
     assert service.deleted == []
     assert a1.deleted is True
     assert a2.deleted is True
+
+
+def test_label_with_unknown_concept_changes_nothing():
+    """A concept the KB can't resolve must not verify boxes under their old concept."""
+
+    class _NoKB:
+        def get_concept_name(self, concept):
+            return None
+
+    service = _FakeAnnotationService()
+    ctrl = AnnotationController(service, _NoKB())  # type: ignore[arg-type]
+    failures = []
+    ctrl.operation_failed.connect(failures.append)
+    a = _FakeAssoc("1")
+
+    ctrl.label_selected([a], "Typoconcept", "self", "observer")
+
+    assert failures and "not a concept" in failures[0]
+    assert a.set_verified_concept_calls == []
+    assert service.pushed == []

@@ -36,11 +36,16 @@ class MosaicSelectionCoordinator(QtCore.QObject):
         selection_model: SelectionModel,
         mosaic_view: _MosaicViewLike,
         all_widgets_getter: Callable[[], list],
+        visible_widgets_getter: Callable[[], list] | None = None,
     ) -> None:
         super().__init__(parent)
         self._selection_model = selection_model
         self._mosaic_view = mosaic_view
         self._all_widgets_getter = all_widgets_getter
+        # Tiles actually laid out, in display order (hide/filter applied).
+        # Keyboard navigation moves through these, so it can't land on a
+        # hidden tile that the next action would then change unseen.
+        self._visible_widgets_getter = visible_widgets_getter or all_widgets_getter
         # Anchor: the fixed endpoint for Shift-based range selection.
         # Nav cursor: the moving endpoint (updated by Shift+Arrow and Shift+Click).
         # Both are reset to the clicked/navigated item on any non-Shift operation.
@@ -57,6 +62,12 @@ class MosaicSelectionCoordinator(QtCore.QObject):
 
     def clear_selected(self) -> None:
         self._selection_model.clear()
+
+    def reset(self) -> None:
+        """Forget the selection and the Shift anchor (new results loaded)."""
+        self._selection_model.clear()
+        self._anchor = None
+        self._nav_cursor = None
 
     def select(self, rect_widget: object, *, clear: bool = True) -> None:
         all_widgets = self._all_widgets_getter()
@@ -90,10 +101,13 @@ class MosaicSelectionCoordinator(QtCore.QObject):
                 of replacing it (Ctrl+Shift behaviour).
         """
         all_widgets = self._all_widgets_getter()
-        if first not in all_widgets:
-            raise ValueError("First widget not in rect widget list")
         if last not in all_widgets:
             raise ValueError("Last widget not in rect widget list")
+        if first not in all_widgets:
+            # Stale anchor (its tile was deleted, or a new page loaded):
+            # behave like a plain click rather than raising out of the slot.
+            self.select(last, clear=not add)
+            return
 
         first_idx = all_widgets.index(first)
         last_idx = all_widgets.index(last)
@@ -132,7 +146,7 @@ class MosaicSelectionCoordinator(QtCore.QObject):
         activate_callback: Callable[[object], None],
         shift: bool = False,
     ) -> bool:
-        all_widgets = self._all_widgets_getter()
+        all_widgets = self._visible_widgets_getter()
         navigable_keys = {
             QtCore.Qt.Key.Key_Left,
             QtCore.Qt.Key.Key_Right,
@@ -160,17 +174,12 @@ class MosaicSelectionCoordinator(QtCore.QObject):
             if next_idx is None:
                 return False
             next_widget = all_widgets[next_idx]
+            if self._anchor not in all_widgets:  # anchor hidden by a filter
+                self._anchor = nav
             anchor_idx = all_widgets.index(self._anchor)
             begin_idx = min(anchor_idx, next_idx)
             end_idx = max(anchor_idx, next_idx)
-            range_selection = list(
-                self._mosaic_view.visible_widgets_in_range(
-                    all_widgets=all_widgets,
-                    begin_index=begin_idx,
-                    end_index=end_idx,
-                )
-            )
-            self._selection_model.set_selection(range_selection)
+            self._selection_model.set_selection(all_widgets[begin_idx : end_idx + 1])
             self._nav_cursor = next_widget
             self._mosaic_view.ensure_widget_visible_if_needed(next_widget)
             return True
@@ -183,7 +192,9 @@ class MosaicSelectionCoordinator(QtCore.QObject):
         # continue from the live end of the range, not from the anchor.
         nav = self._nav_cursor
         if nav is None or nav not in all_widgets:
-            nav = selected[0]
+            nav = next((w for w in selected if w in all_widgets), None)
+        if nav is None:  # everything selected is hidden
+            return True
         nav_idx = all_widgets.index(nav)
         next_idx = MosaicView.compute_relative_index(
             current_index=nav_idx,

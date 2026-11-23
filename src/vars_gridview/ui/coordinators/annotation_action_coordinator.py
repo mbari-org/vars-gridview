@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.config.constants import get_settings
 from vars_gridview.lib.config.settings import AppSettings
+from vars_gridview.lib.runtime.runnables import Worker
 
 if TYPE_CHECKING:
     from vars_gridview.controllers.annotation_controller import AnnotationController
@@ -48,6 +49,19 @@ class AnnotationActionCoordinator:
     def clear_pending(self) -> None:
         self._pending_action = None
         self._pending_deleted_rects = []
+
+    def _busy(self) -> bool:
+        """True (and tell the user) while an earlier operation is still
+        running: the finish handling is per operation, and a second action
+        on top of a running one used to race it."""
+        if self._pending_action is None:
+            return False
+        QtWidgets.QMessageBox.information(
+            self._parent,
+            "Operation in progress",
+            "Please wait for the current operation to finish.",
+        )
+        return True
 
     def _controller(self) -> AnnotationController | None:
         return self._annotation_controller_getter()
@@ -94,10 +108,12 @@ class AnnotationActionCoordinator:
         confirm_message: str,
         run_action: Callable[[list], None],
     ) -> None:
-        if not self._ensure_annotation_ready():
+        if not self._ensure_annotation_ready() or self._busy():
             return
 
         selected_rects, associations = self._selected_associations()
+        if not selected_rects:
+            return
         if not self._confirm_count_action(
             self._parent,
             confirm_title,
@@ -115,16 +131,30 @@ class AnnotationActionCoordinator:
             return
 
         associations = [rw.association for rw in selected_rects]
-        try:
-            delete_plan = controller.plan_delete(associations)
-        except Exception as exc:  # noqa: BLE001
-            QtWidgets.QMessageBox.critical(
-                self._parent,
-                "Delete Planning Failed",
-                f"Could not inspect parent observations before delete:\n\n{exc}",
-            )
-            return
+        # Planning makes one request per observation: off the GUI thread.
+        # Marked pending now so no other action starts meanwhile.
+        self._pending_action = "delete"
+        worker = Worker(controller.plan_delete, associations)
+        worker.signals.result.connect(
+            lambda plan: self._continue_delete(selected_rects, associations, plan)
+        )
+        worker.signals.error.connect(self._on_delete_plan_failed)
+        QtCore.QThreadPool.globalInstance().start(worker)
 
+    def _on_delete_plan_failed(self, err: tuple) -> None:
+        self.clear_pending()
+        message = str(err[1]) if len(err) > 1 else "Unknown error"
+        QtWidgets.QMessageBox.critical(
+            self._parent,
+            "Delete Planning Failed",
+            f"Could not inspect parent observations before delete:\n\n{message}",
+        )
+
+    def _continue_delete(self, selected_rects, associations, delete_plan) -> None:
+        controller = self._controller()
+        if controller is None:
+            self.clear_pending()
+            return
         delete_dangling_observations = False
         if delete_plan.dangling_count > 0:
             confirm = QtWidgets.QMessageBox.question(
@@ -133,7 +163,7 @@ class AnnotationActionCoordinator:
                 (
                     "This operation would leave "
                     f"{delete_plan.dangling_count} observations with no "
-                    "bounding box associations. Delete those observations too?"
+                    "associations at all. Delete those observations too?"
                 ),
             )
             delete_dangling_observations = (
@@ -145,6 +175,7 @@ class AnnotationActionCoordinator:
         controller.delete_selected(
             associations,
             delete_dangling_observations=delete_dangling_observations,
+            plan=delete_plan,
         )
 
     def label_selected(self, concept: str, part: str) -> None:
@@ -251,7 +282,7 @@ class AnnotationActionCoordinator:
         )
 
     def delete_selected(self) -> None:
-        if not self._ensure_annotation_ready():
+        if not self._ensure_annotation_ready() or self._busy():
             return
 
         to_delete = self._image_mosaic.get_selected()

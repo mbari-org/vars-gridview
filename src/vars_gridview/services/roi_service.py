@@ -11,7 +11,9 @@ responsive.
 from __future__ import annotations
 
 import logging
+import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable
 
 import cv2
@@ -40,6 +42,13 @@ _BUSY_MAX_RETRY_SECONDS = 5.0
 # caller telling us the request is stale (see fetch_full_image's should_cancel).
 _INTERACTIVE_MAX_WAIT_SECONDS = 120.0
 
+# Decoded video frames kept for reuse. Tiles are built frame by frame, so a
+# frame with K boxes used to be captured and decoded K times by Beholder; a
+# handful of recent frames is enough to share one capture between them (and
+# with the full-image view when a tile from that frame is clicked). A 4K
+# frame is ~25 MB decoded, so this is kept small.
+_FRAME_CACHE_SIZE = 8
+
 
 class _FetchCancelled(Exception):
     """Raised internally when ``should_cancel`` reports the request is stale."""
@@ -63,12 +72,64 @@ class RoiService:
     def __init__(self, skimmer: SkimmerClient, beholder: BeholderClient) -> None:
         self._skimmer = skimmer
         self._beholder = beholder
+        self._session = requests.Session()
+        self._frames: OrderedDict[tuple[str, int], np.ndarray] = OrderedDict()
+        self._frames_lock = threading.Lock()
+        # One lock per frame being captured, so concurrent tiles from the same
+        # frame wait for the first capture instead of each starting their own.
+        self._frame_locks: dict[tuple[str, int], threading.Lock] = {}
+
+    def _cached_frame(self, key: tuple[str, int]) -> np.ndarray | None:
+        with self._frames_lock:
+            frame = self._frames.get(key)
+            if frame is not None:
+                self._frames.move_to_end(key)
+            return frame
+
+    def _store_frame(self, key: tuple[str, int], frame: np.ndarray) -> None:
+        with self._frames_lock:
+            self._frames[key] = frame
+            self._frames.move_to_end(key)
+            while len(self._frames) > _FRAME_CACHE_SIZE:
+                self._frames.popitem(last=False)
+
+    def _video_frame(
+        self, url: str, elapsed_time_millis: int, capture: Callable[[], bytes]
+    ) -> np.ndarray | None:
+        """Decoded frame at *elapsed_time_millis*, captured at most once
+        while it stays in the small frame cache."""
+        key = (url, int(elapsed_time_millis))
+        frame = self._cached_frame(key)
+        if frame is not None:
+            return frame
+        with self._frames_lock:
+            lock = self._frame_locks.setdefault(key, threading.Lock())
+        try:
+            with lock:
+                frame = self._cached_frame(key)  # captured while we waited
+                if frame is not None:
+                    return frame
+                raw_bytes = capture()
+                frame = cv2.imdecode(
+                    np.frombuffer(raw_bytes, np.uint8), cv2.IMREAD_COLOR
+                )
+                if frame is not None:
+                    frame.flags.writeable = False  # shared between tiles
+                    self._store_frame(key, frame)
+                return frame
+        finally:
+            with self._frames_lock:
+                if self._frame_locks.get(key) is lock and not lock.locked():
+                    del self._frame_locks[key]
 
     def fetch_roi(
         self,
         assoc: BoundingBoxAssociation,
         image_url: str,
         elapsed_time_millis: int | None = None,
+        *,
+        scale_x: float = 1.0,
+        scale_y: float = 1.0,
     ) -> np.ndarray | None:
         """Fetch the cropped ROI for *assoc*.
 
@@ -78,6 +139,10 @@ class RoiService:
                 when *elapsed_time_millis* is provided).
             elapsed_time_millis: If not ``None``, use Beholder to capture the
                 frame at this offset before cropping.
+            scale_x, scale_y: Source-video size over the captured video's
+                size (> 1 when frames come from a lower-resolution proxy).
+                Boxes are in source coordinates, so they're divided by this
+                before cropping a proxy frame.
 
         Returns:
             BGR uint8 NumPy array ``(H, W, 3)``, or ``None`` on error.
@@ -85,16 +150,30 @@ class RoiService:
         x, y, xf, yf = assoc.box
         try:
             if elapsed_time_millis is not None:
-                raw_bytes = self._capture_raw_with_busy_retry(
-                    image_url, elapsed_time_millis
-                )
-                full_image = cv2.imdecode(
-                    np.frombuffer(raw_bytes, np.uint8), cv2.IMREAD_COLOR
+                full_image = self._video_frame(
+                    image_url,
+                    elapsed_time_millis,
+                    lambda: self._capture_raw_with_busy_retry(
+                        image_url, elapsed_time_millis
+                    ),
                 )
                 if full_image is None:
                     _log.warning(f"Could not decode Beholder frame for {image_url}")
                     return None
-                return full_image[y:yf, x:xf]
+                sx = scale_x if scale_x and scale_x > 0 else 1.0
+                sy = scale_y if scale_y and scale_y > 0 else 1.0
+                height, width = full_image.shape[:2]
+                left = min(max(int(x / sx), 0), width)
+                top = min(max(int(y / sy), 0), height)
+                right = min(max(round(xf / sx), left), width)
+                bottom = min(max(round(yf / sy), top), height)
+                if right <= left or bottom <= top:
+                    _log.warning(
+                        f"Box for {assoc.uuid} falls outside the {width}x{height} frame"
+                    )
+                    return None
+                # A copy: the cached frame is shared and read-only.
+                return full_image[top:bottom, left:right].copy()
             else:
                 response = self._crop_with_busy_retry(image_url, x, y, xf, yf)
                 response.raise_for_status()
@@ -187,9 +266,15 @@ class RoiService:
         """
         try:
             if elapsed_time_millis is not None:
-                raw_bytes = self._capture_raw_with_unbounded_retry(
-                    image_url, elapsed_time_millis, should_cancel
+                frame = self._video_frame(
+                    image_url,
+                    elapsed_time_millis,
+                    lambda: self._capture_raw_with_unbounded_retry(
+                        image_url, elapsed_time_millis, should_cancel
+                    ),
                 )
+                # Callers draw on / resize the frame: hand out a private copy.
+                return None if frame is None else frame.copy()
             else:
                 response = self._get_with_unbounded_retry(image_url, should_cancel)
                 response.raise_for_status()
@@ -234,7 +319,7 @@ class RoiService:
         full-image path -- see :meth:`_capture_raw_with_unbounded_retry`."""
         deadline = time.monotonic() + _INTERACTIVE_MAX_WAIT_SECONDS
         while True:
-            response = requests.get(url, timeout=30)
+            response = self._session.get(url, timeout=30)
             if response.status_code != 503:
                 return response
             if should_cancel is not None and should_cancel():

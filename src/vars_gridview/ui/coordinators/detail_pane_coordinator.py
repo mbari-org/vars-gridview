@@ -108,25 +108,13 @@ class DetailPaneCoordinator(QtCore.QObject):
                 generation,
                 needs_autorange,
                 DetailPaneCoordinator._placeholder_image(),
+                True,
             )
 
-        if not is_image and (scale_x != 1.0 or scale_y != 1.0):
-            image = cv2.resize(
-                image,
-                None,
-                fx=scale_x,
-                fy=scale_y,
-                interpolation=cv2.INTER_CUBIC,
-            )
-
-        if image is None:
-            return (
-                generation,
-                needs_autorange,
-                DetailPaneCoordinator._placeholder_image(),
-            )
-
-        return generation, needs_autorange, image
+        # RectWidget.get_image has already scaled a proxy frame up to the
+        # source resolution the boxes are in; scaling it again here put the
+        # boxes in the wrong place on proxy-backed video.
+        return generation, needs_autorange, image, False
 
     @staticmethod
     def _placeholder_image() -> np.ndarray:
@@ -146,11 +134,13 @@ class DetailPaneCoordinator(QtCore.QObject):
 
     @QtCore.pyqtSlot(object)
     def _on_detail_worker_result(self, payload) -> None:
-        generation, needs_autorange, rect_full_image = payload
+        generation, needs_autorange, rect_full_image, is_placeholder = payload
         rect = self._selected_rect_getter()
         if rect is None:
             return
-        self._on_rect_detail_ready(rect, generation, needs_autorange, rect_full_image)
+        self._on_rect_detail_ready(
+            rect, generation, needs_autorange, rect_full_image, is_placeholder
+        )
 
     def _on_rect_detail_ready(
         self,
@@ -158,6 +148,7 @@ class DetailPaneCoordinator(QtCore.QObject):
         generation: int,
         needs_autorange: bool,
         rect_full_image,
+        is_placeholder: bool = False,
     ) -> None:
         """Apply async detail-image result to the ROI detail view if still current."""
         if generation != self._detail_request_generation:
@@ -165,7 +156,11 @@ class DetailPaneCoordinator(QtCore.QObject):
         if self._selected_rect_getter() is not rect:
             return
         source_image_height, source_image_width = rect_full_image.shape[:2]
-        rect.set_source_image_dimensions(source_image_width, source_image_height)
+        if not is_placeholder:
+            # Not from the "Image unavailable" placeholder: its 1280x720 would
+            # become the box bounds, and dragging a box on a 4K frame would
+            # clamp it and save wrong coordinates.
+            rect.set_source_image_dimensions(source_image_width, source_image_height)
 
         box_handler = self._box_handler_getter()
         if box_handler is None:
@@ -184,6 +179,9 @@ class DetailPaneCoordinator(QtCore.QObject):
         box_handler.roi_detail.setImage(rgb_image)
         if needs_autorange:
             box_handler.view_box.autoRange()
+
+        if is_placeholder:
+            return  # no editable boxes over a missing image
 
         box_handler.add_annotation(
             rect.localization_index,

@@ -53,6 +53,42 @@ def parse_args(
     return args, qt_args
 
 
+def install_exception_hook() -> None:
+    """Log (and show) exceptions that escape Qt slots instead of aborting.
+
+    With no ``sys.excepthook`` of its own, PyQt6 calls qFatal() on any
+    exception raised in a slot, killing the app -- and with it any box edits
+    not yet saved to VARS. Logging and carrying on keeps the session alive.
+    """
+    showing = False
+
+    def hook(exc_type, exc_value, exc_tb) -> None:
+        nonlocal showing
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        LOGGER.error(f"Unhandled exception:\n{text}")
+        app = QtWidgets.QApplication.instance()
+        if app is None or showing or QtCore.QThread.currentThread() is not app.thread():
+            return
+        showing = True  # one dialog at a time, not one per repeated failure
+        try:
+            box = QtWidgets.QMessageBox(
+                QtWidgets.QMessageBox.Icon.Warning,
+                "Unexpected error",
+                f"{exc_type.__name__}: {exc_value}\n\n"
+                "The error was logged. GridView will keep running, but you may "
+                "want to save your work and restart.",
+            )
+            box.setDetailedText(text)
+            box.exec()
+        finally:
+            showing = False
+
+    sys.excepthook = hook
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """
     Main entrypoint.
@@ -78,6 +114,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Create the Qt application
     app = QtWidgets.QApplication([sys.argv[0], *qt_args])
+    install_exception_hook()
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_ORGANIZATION)
 

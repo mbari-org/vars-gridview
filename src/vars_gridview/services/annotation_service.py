@@ -66,24 +66,24 @@ class AnnotationService:
             return
 
         obs = observer or self._observer
-        do_modify_box = False
+        # Each flag is cleared only once its own PUT has succeeded, so a
+        # failed save leaves the association dirty and the next save (click
+        # away, shutdown) retries it instead of silently reporting success.
+        # The box data (which also carries verifier/concept JSON) is written
+        # whenever anything changed, and cleared last.
+        do_modify_box = assoc._dirty_concept or assoc._dirty_part or assoc._dirty_box
 
         if assoc._dirty_concept:
             self._update_observation_concept(assoc.observation.uuid, assoc.concept, obs)
             assoc._dirty_concept = False
-            do_modify_box = True
 
         if assoc._dirty_part:
             self._update_association_part(assoc.uuid, assoc.part)
             assoc._dirty_part = False
-            do_modify_box = True
-
-        if assoc._dirty_box:
-            assoc._dirty_box = False
-            do_modify_box = True
 
         if do_modify_box:
             self._update_bounding_box_data(assoc.uuid, assoc.data)
+            assoc._dirty_box = False
 
     def delete_association(self, assoc: BoundingBoxAssociation) -> None:
         """Delete *assoc* from Annosaurus and mark it locally as deleted.
@@ -137,6 +137,19 @@ class AnnotationService:
                 continue
             uuids.add(UUID(str(association.get("uuid"))))
         return uuids
+
+    def get_observation_association_uuids(self, observation_uuid: UUID) -> set[UUID]:
+        """Return UUIDs of *all* associations of an observation (any link).
+
+        Raises:
+            requests.HTTPError: On network failure.
+        """
+        response = self._client.get_observation(str(observation_uuid))
+        response.raise_for_status()
+        return {
+            UUID(str(association.get("uuid")))
+            for association in response.json().get("associations", [])
+        }
 
     # ── Private helpers ────────────────────────────────────────────────────────
 

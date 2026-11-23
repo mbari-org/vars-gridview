@@ -23,6 +23,7 @@ from vars_gridview.lib.config.constants import (
 from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.m3.query import QueryConstraint
 from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.ui.coordinators.annotation_action_coordinator import (
     AnnotationActionCoordinator,
 )
@@ -560,20 +561,72 @@ class MainWindow(QtWidgets.QMainWindow):
         if query_spec is None:  # User cancelled, do nothing
             return
         constraints, limit, offset = query_spec
-        self._prepare_for_new_results()
-        self._query_controller.execute(constraints, limit, offset)
+
+        def run() -> None:
+            self._prepare_for_new_results()
+            self._query_controller.execute(constraints, limit, offset)
+
+        self._save_dirty_boxes_then(run)
 
     def next_page(self) -> None:
         if not self._require_loaded("paging"):
             return
-        self._prepare_for_new_results()
-        self._query_controller.next_page()
+        if not self._query_controller.has_next_page():
+            self.statusBar().showMessage("Already on the last page.", 3000)
+            return
+
+        def run() -> None:
+            self._prepare_for_new_results()
+            self._query_controller.next_page()
+
+        self._save_dirty_boxes_then(run)
 
     def previous_page(self) -> None:
         if not self._require_loaded("paging"):
             return
-        self._prepare_for_new_results()
-        self._query_controller.previous_page()
+        if not self._query_controller.has_previous_page():
+            self.statusBar().showMessage("Already on the first page.", 3000)
+            return
+
+        def run() -> None:
+            self._prepare_for_new_results()
+            self._query_controller.previous_page()
+
+        self._save_dirty_boxes_then(run)
+
+    def _save_dirty_boxes_then(self, proceed) -> None:
+        """Save edited-but-unsaved boxes before the current results are
+        dropped (a new query or page), then call *proceed*. If the save
+        fails the results stay up -- nothing is discarded -- and the error
+        is shown, so the edits can be retried."""
+        box_handler = self.box_handler
+        dirty = box_handler.get_dirty_associations() if box_handler is not None else []
+        if not dirty:
+            proceed()
+            return
+        self.statusBar().showMessage(f"Saving {len(dirty)} edited boxes...")
+        worker = Worker(
+            self._dirty_association_save.save_dirty_associations_worker, dirty
+        )
+
+        def saved(saved_uuids) -> None:
+            if self.box_handler is box_handler and isinstance(saved_uuids, set):
+                box_handler.clear_dirty_for(saved_uuids)
+            self.statusBar().clearMessage()
+            proceed()
+
+        def failed(err: tuple) -> None:
+            self.statusBar().clearMessage()
+            message = str(err[1]) if len(err) > 1 else "Unknown error"
+            self._notify_error(
+                "Could not save edited boxes",
+                "The current results were kept so your edits aren't lost.\n\n"
+                + message,
+            )
+
+        worker.signals.result.connect(saved)
+        worker.signals.error.connect(failed)
+        QtCore.QThreadPool.globalInstance().start(worker)
 
     def _prepare_for_new_results(self) -> None:
         """Reset active selection/detail panes before a new query page loads."""
@@ -584,9 +637,13 @@ class MainWindow(QtWidgets.QMainWindow):
             self.image_mosaic.deselect(self.last_selected_rect)
         self.last_selected_rect = None
 
+        # Before box_handler goes: clear_selected() is a no-op once nothing is
+        # "loaded", which left the old selection live for the next action.
+        self.image_mosaic.clear_selected()
         self.image_mosaic.clear_view()
+        if self.box_handler is not None:
+            self.box_handler.clear()  # detail-view boxes, deleted by Qt
         self.box_handler = None
-        self.clear_selected()
         self._clear_detail_panels()
 
     def _clear_detail_panels(self) -> None:

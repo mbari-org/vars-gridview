@@ -67,6 +67,32 @@ class MosaicView:
         self._last_columns = -1
         self._last_widget_size = (-1, -1)
 
+    def dispose(self, rect_widgets: list) -> None:
+        """Take tiles out of the scene for good and let Qt delete them.
+
+        ``QGraphicsGridLayout.removeAt`` only unlinks a tile from the layout;
+        it stays in the scene as a hidden child of the grid widget, holding
+        its pixmap and crop. Without this every query or page change leaked
+        the previous page's tiles.
+        """
+        if not rect_widgets:
+            return
+        self._graphics_view.setUpdatesEnabled(False)
+        try:
+            gone = {id(w) for w in rect_widgets}
+            for idx in range(self._layout.count() - 1, -1, -1):
+                item = self._layout.itemAt(idx)
+                if id(item) in gone:
+                    self._layout.removeAt(idx)
+            for rect_widget in rect_widgets:
+                rect_widget.hide()
+                if rect_widget.scene() is self._graphics_scene:
+                    self._graphics_scene.removeItem(rect_widget)
+                rect_widget.deleteLater()
+        finally:
+            self._graphics_view.setUpdatesEnabled(True)
+        self._last_visible_signature = ()
+
     def render(
         self,
         *,

@@ -144,3 +144,40 @@ def test_push_changes_box_only_updates_link_value() -> None:
     association_uuid, payload = client.updated_associations[0]
     assert association_uuid == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
     assert "link_value" in payload
+
+
+def test_push_changes_keeps_flags_dirty_when_a_write_fails() -> None:
+    """A failed PUT must leave the association dirty so the next save retries
+    it; clearing the flags first made the edit silently disappear."""
+    import pytest
+    import requests
+
+    class _FailingBoxClient(_FakeAnnosaurusClient):
+        def update_association(self, association_uuid: str, data: dict):
+            if "link_value" in data:
+                raise requests.HTTPError("500 Server Error")
+            return super().update_association(association_uuid, data)
+
+    service = AnnotationService(_FailingBoxClient(), default_observer="default")
+    assoc = _FakeAssociation()
+    assoc._dirty_concept = True
+    assoc._dirty_box = True
+
+    with pytest.raises(requests.HTTPError):
+        service.push_changes(assoc)
+
+    assert assoc._dirty_concept is False  # that write succeeded
+    assert assoc._dirty_box is True  # this one didn't: retried next save
+
+
+def test_get_observation_association_uuids_counts_every_link() -> None:
+    service = AnnotationService(_FakeAnnosaurusClient(), default_observer="default")
+
+    uuids = service.get_observation_association_uuids(
+        UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    )
+
+    assert uuids == {
+        UUID("11111111-1111-1111-1111-111111111111"),
+        UUID("22222222-2222-2222-2222-222222222222"),
+    }
