@@ -240,6 +240,7 @@ class MainWindow(QtWidgets.QMainWindow):
         controls = self.ui.mosaicControlsBar
         controls.filtersChanged.connect(self.image_mosaic.set_filters)
         controls.displayChanged.connect(self._on_display_adjustment_changed)
+        controls.tileSizeChanged.connect(self.update_zoom)
         self.image_mosaic.filter_status_changed.connect(controls.set_filter_status)
         self.image_mosaic.tile_delete_requested.connect(
             self._annotation_actions.delete_from_tile
@@ -324,6 +325,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def _connect_settings_watchers(self) -> None:
         """Connect setting proxies to view updates and coordinator handlers."""
         self._settings.label_font_size.valueChanged.connect(self.update_layout)
+        # Tile size has two controls (the slider above the grid and the Zoom
+        # box in the bottom bar); keep whichever one wasn't used in step.
+        self._settings.gui_zoom.valueChanged.connect(self._sync_zoom_controls)
         self._settings.embeddings_enabled.valueChanged.connect(
             self._embedding_lifecycle.handle_embeddings_enabled
         )
@@ -953,7 +957,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ui.outerSplitter.restoreState(
                 self._settings.gui_outer_splitter_state.value
             )
-        self.ui.zoomSpinBox.setValue(int(self._settings.gui_zoom.value * 100))
+        self._sync_zoom_controls(self._settings.gui_zoom.value)
 
     def _save_gui(self):
         self._settings.gui_geometry.value = self.saveGeometry()
@@ -1092,6 +1096,14 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot(int)
     def update_zoom(self, zoom: int):
         self._settings.gui_zoom.value = zoom / 100
+
+    @QtCore.pyqtSlot(object)
+    def _sync_zoom_controls(self, zoom: float) -> None:
+        percent = round(float(zoom) * 100)
+        # Setting the spinbox to its own value emits nothing, and a new value
+        # only writes back the zoom that's already stored, so no loop.
+        self.ui.zoomSpinBox.setValue(percent)
+        self.ui.mosaicControlsBar.set_tile_size(percent)
 
     def _apply_embedding_model(self, model: "Embedding | None") -> None:
         if self.image_mosaic is not None:

@@ -10,7 +10,9 @@ Two rows:
 * **View** -- display-only adjustments: colour correction for underwater
   images (with optional local contrast), fix colour fringes, sharpen,
   brightness and contrast. These change how tiles and the image view are
-  drawn, never the stored images, boxes or embeddings.
+  drawn, never the stored images, boxes or embeddings. The row ends with a
+  tile size slider, which scales every tile in the grid (the same setting as
+  the Zoom box in the bottom bar).
 
 Slider movement is coalesced (debounced) so dragging stays smooth on large
 pages.
@@ -21,12 +23,15 @@ from __future__ import annotations
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.vision.display_adjust import DisplayAdjustment
+from vars_gridview.ui.style import UiGeometry
 from vars_gridview.ui.widgets.flow_layout import FlowLayout
 from vars_gridview.ui.widgets.range_slider import RangeSlider
 
 ALL_LABELS = "All labels"
 FILTER_DEBOUNCE_MS = 120
 VIEW_DEBOUNCE_MS = 120
+# Re-laying out the grid is the slow part of a resize; wait for a pause.
+TILE_SIZE_DEBOUNCE_MS = 120
 # Local contrast (CLAHE clip limit) in steps of 0.5; 0 is off.
 LOCAL_CONTRAST_MAX_STEPS = 6
 BRIGHTNESS_RANGE = (-100, 100)
@@ -74,6 +79,7 @@ class MosaicControlsBar(QtWidgets.QWidget):
     # label (None = all), min confidence, max confidence
     filtersChanged = QtCore.pyqtSignal(object, float, float)
     displayChanged = QtCore.pyqtSignal(object)  # DisplayAdjustment
+    tileSizeChanged = QtCore.pyqtSignal(int)  # percent of the stored crop size
 
     def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
@@ -195,6 +201,27 @@ class MosaicControlsBar(QtWidgets.QWidget):
         self.reset_view_button = QtWidgets.QPushButton("Reset view")
         self.reset_view_button.setToolTip("Turn every view adjustment off.")
         self.reset_view_button.clicked.connect(self.reset_view)
+
+        self.tile_size_slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.tile_size_slider.setRange(UiGeometry.ZOOM_MIN, UiGeometry.ZOOM_MAX)
+        self.tile_size_slider.setSingleStep(UiGeometry.ZOOM_STEP)
+        self.tile_size_slider.setPageStep(UiGeometry.ZOOM_STEP * 2)
+        self.tile_size_slider.setValue(UiGeometry.ZOOM_DEFAULT)
+        self.tile_size_slider.setFixedWidth(120)
+        self.tile_size_slider.setToolTip(
+            "Make every tile in the grid bigger or smaller (same as Zoom in "
+            "the bottom bar). Not affected by Reset view."
+        )
+        self.tile_size_slider.valueChanged.connect(self._on_tile_size_moved)
+        self.tile_size_value = QtWidgets.QLabel(
+            self._tile_size_text(UiGeometry.ZOOM_DEFAULT)
+        )
+        self.tile_size_value.setMinimumWidth(
+            self.tile_size_value.fontMetrics().horizontalAdvance(
+                self._tile_size_text(UiGeometry.ZOOM_MAX)
+            )
+            + 6
+        )
         layout.addWidget(
             _flow_row(
                 self.colour_box,
@@ -204,6 +231,11 @@ class MosaicControlsBar(QtWidgets.QWidget):
                 _group(QtWidgets.QLabel("Brightness"), self.brightness_slider),
                 _group(QtWidgets.QLabel("Contrast"), self.contrast_slider),
                 self.reset_view_button,
+                _group(
+                    QtWidgets.QLabel("Tile size"),
+                    self.tile_size_slider,
+                    self.tile_size_value,
+                ),
             )
         )
 
@@ -215,6 +247,10 @@ class MosaicControlsBar(QtWidgets.QWidget):
         self._display_timer.setSingleShot(True)
         self._display_timer.setInterval(VIEW_DEBOUNCE_MS)
         self._display_timer.timeout.connect(self._emit_display)
+        self._tile_size_timer = QtCore.QTimer(self)
+        self._tile_size_timer.setSingleShot(True)
+        self._tile_size_timer.setInterval(TILE_SIZE_DEBOUNCE_MS)
+        self._tile_size_timer.timeout.connect(self._emit_tile_size)
 
         self._label: str | None = None
 
@@ -376,6 +412,36 @@ class MosaicControlsBar(QtWidgets.QWidget):
         self.contrast_slider.setValue(100)
         self._display_timer.stop()
         self._emit_display()
+
+    # -- tile size ------------------------------------------------------------
+
+    @staticmethod
+    def _tile_size_text(percent: int) -> str:
+        return f"{percent}%"
+
+    @property
+    def tile_size(self) -> int:
+        """Tile size in percent of the stored crop size."""
+        return int(self.tile_size_slider.value())
+
+    def set_tile_size(self, percent: int) -> None:
+        """Show *percent* without emitting :attr:`tileSizeChanged` -- for
+        following the setting when something else (the Zoom box, a restored
+        session) changed it."""
+        blocked = self.tile_size_slider.blockSignals(True)
+        try:
+            self.tile_size_slider.setValue(int(percent))
+        finally:
+            self.tile_size_slider.blockSignals(blocked)
+        self.tile_size_value.setText(self._tile_size_text(self.tile_size))
+        self._tile_size_timer.stop()
+
+    def _on_tile_size_moved(self, percent: int) -> None:
+        self.tile_size_value.setText(self._tile_size_text(percent))
+        self._tile_size_timer.start()
+
+    def _emit_tile_size(self) -> None:
+        self.tileSizeChanged.emit(self.tile_size)
 
 
 __all__ = ["ALL_LABELS", "MosaicControlsBar"]
