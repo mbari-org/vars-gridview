@@ -284,3 +284,23 @@ def test_plain_arrow_after_shift_navigates_from_nav_cursor() -> None:
         activate_callback=lambda w: activated.append(w),
     )
     assert activated == [widgets[3]]
+
+
+def test_select_all_selects_only_shown_tiles() -> None:
+    model = SelectionModel()
+    view = _FakeMosaicView()
+    widgets = [_FakeWidget(name) for name in "abcd"]
+    shown = [widgets[0], widgets[2], widgets[3]]  # b hidden by a filter
+    coordinator = MosaicSelectionCoordinator(
+        parent=model,
+        selection_model=model,
+        mosaic_view=cast(Any, view),
+        all_widgets_getter=lambda: widgets,
+        visible_widgets_getter=lambda: shown,
+    )
+
+    coordinator.select(widgets[1])
+    coordinator.select_all()
+
+    assert model.selected == shown
+    assert coordinator.anchor is widgets[0]

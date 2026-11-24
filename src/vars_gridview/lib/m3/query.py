@@ -3,7 +3,9 @@
 This module defines the :class:`QueryConstraint` and :class:`QueryRequest`
 Pydantic dataclasses that are serialised to JSON and sent to the Annosaurus
 ``/query/run`` and related endpoints.  It also provides :func:`merge_constraints`
-for collapsing duplicate column constraints before dispatch.
+for collapsing duplicate column constraints before dispatch, and
+:func:`split_where` / :func:`page_slices` for running a query whose ``in``
+list is too long for one database statement.
 """
 
 from __future__ import annotations
@@ -169,4 +171,110 @@ def merge_constraints(constraints: list[QueryConstraint]) -> list[QueryConstrain
     return merged
 
 
-__all__ = ["QueryConstraint", "QueryRequest", "merge_constraints"]
+# Annosaurus binds every value of an ``in`` list as its own SQL parameter, and
+# SQL Server refuses a statement with more than 2,100. Stay well under that so
+# the other constraints, paging and any driver extras still fit.
+MAX_QUERY_PARAMETERS = 2000
+
+
+def _parameter_count(constraint: QueryConstraint) -> int:
+    """How many SQL parameters Annosaurus binds for *constraint*."""
+    if constraint.in_ is not None:
+        return len(constraint.in_)
+    if constraint.between is not None or constraint.minmax is not None:
+        return 2
+    if constraint.isnull is not None:
+        return 0
+    return 1
+
+
+def split_where(
+    where: list[QueryConstraint],
+    max_parameters: int = MAX_QUERY_PARAMETERS,
+) -> list[list[QueryConstraint]]:
+    """Split *where* into constraint lists that each fit in one statement.
+
+    When the constraints need more than *max_parameters* parameters, the
+    longest ``in`` list is sorted and cut into pieces, and each returned list
+    holds one piece plus every other constraint unchanged. The rows matching
+    *where* are then the rows matching any of the returned lists, with no row
+    in two of them.
+
+    Args:
+        where: Constraints that are AND-combined.
+        max_parameters: Parameter budget for one statement.
+
+    Returns:
+        ``[where]`` when it already fits, otherwise one list per piece.
+
+    Raises:
+        ValueError: If the constraints other than the longest ``in`` list
+            already use the whole budget.
+    """
+    total = sum(_parameter_count(c) for c in where)
+    if total <= max_parameters:
+        return [where]
+    longest = max(
+        (c for c in where if c.in_ is not None),
+        key=lambda c: len(c.in_),
+        default=None,
+    )
+    if longest is None:
+        raise ValueError("The query has too many constraints for one statement.")
+    others = total - len(longest.in_)
+    room = max_parameters - others
+    if room < 1:
+        raise ValueError(
+            f"The query's lists add up to {total:,} values, and only the "
+            f"longest one can be split. Shorten the other lists to under "
+            f"{max_parameters:,} values in all."
+        )
+    values = sorted(longest.in_)
+    pieces = [values[i : i + room] for i in range(0, len(values), room)]
+    return [
+        [
+            QueryConstraint(column=longest.column, in_=piece) if c is longest else c
+            for c in where
+        ]
+        for piece in pieces
+    ]
+
+
+def page_slices(
+    counts: list[int], offset: int, limit: int
+) -> list[tuple[int, int, int]]:
+    """Map one page of the combined results onto the split queries.
+
+    The split queries' results are treated as concatenated in order.
+
+    Args:
+        counts: Row count of each split query.
+        offset: Offset of the page in the combined results.
+        limit: Page length.
+
+    Returns:
+        ``(query index, offset, limit)`` for each split query the page
+        touches, in order.
+    """
+    slices: list[tuple[int, int, int]] = []
+    start = 0
+    end_of_page = offset + limit
+    for index, count in enumerate(counts):
+        end = start + count
+        lo, hi = max(offset, start), min(end_of_page, end)
+        if lo < hi:
+            slices.append((index, lo - start, hi - lo))
+        if end >= end_of_page:
+            break
+        start = end
+    return slices
+
+
+__all__ = [
+    "MAX_QUERY_PARAMETERS",
+    "QueryConstraint",
+    "QueryRequest",
+    "merge_constraints",
+    "page_slices",
+    "split_where",
+]

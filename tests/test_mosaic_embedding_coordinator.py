@@ -15,6 +15,7 @@ class _Rect:
         self.roi_loaded = roi_loaded
         self.roi = roi
         self.association_uuid = association_uuid
+        self.roi_box = (0, 0, 2, 2)
 
 
 class _EmbeddingModel:
@@ -40,8 +41,9 @@ def test_compute_embeddings_payload_filters_unloaded_and_none_roi() -> None:
         ),
     ]
 
-    generation, rows = MosaicEmbeddingCoordinator.compute_embeddings_payload(
-        rect_widgets=cast(Any, rects),
+    items = MosaicEmbeddingCoordinator.snapshot(cast(Any, rects))
+    generation, _model, rows = MosaicEmbeddingCoordinator.compute_embeddings_payload(
+        items,
         embedding_model=cast(Any, _EmbeddingModel()),
         generation=7,
         progress_callback=None,
@@ -50,13 +52,15 @@ def test_compute_embeddings_payload_filters_unloaded_and_none_roi() -> None:
     assert generation == 7
     assert len(rows) == 1
     assert rows[0][0] == good_uuid
+    assert rows[0][2] == (0, 0, 2, 2)  # the box the image was cropped from
 
 
 def test_compute_embeddings_payload_returns_empty_when_no_candidates() -> None:
     rects = [_Rect(roi_loaded=False, roi=None, association_uuid=uuid4())]
 
-    generation, rows = MosaicEmbeddingCoordinator.compute_embeddings_payload(
-        rect_widgets=cast(Any, rects),
+    items = MosaicEmbeddingCoordinator.snapshot(cast(Any, rects))
+    generation, _model, rows = MosaicEmbeddingCoordinator.compute_embeddings_payload(
+        items,
         embedding_model=cast(Any, _EmbeddingModel()),
         generation=3,
         progress_callback=None,
@@ -64,3 +68,30 @@ def test_compute_embeddings_payload_returns_empty_when_no_candidates() -> None:
 
     assert generation == 3
     assert rows == []
+
+
+def test_queued_restart_reads_the_current_tiles(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    tiles = [SimpleNamespace(has_cached_embedding=False) for _ in range(4)]
+    current = {"tiles": tiles}
+    coordinator = MosaicEmbeddingCoordinator(parent=None)
+    snapshotted: list = []
+    monkeypatch.setattr(
+        coordinator, "snapshot", lambda targets: snapshotted.append(targets) or []
+    )
+
+    coordinator._in_progress = True  # a precompute is running
+    coordinator.request_precompute(
+        rect_widgets=lambda: current["tiles"],
+        embedding_model=_EmbeddingModel(),
+        generation=1,
+        on_result=lambda _payload: None,
+        on_unavailable=lambda _message: None,
+    )
+    assert coordinator._pending  # restart queued
+
+    current["tiles"] = tiles[2:]  # two tiles deleted meanwhile (a new list)
+    coordinator._on_finished()
+
+    assert snapshotted == [tiles[2:]]

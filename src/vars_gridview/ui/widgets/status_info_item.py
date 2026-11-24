@@ -3,6 +3,8 @@ from PyQt6.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QWidget
 
 from vars_gridview.ui.style import UiDimensions, status_info_item_stylesheet
 
+MAX_VALUE_WIDTH_PX = 360
+
 
 class StatusInfoItem(QWidget):
     """
@@ -16,7 +18,8 @@ class StatusInfoItem(QWidget):
 
         # Create widgets
         self._label = QLabel(label)
-        self._value = QLabel(value)
+        self._value = QLabel()
+        self._full_value = ""
 
         # Assign object names
         self.setObjectName("StatusInfoItem")
@@ -44,6 +47,7 @@ class StatusInfoItem(QWidget):
 
         # Style the widget using object names for scoping
         self.setStyleSheet(status_info_item_stylesheet())
+        self.value = value
 
     def _layout(self) -> None:
         layout = QHBoxLayout()
@@ -55,8 +59,17 @@ class StatusInfoItem(QWidget):
 
     @property
     def value(self) -> str:
-        return self._value.text()
+        return self._full_value
 
     @value.setter
     def value(self, value: str):
-        self._value.setText(value)
+        # A long value (an operation description, say) is shortened with an
+        # ellipsis, full text in the tooltip: an item as wide as its whole
+        # text used to widen the grid's pane and make the grid reflow.
+        self._full_value = value
+        metrics = self._value.fontMetrics()
+        shown = metrics.elidedText(
+            value, Qt.TextElideMode.ElideMiddle, MAX_VALUE_WIDTH_PX
+        )
+        self._value.setText(shown)
+        self._value.setToolTip(value if shown != value else "")

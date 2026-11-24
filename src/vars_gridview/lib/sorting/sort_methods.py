@@ -13,6 +13,7 @@ look up a value from a
 
 from __future__ import annotations
 
+import math
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -22,6 +23,37 @@ import cv2
 import numpy as np
 
 from vars_gridview.ui.mosaic.rect_widget import RectWidget
+
+
+def comparable(value: Any) -> tuple:
+    """Wrap a sort key so any two keys compare.
+
+    Keys come from association JSON (``"confidence": null``, a verifier
+    that's a string on one box and missing on another) and from ROI pixels
+    that may not have loaded yet. Comparing None or mixed types raised
+    TypeError out of the sort. Numbers (and datetimes) sort first, then
+    text, then missing values.
+    """
+    if isinstance(value, tuple):
+        return tuple(comparable(v) for v in value)
+    if value is None:
+        return (2, 0.0, "")
+    if isinstance(value, datetime):
+        try:
+            return (0, value.timestamp(), "")
+        except (OverflowError, OSError, ValueError):
+            return (1, 0.0, value.isoformat())
+    if isinstance(value, (bool, int, float, np.integer, np.floating)):
+        number = float(value)
+        return (2, 0.0, "") if math.isnan(number) else (0, number, "")
+    return (1, 0.0, str(value))
+
+
+def _safe_key(key: Callable[[RectWidget], Any], rect: RectWidget) -> Any:
+    try:
+        return key(rect)
+    except Exception:  # noqa: BLE001 -- e.g. pixel sorts before the ROI loads
+        return None
 
 
 class SortMethod(ABC):
@@ -54,7 +86,7 @@ class SortMethod(ABC):
             rect_widgets: List to sort in place.
             **kwargs: Forwarded to :func:`list.sort` (e.g. ``reverse=True``).
         """
-        rect_widgets.sort(key=cls.key, **kwargs)
+        rect_widgets.sort(key=lambda r: comparable(_safe_key(cls.key, r)), **kwargs)
 
 
 class SortMethodGroup:
@@ -77,7 +109,7 @@ class SortMethodGroup:
         Returns:
             Tuple of keys; lexicographic comparison gives the composite order.
         """
-        return tuple(method.key(rect) for method in self.methods)
+        return tuple(_safe_key(method.key, rect) for method in self.methods)
 
     def sort(self, rect_widgets: list[RectWidget], **kwargs: Any) -> None:
         """In-place sort *rect_widgets* using the composite key.
@@ -86,7 +118,7 @@ class SortMethodGroup:
             rect_widgets: List to sort in place.
             **kwargs: Forwarded to :func:`list.sort`.
         """
-        rect_widgets.sort(key=self.key, **kwargs)
+        rect_widgets.sort(key=lambda r: comparable(self.key(r)), **kwargs)
 
 
 class NoopSort(SortMethod):
@@ -95,8 +127,8 @@ class NoopSort(SortMethod):
     NAME = "No-op"
 
     @staticmethod
-    def key(rect: RectWidget) -> None:
-        return None
+    def key(rect: RectWidget) -> int:
+        return 0  # every key equal: the stable sort keeps the current order
 
 
 class RecordedTimestampSort(SortMethod):

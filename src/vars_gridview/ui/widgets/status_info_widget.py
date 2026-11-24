@@ -1,6 +1,7 @@
-from PyQt6.QtWidgets import QHBoxLayout, QSizePolicy, QWidget
+from PyQt6.QtWidgets import QSizePolicy, QWidget
 
 from vars_gridview.ui.style import UiDimensions
+from vars_gridview.ui.widgets.flow_layout import FlowLayout
 from vars_gridview.ui.widgets.status_info_item import StatusInfoItem
 
 
@@ -14,16 +15,16 @@ class StatusInfoWidget(QWidget):
 
         self._items = {}
 
-        # Create a single layout object and attach it once. We'll reuse it
-        # and clear/add child widgets as the state changes so we don't call
-        # setLayout repeatedly.
-        self._layout_obj = QHBoxLayout()
+        # Items wrap onto another line instead of widening the window pane.
+        # This widget sits under the grid, so any width it demanded was taken
+        # from the grid's pane, and the grid reflowed ("jumped") every time
+        # the status text grew or shrank. Wrapping only changes the height,
+        # which never changes the grid's column count.
+        self._layout_obj = FlowLayout(spacing=UiDimensions.STATUS_WIDGET_SPACING)
         self._layout_obj.setContentsMargins(*UiDimensions.STATUS_WIDGET_MARGINS)
-        self._layout_obj.setSpacing(UiDimensions.STATUS_WIDGET_SPACING)
         self.setLayout(self._layout_obj)
-
-        # Compact size policy so it fits in a horizontal status bar
-        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Fixed)
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.setMinimumWidth(0)
 
         # Populate initial items
         self.update(state)
@@ -40,9 +41,6 @@ class StatusInfoWidget(QWidget):
         for item in self._items.values():
             self._layout_obj.addWidget(item)
 
-        # ensure remaining space is kept to the right
-        self._layout_obj.addStretch()
-
     def clear(self) -> None:
         self._items = {}
         # remove widgets from layout
@@ -53,9 +51,14 @@ class StatusInfoWidget(QWidget):
                 widget.setParent(None)
 
     def update(self, state: dict[str, str]) -> None:
+        added = False
         for label, value in state.items():
             if label in self._items:
                 self._items[label].value = value
             else:
                 self._items[label] = StatusInfoItem(label, value)
-        self._layout()
+                added = True
+        # Rebuild the layout only when an item was added; a value change
+        # just updates its label in place.
+        if added:
+            self._layout()

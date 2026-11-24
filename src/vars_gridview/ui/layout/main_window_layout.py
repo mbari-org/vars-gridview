@@ -8,6 +8,7 @@ from PyQt6 import QtCore, QtGui, QtWidgets
 from vars_gridview.ui.style import UiGeometry, UiTypography, control_font
 from vars_gridview.ui.widgets.flow_layout import FlowLayout
 from vars_gridview.ui.widgets.json_tree import JSONTree
+from vars_gridview.ui.widgets.mosaic_controls_bar import MosaicControlsBar
 
 
 class MainWindowLayout:
@@ -33,10 +34,21 @@ class MainWindowLayout:
         left_layout = QtWidgets.QVBoxLayout(left_panel)
         left_layout.setObjectName("verticalLayout_3")
 
+        # Label / confidence filter and view adjustments, above the grid.
+        self.mosaicControlsBar = MosaicControlsBar(left_panel)
+        self.mosaicControlsBar.setObjectName("mosaicControlsBar")
+        left_layout.addWidget(self.mosaicControlsBar)
+
         self.roiGraphicsView = QtWidgets.QGraphicsView(left_panel)
         self.roiGraphicsView.setObjectName("roiGraphicsView")
         self.roiGraphicsView.setMinimumSize(
             QtCore.QSize(UiGeometry.ROI_GRAPHICS_MIN_WIDTH, 0)
+        )
+        # Always show the vertical scrollbar: with "as needed", the bar
+        # appearing or disappearing (results grow past one screen, a filter
+        # shrinks them) changed the viewport width and so the column count.
+        self.roiGraphicsView.setVerticalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOn
         )
         left_layout.addWidget(self.roiGraphicsView)
 
@@ -45,6 +57,12 @@ class MainWindowLayout:
         self.statusInfoLayout = QtWidgets.QVBoxLayout(self.statusInfoContainer)
         self.statusInfoLayout.setObjectName("statusInfoLayout")
         self.statusInfoLayout.setContentsMargins(0, 0, 0, 0)
+        # The status/progress lines under the grid must never set the pane's
+        # width: when they did, a longer status message widened the grid's
+        # pane and the grid reflowed to a different column count ("jumped").
+        self.statusInfoContainer.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored, QtWidgets.QSizePolicy.Policy.Preferred
+        )
         left_layout.addWidget(self.statusInfoContainer)
 
         self.splitter1 = QtWidgets.QSplitter(self.splitter2)

@@ -1,11 +1,26 @@
-"""Coordinator for asynchronous similarity sorting in the mosaic."""
+"""Coordinator for similarity sorting ("Find similar") in the mosaic.
+
+Ranks tiles by cosine similarity to the clicked tile using the embeddings
+the tiles already hold -- from the VARS vector database, or computed in the
+background -- in one matrix product (milliseconds for thousands of tiles).
+
+It used to compute each distance through ``RectWidget.embedding``, which
+embedded any tile without a cached vector one HTTP call at a time on a worker
+behind a modal progress dialog with no cancel: on a fresh page that could
+lock the window for minutes. Now tiles without an embedding yet are simply
+placed last (and the status line says how many), and only the clicked tile is
+embedded on demand if it has none.
+
+The ranking is applied as an order of tiles, not of indices, onto whatever
+the grid holds by then, so a delete finishing in between can't misapply it.
+"""
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from math import inf
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import TYPE_CHECKING
 
+import numpy as np
 from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.runtime.log import LOGGER
@@ -15,16 +30,49 @@ if TYPE_CHECKING:
     from vars_gridview.ui.mosaic.rect_widget import RectWidget
 
 
-class _SimilarityRect(Protocol):
-    text_label: str
+def rank_by_similarity(
+    query: np.ndarray,
+    embeddings: list[np.ndarray | None],
+    labels: list[str],
+    query_label: str,
+    same_class_only: bool,
+) -> tuple[list[int], int]:
+    """Indices of *embeddings* from most to least similar to *query*.
 
-    def embedding_distance(self, other: object) -> float: ...
+    Tiles with another label (when *same_class_only*) come after all
+    matching ones, and tiles without an embedding come last; both keep their
+    current relative order. Returns ``(order, missing)`` where *missing* counts
+    the tiles that had no embedding.
+    """
+    q = np.asarray(query, dtype=np.float32).ravel()
+    q = q / (np.linalg.norm(q) or 1.0)
+    have = [i for i, e in enumerate(embeddings) if e is not None]
+    missing = len(embeddings) - len(have)
+    similarity = np.full(len(embeddings), -np.inf, dtype=np.float32)
+    if have:
+        matrix = np.stack([np.asarray(embeddings[i], np.float32).ravel() for i in have])
+        norms = np.linalg.norm(matrix, axis=1)
+        norms[norms == 0] = 1.0
+        similarity[have] = (matrix @ q) / norms
+    groups = []
+    for i in range(len(embeddings)):
+        if embeddings[i] is None:
+            group = 2
+        elif same_class_only and labels[i] != query_label:
+            group = 1
+        else:
+            group = 0
+        groups.append(group)
+    # Stable: equal keys keep the current order.
+    order = sorted(
+        range(len(embeddings)),
+        key=lambda i: (groups[i], -float(similarity[i]) if groups[i] == 0 else 0.0),
+    )
+    return order, missing
 
 
 class MosaicSimilarityCoordinator(QtCore.QObject):
-    """Own similarity-sort worker lifecycle and progress UI."""
-
-    sort_progress = QtCore.pyqtSignal(int, int)
+    """Rank the mosaic by similarity to a clicked tile."""
 
     def __init__(
         self,
@@ -32,112 +80,121 @@ class MosaicSimilarityCoordinator(QtCore.QObject):
         parent: QtCore.QObject,
         dialog_parent: QtWidgets.QWidget | None,
         rect_widgets_getter: Callable[[], list[RectWidget]],
-        apply_sorted_indices: Callable[[list[int]], None],
+        apply_order: Callable[[list[RectWidget]], None],
         sort_unavailable_callback: Callable[[str], None] | None = None,
+        status_callback: Callable[[str], None] | None = None,
+        space_getter: Callable[[], str | None] | None = None,
     ) -> None:
         super().__init__(parent)
         self._dialog_parent = dialog_parent
         self._rect_widgets_getter = rect_widgets_getter
-        self._apply_sorted_indices = apply_sorted_indices
+        self._apply_order = apply_order
         self._sort_unavailable_callback = sort_unavailable_callback
-        self._dialog: QtWidgets.QProgressDialog | None = None
+        self._status_callback = status_callback
+        # The model whose vectors the grid uses now; vectors of any other
+        # model live in another space and are never ranked against them.
+        self._space_getter = space_getter or (lambda: None)
+        self._request = 0
 
-        self.sort_progress.connect(self._on_progress)
+    def _usable(self, rect_widget: RectWidget, space: str | None) -> bool:
+        """The tile has an embedding of its current box, from the current model."""
+        if not rect_widget.has_cached_embedding:
+            return False
+        return space is None or rect_widget.embedding_space == space
 
-    def start(self, clicked_rect: object, same_class_only: bool) -> None:
-        """Compute and apply similarity sort order asynchronously."""
+    def start(self, clicked_rect: RectWidget, same_class_only: bool) -> None:
+        """Sort by similarity to *clicked_rect*; embeds it first if needed."""
+        self._request += 1
+        request = self._request
+        space = self._space_getter()
+        if self._usable(clicked_rect, space):
+            self._sort(clicked_rect, same_class_only)
+            return
+        model = getattr(clicked_rect, "_embedding_model", None)
+        model_name = getattr(model, "model_name", None)
+        if (
+            model is None
+            or (space is not None and model_name != space)
+            or not clicked_rect.roi_loaded
+            or clicked_rect.roi is None
+        ):
+            self._unavailable(
+                "This tile has no embedding: it isn't in the VARS vector "
+                "database and the embedding service isn't available (or the "
+                "image hasn't loaded yet)."
+            )
+            return
+        box = clicked_rect.roi_box  # the box its image was cropped from
+        roi = clicked_rect.roi[:, :, ::-1].copy()  # plain data for the worker
+        worker = Worker(model.embed, roi)
+        worker.signals.result.connect(
+            lambda embedding: self._on_clicked_embedded(
+                request, clicked_rect, box, model_name, embedding, same_class_only
+            )
+        )
+        worker.signals.error.connect(
+            lambda err: self._unavailable(f"Could not embed the tile: {err[1]}")
+        )
+        QtCore.QThreadPool.globalInstance().start(worker)
+
+    def _on_clicked_embedded(
+        self, request, clicked_rect, box, model_name, embedding, same_class_only
+    ) -> None:
+        if request != self._request:
+            return  # a newer Find similar replaced this one
+        if clicked_rect not in self._rect_widgets_getter():
+            return  # tile gone (new page, deleted)
+        space = self._space_getter()
+        if space is not None and model_name != space:
+            return  # the model changed while it was embedding
+        clicked_rect.cache_embedding(embedding, box=box, space=model_name)
+        self._sort(clicked_rect, same_class_only, query=embedding)
+
+    def _sort(
+        self,
+        clicked_rect: RectWidget,
+        same_class_only: bool,
+        query: np.ndarray | None = None,
+    ) -> None:
         rect_widgets = list(self._rect_widgets_getter())
         if not rect_widgets:
             return
-
-        self._dialog = QtWidgets.QProgressDialog(
-            "Computing similarity sort...",
-            None,
-            0,
-            len(rect_widgets),
-            self._dialog_parent,
+        space = self._space_getter()
+        embeddings = [
+            rw._embedding if self._usable(rw, space) else None for rw in rect_widgets
+        ]
+        query = clicked_rect._embedding if query is None else query
+        labels = [rw.text_label for rw in rect_widgets]
+        order, missing = rank_by_similarity(
+            query, embeddings, labels, clicked_rect.text_label, same_class_only
         )
-        self._dialog.setWindowTitle("Sorting")
-        self._dialog.setWindowModality(QtCore.Qt.WindowModality.WindowModal)
-        self._dialog.setMinimumDuration(0)
-        self._dialog.setValue(0)
-        self._dialog.show()
-
-        worker = Worker(
-            self.compute_similarity_sort_order,
-            cast(list[_SimilarityRect], rect_widgets),
-            cast(_SimilarityRect, clicked_rect),
-            same_class_only,
-            self.sort_progress.emit,
-        )
-        worker.signals.result.connect(self._on_ready)
-        worker.signals.error.connect(self._on_error)
-        worker.signals.finished.connect(self._on_finished)
-
-        pool = QtCore.QThreadPool.globalInstance()
-        if pool is None:
-            LOGGER.error("Global thread pool unavailable; cannot run similarity sort")
-            self._on_finished()
+        self._apply_order([rect_widgets[i] for i in order])
+        if self._status_callback is None:
             return
-        pool.start(worker)
-
-    @staticmethod
-    def compute_similarity_sort_order(
-        rect_widgets: list[_SimilarityRect],
-        clicked_rect: _SimilarityRect,
-        same_class_only: bool,
-        progress_callback: Callable[[int, int], None] | None = None,
-    ) -> list[int]:
         total = len(rect_widgets)
-        if progress_callback is not None:
-            progress_callback(0, total)
+        if same_class_only:
+            ranked = sum(
+                1
+                for e, label in zip(embeddings, labels, strict=True)
+                if e is not None and label == clicked_rect.text_label
+            )
+            self._status_callback(
+                f"Sorted by similarity: {ranked:,} '{clicked_rect.text_label}' "
+                f"tiles ranked; the other {total - ranked:,} of {total:,} "
+                "(other labels, or no embedding yet) are after them"
+            )
+        elif missing:
+            self._status_callback(
+                f"Sorted by similarity: {total - missing:,} of {total:,} tiles "
+                f"ranked; {missing:,} without an embedding yet are after them"
+            )
+        else:
+            self._status_callback(f"Sorted by similarity: all {total:,} tiles ranked")
 
-        scored: list[tuple[float, int]] = []
-        for idx, rect_widget in enumerate(rect_widgets, start=1):
-            if same_class_only and clicked_rect.text_label != rect_widget.text_label:
-                distance = inf
-            else:
-                try:
-                    distance = clicked_rect.embedding_distance(rect_widget)
-                except Exception:  # noqa: BLE001
-                    distance = inf
-
-            scored.append((distance, idx - 1))
-            if progress_callback is not None and (idx == total or idx % 32 == 0):
-                progress_callback(idx, total)
-
-        scored.sort(key=lambda pair: pair[0])
-        return [idx for _distance, idx in scored]
-
-    @QtCore.pyqtSlot(object)
-    def _on_ready(self, sorted_indices: object) -> None:
-        if isinstance(sorted_indices, list) and all(
-            isinstance(idx, int) for idx in sorted_indices
-        ):
-            self._apply_sorted_indices(cast(list[int], sorted_indices))
-
-    @QtCore.pyqtSlot(tuple)
-    def _on_error(self, err: tuple) -> None:
-        message = str(err[1]) if len(err) > 1 else "Unknown error"
-        LOGGER.error("Similarity sort failed: %s", message)
-        if (
-            "not available" in message.lower()
-            and self._sort_unavailable_callback is not None
-        ):
+    def _unavailable(self, message: str) -> None:
+        LOGGER.warning(f"Find similar: {message}")
+        if self._sort_unavailable_callback is not None:
             self._sort_unavailable_callback(message)
 
-    @QtCore.pyqtSlot(int, int)
-    def _on_progress(self, current: int, total: int) -> None:
-        if self._dialog is None:
-            return
-        self._dialog.setMaximum(max(0, total))
-        self._dialog.setValue(max(0, min(current, total)))
 
-    @QtCore.pyqtSlot()
-    def _on_finished(self) -> None:
-        if self._dialog is not None:
-            self._dialog.close()
-            self._dialog = None
-
-
-__all__ = ["MosaicSimilarityCoordinator"]
+__all__ = ["MosaicSimilarityCoordinator", "rank_by_similarity"]

@@ -164,7 +164,20 @@ class LocalizationStore:
                 )
                 continue
 
-            group_key = (imaged_moment_uuid, association.image_reference_uuid)
+            # link_value JSON carries the image reference UUID as a string;
+            # image_reference_urls is keyed by the query rows' UUID objects.
+            image_reference_uuid = association.image_reference_uuid
+            if image_reference_uuid is not None and not isinstance(
+                image_reference_uuid, UUID
+            ):
+                try:
+                    image_reference_uuid = UUID(str(image_reference_uuid))
+                except ValueError:
+                    LOGGER.warning(
+                        f"Association {association_uuid} has a malformed "
+                        f"image_reference_uuid {image_reference_uuid!r}"
+                    )
+            group_key = (imaged_moment_uuid, image_reference_uuid)
             if group_key not in self.association_groups:
                 self.association_groups[group_key] = []
             self.association_groups[group_key].append(association)

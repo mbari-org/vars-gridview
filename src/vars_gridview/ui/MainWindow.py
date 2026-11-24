@@ -23,6 +23,7 @@ from vars_gridview.lib.config.constants import (
 from vars_gridview.lib.config.settings import AppSettings
 from vars_gridview.lib.m3.query import QueryConstraint
 from vars_gridview.lib.runtime.log import LOGGER
+from vars_gridview.lib.runtime.runnables import Worker
 from vars_gridview.ui.coordinators.annotation_action_coordinator import (
     AnnotationActionCoordinator,
 )
@@ -118,6 +119,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._settings.gui_style.valueChanged.connect(self._on_gui_style_changed)
 
         self.last_selected_rect = None  # Last selected ROI
+        # Edited boxes being saved before a new page / query; the latest
+        # navigation asked for meanwhile runs once the save is done.
+        self._dirty_save_running = False
+        self._after_dirty_save = None
 
         # Last query request and total row count
         self._shutdown_save = ShutdownSaveCoordinator(parent=self, dialog_parent=self)
@@ -190,6 +195,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._detail_pane = DetailPaneCoordinator(
             box_handler_getter=lambda: self.box_handler,
             selected_rect_getter=lambda: self.last_selected_rect,
+            display_context_getter=lambda: self.image_mosaic.display_context,
+            frame_loaded_callback=self.image_mosaic.remember_frame_colour,
         )
         self._rect_interaction = RectInteractionCoordinator(
             parent=self,
@@ -234,6 +241,17 @@ class MainWindow(QtWidgets.QMainWindow):
             delete_callback=self._delete_from_box,
         )
         self.image_mosaic.stats_changed.connect(self._on_mosaic_stats_changed)
+        controls = self.ui.mosaicControlsBar
+        controls.filtersChanged.connect(self.image_mosaic.set_filters)
+        controls.displayChanged.connect(self._on_display_adjustment_changed)
+        controls.tileSizeChanged.connect(self.update_zoom)
+        self.image_mosaic.filter_status_changed.connect(controls.set_filter_status)
+        self.image_mosaic.tile_delete_requested.connect(
+            self._annotation_actions.delete_from_tile
+        )
+        self.image_mosaic.tile_verify_and_mark_training_requested.connect(
+            self._annotation_actions.verify_and_mark_training_from_tile
+        )
         self.image_mosaic.mosaic_stage_started.connect(self._query_progress.begin_stage)
         self.image_mosaic.mosaic_stage_progress.connect(
             self._query_progress.on_stage_progress
@@ -284,6 +302,14 @@ class MainWindow(QtWidgets.QMainWindow):
         """Connect UI button and checkbox signals to MainWindow actions."""
         self.ui.discardButton.clicked.connect(self.delete)
         self.ui.clearSelections.clicked.connect(self.clear_selected)
+        # Cmd+A (Ctrl+A on Windows/Linux) selects every tile shown. A text
+        # field with focus (concept box, label filter) keeps Cmd+A for itself:
+        # Qt gives the focused widget first claim on standard shortcuts.
+        self._select_all_shortcut = QtGui.QShortcut(
+            QtGui.QKeySequence(QtGui.QKeySequence.StandardKey.SelectAll), self
+        )
+        self._select_all_shortcut.setContext(QtCore.Qt.ShortcutContext.WindowShortcut)
+        self._select_all_shortcut.activated.connect(self.select_all)
         self.ui.labelSelectedButton.clicked.connect(self.label_selected)
         self.ui.saveFavoriteButton.clicked.connect(self._save_quick_label_favorite)
         self.ui.verifySelectedButton.clicked.connect(self.verify_selected)
@@ -303,6 +329,9 @@ class MainWindow(QtWidgets.QMainWindow):
     def _connect_settings_watchers(self) -> None:
         """Connect setting proxies to view updates and coordinator handlers."""
         self._settings.label_font_size.valueChanged.connect(self.update_layout)
+        # Tile size has two controls (the slider above the grid and the Zoom
+        # box in the bottom bar); keep whichever one wasn't used in step.
+        self._settings.gui_zoom.valueChanged.connect(self._sync_zoom_controls)
         self._settings.embeddings_enabled.valueChanged.connect(
             self._embedding_lifecycle.handle_embeddings_enabled
         )
@@ -312,6 +341,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self._settings.embedding_model_name.valueChanged.connect(
             self._embedding_lifecycle.on_embedding_config_changed
         )
+        # Stored vectors don't need the embedding service: refetch whenever
+        # what they depend on changes, even while the service is down.
+        for setting in (
+            self._settings.embeddings_enabled,
+            self._settings.embedding_model_name,
+            self._settings.vector_db_enabled,
+            self._settings.vector_db_url,
+            self._settings.vector_db_collection,
+        ):
+            setting.valueChanged.connect(
+                lambda _value: self.image_mosaic.fetch_stored_embeddings()
+            )
 
     def _build_settings_dialog(self) -> SettingsDialog:
         """Create and register all settings tabs."""
@@ -560,20 +601,86 @@ class MainWindow(QtWidgets.QMainWindow):
         if query_spec is None:  # User cancelled, do nothing
             return
         constraints, limit, offset = query_spec
-        self._prepare_for_new_results()
-        self._query_controller.execute(constraints, limit, offset)
+
+        def run() -> None:
+            self._prepare_for_new_results()
+            self._query_controller.execute(constraints, limit, offset)
+
+        self._save_dirty_boxes_then(run)
 
     def next_page(self) -> None:
         if not self._require_loaded("paging"):
             return
-        self._prepare_for_new_results()
-        self._query_controller.next_page()
+        if not self._query_controller.has_next_page():
+            self.statusBar().showMessage("Already on the last page.", 3000)
+            return
+
+        def run() -> None:
+            self._prepare_for_new_results()
+            self._query_controller.next_page()
+
+        self._save_dirty_boxes_then(run)
 
     def previous_page(self) -> None:
         if not self._require_loaded("paging"):
             return
-        self._prepare_for_new_results()
-        self._query_controller.previous_page()
+        if not self._query_controller.has_previous_page():
+            self.statusBar().showMessage("Already on the first page.", 3000)
+            return
+
+        def run() -> None:
+            self._prepare_for_new_results()
+            self._query_controller.previous_page()
+
+        self._save_dirty_boxes_then(run)
+
+    def _save_dirty_boxes_then(self, proceed) -> None:
+        """Save edited-but-unsaved boxes before the current results are
+        dropped (a new query or page), then call *proceed*. If the save
+        fails the results stay up -- nothing is discarded -- and the error
+        is shown, so the edits can be retried.
+
+        While a save runs, another request (a double-click on Next, or a new
+        query) replaces the waiting one instead of saving the same boxes
+        again and loading twice; only the latest runs after the save."""
+        if self._dirty_save_running:
+            self._after_dirty_save = proceed
+            return
+        box_handler = self.box_handler
+        dirty = box_handler.get_dirty_associations() if box_handler is not None else []
+        if not dirty:
+            proceed()
+            return
+        self.statusBar().showMessage(f"Saving {len(dirty)} edited boxes...")
+        self._dirty_save_running = True
+        self._after_dirty_save = proceed
+        worker = Worker(
+            self._dirty_association_save.save_dirty_associations_worker, dirty
+        )
+
+        def saved(saved_uuids) -> None:
+            self._dirty_save_running = False
+            if self.box_handler is box_handler and isinstance(saved_uuids, set):
+                box_handler.clear_dirty_for(saved_uuids)
+            self.statusBar().clearMessage()
+            after, self._after_dirty_save = self._after_dirty_save, None
+            if after is not None:
+                after()
+
+        def failed(err: tuple) -> None:
+            self._dirty_save_running = False
+            self._after_dirty_save = None  # keep the results and the edits
+            self.statusBar().clearMessage()
+            message = str(err[1]) if len(err) > 1 else "Unknown error"
+            self._notify_error(
+                "Could not save edited boxes",
+                "The current results were kept so your edits aren't lost.\n\n"
+                + message,
+            )
+
+        worker.signals.result.connect(saved)
+        worker.signals.error.connect(failed)
+        QtCore.QThreadPool.globalInstance().start(worker)
 
     def _prepare_for_new_results(self) -> None:
         """Reset active selection/detail panes before a new query page loads."""
@@ -584,9 +691,13 @@ class MainWindow(QtWidgets.QMainWindow):
             self.image_mosaic.deselect(self.last_selected_rect)
         self.last_selected_rect = None
 
+        # Before box_handler goes: clear_selected() is a no-op once nothing is
+        # "loaded", which left the old selection live for the next action.
+        self.image_mosaic.clear_selected()
         self.image_mosaic.clear_view()
+        if self.box_handler is not None:
+            self.box_handler.clear()  # detail-view boxes, deleted by Qt
         self.box_handler = None
-        self.clear_selected()
         self._clear_detail_panels()
 
     def _clear_detail_panels(self) -> None:
@@ -658,7 +769,16 @@ class MainWindow(QtWidgets.QMainWindow):
                 "Status": "Ready",
             }
         )
+        self._refresh_filter_labels()
         self._query_progress.mark_done()
+
+    def _refresh_filter_labels(self) -> None:
+        """Offer the labels now in the results (with counts) in the filter."""
+        self.ui.mosaicControlsBar.set_labels(self.image_mosaic.label_counts())
+
+    def _on_display_adjustment_changed(self, adjustment) -> None:
+        self.image_mosaic.set_display_adjustment(adjustment)
+        self._detail_pane.refresh_display()
 
     def _change_concept_from_box(
         self,
@@ -704,10 +824,12 @@ class MainWindow(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot(str)
     def _on_annotation_operation_finished(self, _description: str) -> None:
         self._annotation_presenter.on_finished()
+        self._refresh_filter_labels()  # labels or tiles may have changed
 
     @QtCore.pyqtSlot(str)
     def _on_annotation_operation_failed(self, message: str) -> None:
         self._annotation_presenter.on_failed(message)
+        self._refresh_filter_labels()
 
     @QtCore.pyqtSlot(dict)
     def _on_mosaic_stats_changed(self, stats: dict[str, str]) -> None:
@@ -853,7 +975,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.ui.outerSplitter.restoreState(
                 self._settings.gui_outer_splitter_state.value
             )
-        self.ui.zoomSpinBox.setValue(int(self._settings.gui_zoom.value * 100))
+        self._sync_zoom_controls(self._settings.gui_zoom.value)
 
     def _save_gui(self):
         self._settings.gui_geometry.value = self.saveGeometry()
@@ -965,6 +1087,13 @@ class MainWindow(QtWidgets.QMainWindow):
         self._annotation_actions.delete_selected()
 
     @QtCore.pyqtSlot()
+    def select_all(self) -> None:
+        if not self.loaded:
+            return
+
+        self.image_mosaic.select_all()
+
+    @QtCore.pyqtSlot()
     def clear_selected(self):
         if not self.loaded:
             return
@@ -987,9 +1116,18 @@ class MainWindow(QtWidgets.QMainWindow):
     def update_zoom(self, zoom: int):
         self._settings.gui_zoom.value = zoom / 100
 
+    @QtCore.pyqtSlot(object)
+    def _sync_zoom_controls(self, zoom: float) -> None:
+        percent = round(float(zoom) * 100)
+        # Setting the spinbox to its own value emits nothing, and a new value
+        # only writes back the zoom that's already stored, so no loop.
+        self.ui.zoomSpinBox.setValue(percent)
+        self.ui.mosaicControlsBar.set_tile_size(percent)
+
     def _apply_embedding_model(self, model: "Embedding | None") -> None:
         if self.image_mosaic is not None:
             self.image_mosaic.update_embedding_model(model)
+            self.image_mosaic.fetch_stored_embeddings()
             if model is not None:
                 self.image_mosaic.precompute_embeddings_async()
 

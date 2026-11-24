@@ -3,6 +3,7 @@ VARS GridView application entrypoint.
 """
 
 import argparse
+import functools
 import logging
 import sys
 import traceback
@@ -53,6 +54,73 @@ def parse_args(
     return args, qt_args
 
 
+def install_exception_hook() -> None:
+    """Log (and show) exceptions that escape Qt slots instead of aborting.
+
+    With no ``sys.excepthook`` of its own, PyQt6 calls qFatal() on any
+    exception raised in a slot, killing the app -- and with it any box edits
+    not yet saved to VARS. Logging and carrying on keeps the session alive.
+    """
+    showing = False
+    quitting = False
+    dialogs: set[QtWidgets.QMessageBox] = set()  # keep open dialogs alive
+
+    def on_dialog_closed(*_args) -> None:
+        nonlocal showing
+        showing = False
+
+    def on_about_to_quit() -> None:
+        nonlocal quitting
+        quitting = True
+
+    app = QtWidgets.QApplication.instance()
+    if app is not None:
+        app.aboutToQuit.connect(on_about_to_quit)
+
+    def hook(exc_type, exc_value, exc_tb) -> None:
+        nonlocal showing
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        LOGGER.error(f"Unhandled exception:\n{text}")
+        app = QtWidgets.QApplication.instance()
+        if (
+            app is None
+            or showing
+            or quitting  # a dialog now would stop the app from quitting
+            or app.closingDown()
+            or QtCore.QThread.currentThread() is not app.thread()
+        ):
+            return
+        showing = True  # one dialog at a time, not one per repeated failure
+        try:
+            box = QtWidgets.QMessageBox(
+                QtWidgets.QMessageBox.Icon.Warning,
+                "Unexpected error",
+                f"{exc_type.__name__}: {exc_value}\n\n"
+                "The error was logged. GridView will keep running, but you may "
+                "want to save your work and restart.",
+            )
+            box.setDetailedText(text)
+            box.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+            box.finished.connect(on_dialog_closed)
+            # show(), not exec(): exec() runs a nested event loop inside the
+            # failing slot, and when that slot was a QTimer.singleShot
+            # callback the loop deleted the callback while PyQt was still
+            # reporting its exception -- a segfault.
+            box.show()
+            dialogs.add(box)
+            # partial, not a lambda: a lambda reads `dialogs` from this
+            # closure, which may already be gone when a dialog still open at
+            # shutdown is destroyed (NameError).
+            box.destroyed.connect(functools.partial(dialogs.discard, box))
+        except Exception:  # noqa: BLE001 -- the hook itself must never raise
+            showing = False
+
+    sys.excepthook = hook
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """
     Main entrypoint.
@@ -78,6 +146,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Create the Qt application
     app = QtWidgets.QApplication([sys.argv[0], *qt_args])
+    install_exception_hook()
     app.setApplicationName(APP_NAME)
     app.setOrganizationName(APP_ORGANIZATION)
 

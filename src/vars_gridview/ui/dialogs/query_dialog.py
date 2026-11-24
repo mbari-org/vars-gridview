@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable, Iterable
 from typing import Any
 from uuid import UUID
@@ -12,9 +13,11 @@ from PyQt6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QDoubleSpinBox,
+    QFileDialog,
     QFormLayout,
     QHBoxLayout,
     QInputDialog,
+    QLabel,
     QLineEdit,
     QListView,
     QListWidget,
@@ -77,6 +80,16 @@ class BaseFilter:
 
 # RESULT IMPLEMENTATIONS
 
+# A list longer than this is shown as its first few values and a count.
+SHOWN_VALUES = 8
+
+
+def _summarise(values: list[Any]) -> str:
+    shown = ", ".join(map(str, values[:SHOWN_VALUES]))
+    if len(values) > SHOWN_VALUES:
+        shown += f", … ({len(values):,} in all)"
+    return shown
+
 
 class EqualityConstraintResult(BaseResult):
     """
@@ -117,7 +130,7 @@ class InConstraintResult(BaseResult):
         )
 
     def __str__(self) -> str:
-        return f"{self.label}: {', '.join(map(str, self.values))}"
+        return f"{self.label}: {_summarise(self.values)}"
 
 
 class UUIDInConstraintResult(InConstraintResult):
@@ -128,7 +141,7 @@ class UUIDInConstraintResult(InConstraintResult):
     def __str__(self) -> str:
         if len(self.values) == 1:
             return f"{self.label}: {self.values[0]}"
-        return f"{self.label}: ({len(self.values)} items)"
+        return f"{self.label}: ({len(self.values):,} items)"
 
 
 class LikeConstraintResult(BaseResult):
@@ -216,7 +229,7 @@ class ConceptInConstraintResult(InConstraintResult):
     def __str__(self) -> str:
         if len(self.values) == 1:
             return f"Concept: {self.values[0]}"
-        return f"Concepts: {', '.join(self.values)}"
+        return f"Concepts: {_summarise(self.values)}"
 
 
 class ConceptDescInConstraintResult(InConstraintResult):
@@ -523,38 +536,79 @@ class DepthRangeFilter(BaseFilter):
 
 # HELPER DIALOG CLASSES
 
+# A QLineEdit holds 32,767 characters by default, about 880 pasted UUIDs.
+# Room for well over 40,000.
+MAX_PASTE_CHARS = 4_000_000
+
+# How many rejected values a warning lists before summarising the rest.
+SHOWN_REJECTED = 10
+
+_LIST_FILE_FILTER = "Text files (*.txt *.csv *.tsv *.list);;All files (*)"
+
+
+def read_list_file(path: str) -> str:
+    """Read a text file of values, tolerating a byte-order mark."""
+    with open(path, encoding="utf-8-sig", errors="replace") as f:
+        return f.read()
+
+
+def _unquote(value: str) -> str:
+    return value.strip().strip("\"'").strip()
+
+
+def _plural(n: int, noun: str) -> str:
+    return f"{n:,} {noun}" if n == 1 else f"{n:,} {noun}s"
+
 
 class BulkInputDialog(QDialog):
     """
     Base dialog that allows the user to input multiple items at once.
 
-    The items should be delimited by commas, spaces, or newlines.
-    The parsed items should be rendered in a QListWidget.
+    Items are typed or pasted (delimited by commas, spaces, or newlines) or
+    read from a text file, and listed in a QListWidget without duplicates.
     """
 
     def __init__(
-        self, parent: QWidget | None = None, placeholder_text: str = ""
+        self,
+        parent: QWidget | None = None,
+        placeholder_text: str = "",
+        item_label: str = "Item",
     ) -> None:
         super().__init__(parent)
+        self._item_label = item_label
+        # "UUID" stays as it is; "Concept" reads as "concept" mid-sentence.
+        self._noun = item_label if item_label.isupper() else item_label.lower()
+        self._present: set[str] = set()
         layout = QVBoxLayout(self)
 
         # Input field for items
         self._input = QLineEdit()
         self._input.setPlaceholderText(placeholder_text)
+        self._input.setMaxLength(MAX_PASTE_CHARS)
         layout.addWidget(self._input)
 
         # Buttons to add and delete items
         button_layout = QHBoxLayout()
         self._add_button = QPushButton("Add")
         self._delete_button = QPushButton("Delete Selected")
+        self._open_button = QPushButton("Open File…")
+        self._open_button.setToolTip(
+            f"Add {self._noun}s from a text file, one per line"
+        )
         button_layout.addWidget(self._add_button)
         button_layout.addWidget(self._delete_button)
+        button_layout.addWidget(self._open_button)
         layout.addLayout(button_layout)
 
         # List widget to display items
         self._list = QListWidget()
         self._list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self._list.setUniformItemSizes(True)  # fast with tens of thousands
         layout.addWidget(self._list)
+
+        self._count_label = QLabel()
+        layout.addWidget(self._count_label)
+        self._update_count()
 
         # Dialog buttons
         self.dialog_buttons = QDialogButtonBox(
@@ -565,26 +619,120 @@ class BulkInputDialog(QDialog):
         # Connect signals to slots
         self._add_button.clicked.connect(self.add_items)
         self._delete_button.clicked.connect(self.delete_selected_items)
+        self._open_button.clicked.connect(self.open_file)
         self.dialog_buttons.accepted.connect(self.accept)
         self.dialog_buttons.rejected.connect(self.reject)
         self._input.returnPressed.connect(self.add_items)
 
+    # ── Parsing and checking (overridden per kind of value) ───────────────────
+
+    def parse_text(self, text: str) -> list[str]:
+        """Split typed or pasted text into values."""
+        values = (_unquote(v) for v in re.split(r"[\s,;]+", text))
+        return [v for v in values if v]
+
+    def parse_file(self, text: str) -> list[str]:
+        """Split a file's text into values."""
+        return self.parse_text(text)
+
+    def check_values(self, values: list[str]) -> tuple[list[str], list[str]]:
+        """Return ``(accepted, rejected)``; accepted values may be normalised."""
+        return values, []
+
+    # ── Adding and removing ───────────────────────────────────────────────────
+
+    def _append(self, values: Iterable[str]) -> int:
+        """List the values not already listed; return how many were new."""
+        new = []
+        for value in values:
+            if value and value not in self._present:
+                self._present.add(value)
+                new.append(value)
+        if new:
+            self._list.addItems(new)
+            self._update_count()
+        return len(new)
+
+    def add_values(self, values: list[str]) -> int:
+        """Check and list *values*, warning about any that were rejected."""
+        accepted, rejected = self.check_values(values)
+        added = self._append(accepted)
+        if rejected:
+            self._warn_rejected(rejected)
+        return added
+
     def add_items(self):
-        input_text = self._input.text()
-        items = [item.strip() for item in input_text.replace(",", " ").split()]
-        for item in items:
-            if item and not self._list.findItems(item, Qt.MatchFlag.MatchExactly):
-                self._list.addItem(item)
+        self.add_values(self.parse_text(self._input.text()))
         self._input.clear()
 
+    @pyqtSlot()
+    def open_file(self) -> None:
+        """Add the values in a text file the user picks."""
+        label = self._noun
+        path, _ = QFileDialog.getOpenFileName(
+            self, f"Open {label} list", "", _LIST_FILE_FILTER
+        )
+        if not path:
+            return
+        try:
+            text = read_list_file(path)
+        except OSError as exc:
+            QMessageBox.warning(self, "Couldn't Open File", f"{path}\n\n{exc}")
+            return
+        values = self.parse_file(text)
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            before = len(self._present)
+            accepted, rejected = self.check_values(values)
+            added = self._append(accepted)
+        finally:
+            QApplication.restoreOverrideCursor()
+        duplicates = len(accepted) - added
+        message = f"Added {_plural(added, label)} from the file"
+        if duplicates:
+            message += f" ({duplicates:,} already listed or repeated)"
+        self._count_label.setText(
+            f"{message}. {_plural(before + added, label)} in all."
+        )
+        if rejected:
+            self._warn_rejected(rejected)
+
     def delete_selected_items(self):
-        selected_items = self._list.selectedItems()
-        for item in selected_items:
-            self._list.takeItem(self._list.row(item))
+        selected = {index.row() for index in self._list.selectedIndexes()}
+        if not selected:
+            return
+        keep = [
+            self._list.item(i).text()
+            for i in range(self._list.count())
+            if i not in selected
+        ]
+        self._list.clear()
+        self._present = set(keep)
+        self._list.addItems(keep)
+        self._update_count()
 
     def items(self) -> list[str]:
         """Return all currently entered items from the list widget."""
         return [self._list.item(i).text() for i in range(self._list.count())]
+
+    def _update_count(self) -> None:
+        n = self._list.count()
+        self._count_label.setText(_plural(n, self._noun) if n else "")
+
+    def _warn_rejected(self, rejected: list[str]) -> None:
+        label = self._noun
+        shown = "\n".join(rejected[:SHOWN_REJECTED])
+        more = len(rejected) - SHOWN_REJECTED
+        if more > 0:
+            shown += f"\n… and {more:,} more"
+        QMessageBox.warning(
+            self,
+            f"Invalid {self._item_label}s",
+            f"{_plural(len(rejected), 'value')} "
+            f"{'was' if len(rejected) == 1 else 'were'} not recognised as "
+            f"{label}s and {'was' if len(rejected) == 1 else 'were'} not "
+            f"added:\n\n{shown}",
+        )
 
     @classmethod
     def get_items(
@@ -605,18 +753,30 @@ class BulkUUIDInputDialog(BulkInputDialog):
     """
     Dialog that allows the user to input multiple UUIDs at once.
 
-    The UUIDs should be delimited by commas, spaces, or newlines.
-
-    The parsed UUIDs should be rendered in a QListWidget.
+    The UUIDs should be delimited by commas, spaces, or newlines, or read from
+    a text file. Anything that isn't a UUID (e.g. a column header) is left
+    out with a warning.
     """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(
             parent,
             placeholder_text="Enter UUIDs separated by commas, spaces, or newlines",
+            item_label="UUID",
         )
         # Rename button
         self._add_button.setText("Add UUIDs")
+
+    def check_values(self, values: list[str]) -> tuple[list[str], list[str]]:
+        accepted, rejected = [], []
+        for value in values:
+            try:
+                UUID(value)
+            except ValueError:
+                rejected.append(value)
+            else:
+                accepted.append(value)
+        return accepted, rejected
 
     @classmethod
     def get_uuids(
@@ -646,8 +806,10 @@ class BulkValidatedInputDialog(BulkInputDialog):
     """
     Dialog that allows the user to input multiple values from a known set at once.
 
-    Supports autocomplete, selection from a list, and drag+drop of newline- or
-    comma-delimited text. Values not in the known set are rejected.
+    Supports autocomplete, selection from a list, drag+drop of newline- or
+    comma-delimited text, and text files with one value per line. Dropped or
+    file values not in the known set are rejected; a value that differs from
+    a known one only in case is taken as that one.
     """
 
     def __init__(
@@ -659,8 +821,8 @@ class BulkValidatedInputDialog(BulkInputDialog):
         super().__init__(
             parent,
             placeholder_text=f"Enter {item_label.lower()}",
+            item_label=item_label,
         )
-        self._item_label = item_label
 
         # Cache values list
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -669,6 +831,8 @@ class BulkValidatedInputDialog(BulkInputDialog):
             self._values = getter()
         finally:
             QApplication.restoreOverrideCursor()
+        self._known = set(self._values)
+        self._by_lower: dict[str, str] | None = None  # built on first need
 
         # Configure the input field with autocomplete
         self._completer = QCompleter(self._values)
@@ -692,6 +856,34 @@ class BulkValidatedInputDialog(BulkInputDialog):
         # Enable drag and drop
         self.setAcceptDrops(True)
 
+    def parse_text(self, text: str) -> list[str]:
+        if "\n" in text:
+            # Split by newlines if multi-line (not spaces; names may contain them)
+            values = (_unquote(item) for item in text.splitlines())
+        else:
+            # Split by commas
+            values = (_unquote(item) for item in text.split(","))
+        return [v for v in values if v]
+
+    def parse_file(self, text: str) -> list[str]:
+        values = (_unquote(line) for line in text.splitlines())
+        return [v for v in values if v]
+
+    def check_values(self, values: list[str]) -> tuple[list[str], list[str]]:
+        accepted, rejected = [], []
+        for value in values:
+            if value in self._known:
+                accepted.append(value)
+                continue
+            if self._by_lower is None:
+                self._by_lower = {v.lower(): v for v in self._values}
+            known = self._by_lower.get(value.lower())
+            if known is None:
+                rejected.append(value)
+            else:
+                accepted.append(known)
+        return accepted, rejected
+
     def dragEnterEvent(self, event: QDragEnterEvent):
         if event.mimeData().hasText():
             event.acceptProposedAction()
@@ -699,39 +891,13 @@ class BulkValidatedInputDialog(BulkInputDialog):
     def dropEvent(self, event: QDropEvent):
         mime_data = event.mimeData()
         if mime_data.hasText():
-            text = mime_data.text()
-            if "\n" in text:
-                # Split by newlines if multi-line (not spaces; names may contain them)
-                values = [item.strip() for item in text.splitlines() if item.strip()]
-            else:
-                # Split by commas
-                values = [item.strip() for item in text.split(",") if item.strip()]
-            invalid_values = []
-            for value in values:
-                # Guard against invalid values
-                if value not in self._values:
-                    invalid_values.append(value)
-                    continue
-
-                # Add the value if it does not already exist in the list
-                if value and not self._list.findItems(value, Qt.MatchFlag.MatchExactly):
-                    self._list.addItem(value)
-
-            # Show a warning for any invalid values
-            if invalid_values:
-                QMessageBox.warning(
-                    self,
-                    f"Invalid {self._item_label}s",
-                    f"The following {self._item_label.lower()}s were not recognized "
-                    "and were not added:\n" + ", ".join(invalid_values),
-                )
-
+            self.add_values(self.parse_text(mime_data.text()))
             event.acceptProposedAction()
 
     def _add_current_value(self):
         value = self._input.text().strip()
-        if value and not self._list.findItems(value, Qt.MatchFlag.MatchExactly):
-            self._list.addItem(value)
+        if value:
+            self._append([value])
             # Use a zero-timer to clear after the current event is processed
             QTimer.singleShot(0, self._input.clear)
 
@@ -744,8 +910,8 @@ class BulkValidatedInputDialog(BulkInputDialog):
             0,
             True,
         )
-        if ok and value and not self._list.findItems(value, Qt.MatchFlag.MatchExactly):
-            self._list.addItem(value)
+        if ok and value:
+            self._append([value])
 
     def add_items(self):
         # This is intentionally empty to prevent splitting by spaces
@@ -874,7 +1040,7 @@ class QueryDialog(QDialog):
         self.limit_offset_bar = QWidget()
         self.limit_offset_bar.setLayout(QFormLayout())
         self.limit_edit = QSpinBox()
-        self.limit_edit.setRange(0, 100000)
+        self.limit_edit.setRange(1, 100000)
         self.limit_edit.setValue(10000)
         self.offset_edit = QSpinBox()
         self.offset_edit.setRange(0, 1000000000)

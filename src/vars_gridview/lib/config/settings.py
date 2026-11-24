@@ -106,6 +106,10 @@ class AppSettings:
         embeddings_enabled: Whether embedding-backed similarity features are active.
         embedding_service_url: Base URL of the embedding HTTP service.
         embedding_model_name: Image model name to use on the embedding service.
+        vector_db_enabled: Use embeddings already stored in the VARS vector
+            database (Qdrant) for tiles that have one, before computing any.
+        vector_db_url: Base URL of the VARS vector database (Qdrant REST).
+        vector_db_collection: Qdrant collection holding VARS annotations.
         gui_geometry: Saved ``QMainWindow`` geometry bytes.
         gui_window_state: Saved ``QMainWindow`` toolbar/dock state bytes.
         gui_splitter1_state: Saved state of the main horizontal splitter.
@@ -183,6 +187,18 @@ class AppSettings:
             "embeddings/model_name",
             str,
             "dinov3",
+        )
+        self.vector_db_enabled: SettingProxy[bool] = SettingProxy(
+            _s, "embeddings/vector_db_enabled", bool, True
+        )
+        self.vector_db_url: SettingProxy[str] = SettingProxy(
+            _s,
+            "embeddings/vector_db_url",
+            str,
+            "http://scirocco.shore.mbari.org:6333",
+        )
+        self.vector_db_collection: SettingProxy[str] = SettingProxy(
+            _s, "embeddings/vector_db_collection", str, "vars_annotations"
         )
 
         # ── GUI persistence ────────────────────────────────────────────────────

@@ -28,7 +28,9 @@ def _fake_image_mosaic(rect_widgets: list) -> SimpleNamespace:
         clear_selected_calls=0,
         render_calls=0,
         rect_widgets_removed=_FakeSignal(),
+        forgotten=[],
     )
+    fake_self._roi_loading = SimpleNamespace(forget=fake_self.forgotten.append)
     fake_self.clear_selected = lambda: setattr(
         fake_self, "clear_selected_calls", fake_self.clear_selected_calls + 1
     )
@@ -49,6 +51,8 @@ def test_remove_rect_widgets_emits_removed_widgets() -> None:
     assert fake_self.clear_selected_calls == 1
     assert fake_self.render_calls == 1
     assert fake_self.rect_widgets_removed.emitted == [[rw2]]
+    # The ROI loader drops it before it's deleted (no retry of a dead tile).
+    assert fake_self.forgotten == [[rw2]]
 
 
 def test_remove_rect_widgets_skips_widgets_not_present() -> None:

@@ -110,17 +110,34 @@ class EmbeddingLifecycleCoordinator(QtCore.QObject):
 
     @QtCore.pyqtSlot(object)
     def _on_embedding_model_ready(self, model) -> None:
-        self._embedding_model = model
-        self._loaded_embedding_config = (
-            self._settings.embedding_service_url.value.strip().rstrip("/"),
-            self._settings.embedding_model_name.value.strip(),
+        # Label the model with the settings it was built from: the settings
+        # may have changed again while it was connecting, and calling it by
+        # the new name would mix two models' vectors under one name.
+        built_from = (
+            str(getattr(model, "base_url", "")).strip().rstrip("/"),
+            str(getattr(model, "model_name", "")).strip(),
         )
+        if built_from != self._current_embedding_config():
+            self._pending_embedding_reload = True  # load the current one next
+            return
+        self._embedding_model = model
+        self._loaded_embedding_config = built_from
         self._apply_model_callback(model)
 
     @QtCore.pyqtSlot(tuple)
     def _on_embedding_model_error(self, err: tuple) -> None:
         message = str(err[1]) if len(err) > 1 else "Unknown error"
         LOGGER.error(f"Could not initialize embedding service: {message}")
+        if self._settings.vector_db_enabled.value:
+            # Not fatal: most tiles' embeddings come from the vector database.
+            QtWidgets.QMessageBox.warning(
+                self._dialog_parent,
+                "Embedding service unavailable",
+                f"Could not connect to the embedding service: {message}\n\n"
+                "Embeddings stored in the VARS vector database will still be "
+                "used for Find similar; tiles without one are placed last.",
+            )
+            return
         QtWidgets.QMessageBox.critical(
             self._dialog_parent,
             "Error",

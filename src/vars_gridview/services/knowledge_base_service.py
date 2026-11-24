@@ -92,9 +92,13 @@ class KnowledgeBaseService:
                 response.raise_for_status()
                 name: str | None = response.json().get("name")
             except requests.HTTPError:
-                name = None
-            concepts[concept] = name
-            self._concept_name_cache[concept] = name
+                # Not cached: a 404 for a typo, or a transient outage, must not
+                # stick for the cache's lifetime.
+                return None
+            if name:
+                concepts[concept] = name
+                self._concept_name_cache[concept] = name
+            return name
 
         return concepts.get(concept)
 

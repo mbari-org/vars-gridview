@@ -1,67 +1,46 @@
 from __future__ import annotations
 
-from typing import Any, cast
+import numpy as np
 
 from vars_gridview.ui.coordinators.mosaic_similarity_coordinator import (
-    MosaicSimilarityCoordinator,
+    rank_by_similarity,
 )
 
 
-class _Rect:
-    def __init__(
-        self, name: str, label: str, distances: dict[str, float] | None = None
-    ):
-        self.name = name
-        self.text_label = label
-        self._distances = distances or {}
-
-    def embedding_distance(self, other: _Rect) -> float:
-        if other.name not in self._distances:
-            raise RuntimeError("distance unavailable")
-        return self._distances[other.name]
+def _v(*xs: float) -> np.ndarray:
+    return np.asarray(xs, dtype=np.float32)
 
 
-def test_compute_similarity_sort_order_basic() -> None:
-    clicked = _Rect("clicked", "fish", {"a": 0.3, "b": 0.1, "c": 0.2})
-    rects = [
-        _Rect("a", "fish"),
-        _Rect("b", "fish"),
-        _Rect("c", "fish"),
-    ]
+def test_rank_by_similarity_basic() -> None:
+    query = _v(1, 0)
+    embeddings = [_v(0, 1), _v(1, 0.1), _v(1, 1)]  # cos ~0, ~0.995, ~0.707
 
-    order = MosaicSimilarityCoordinator.compute_similarity_sort_order(
-        rect_widgets=cast(Any, rects),
-        clicked_rect=cast(Any, clicked),
-        same_class_only=False,
+    order, missing = rank_by_similarity(
+        query, embeddings, ["fish"] * 3, "fish", same_class_only=False
     )
 
     assert order == [1, 2, 0]
+    assert missing == 0
 
 
-def test_compute_similarity_sort_order_same_class_only() -> None:
-    clicked = _Rect("clicked", "fish", {"a": 0.1, "b": 0.2})
-    rects = [
-        _Rect("a", "fish"),
-        _Rect("b", "coral"),
-    ]
+def test_rank_by_similarity_same_class_only_puts_other_labels_after() -> None:
+    query = _v(1, 0)
+    embeddings = [_v(1, 0), _v(0.5, 0.5), _v(0, 1)]
 
-    order = MosaicSimilarityCoordinator.compute_similarity_sort_order(
-        rect_widgets=cast(Any, rects),
-        clicked_rect=cast(Any, clicked),
-        same_class_only=True,
+    order, _missing = rank_by_similarity(
+        query, embeddings, ["coral", "fish", "fish"], "fish", same_class_only=True
     )
 
-    assert order == [0, 1]
+    assert order == [1, 2, 0]  # the identical coral comes after every fish
 
 
-def test_compute_similarity_sort_order_handles_distance_errors() -> None:
-    clicked = _Rect("clicked", "fish", {"a": 0.4})
-    rects = [_Rect("a", "fish"), _Rect("b", "fish")]
+def test_rank_by_similarity_tiles_without_embeddings_go_last_in_order() -> None:
+    query = _v(1, 0)
+    embeddings = [None, _v(0, 1), None, _v(1, 0)]
 
-    order = MosaicSimilarityCoordinator.compute_similarity_sort_order(
-        rect_widgets=cast(Any, rects),
-        clicked_rect=cast(Any, clicked),
-        same_class_only=False,
+    order, missing = rank_by_similarity(
+        query, embeddings, ["fish"] * 4, "fish", same_class_only=False
     )
 
-    assert order == [0, 1]
+    assert order == [3, 1, 0, 2]
+    assert missing == 2

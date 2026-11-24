@@ -5,10 +5,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtWidgets
 
 from vars_gridview.lib.config.constants import get_settings
 from vars_gridview.lib.config.settings import AppSettings
+from vars_gridview.lib.runtime.runnables import Worker
 
 if TYPE_CHECKING:
     from vars_gridview.controllers.annotation_controller import AnnotationController
@@ -48,6 +49,19 @@ class AnnotationActionCoordinator:
     def clear_pending(self) -> None:
         self._pending_action = None
         self._pending_deleted_rects = []
+
+    def _busy(self) -> bool:
+        """True (and tell the user) while an earlier operation is still
+        running: the finish handling is per operation, and a second action
+        on top of a running one used to race it."""
+        if self._pending_action is None:
+            return False
+        QtWidgets.QMessageBox.information(
+            self._parent,
+            "Operation in progress",
+            "Please wait for the current operation to finish.",
+        )
+        return True
 
     def _controller(self) -> AnnotationController | None:
         return self._annotation_controller_getter()
@@ -94,10 +108,12 @@ class AnnotationActionCoordinator:
         confirm_message: str,
         run_action: Callable[[list], None],
     ) -> None:
-        if not self._ensure_annotation_ready():
+        if not self._ensure_annotation_ready() or self._busy():
             return
 
         selected_rects, associations = self._selected_associations()
+        if not selected_rects:
+            return
         if not self._confirm_count_action(
             self._parent,
             confirm_title,
@@ -115,16 +131,30 @@ class AnnotationActionCoordinator:
             return
 
         associations = [rw.association for rw in selected_rects]
-        try:
-            delete_plan = controller.plan_delete(associations)
-        except Exception as exc:  # noqa: BLE001
-            QtWidgets.QMessageBox.critical(
-                self._parent,
-                "Delete Planning Failed",
-                f"Could not inspect parent observations before delete:\n\n{exc}",
-            )
-            return
+        # Planning makes one request per observation: off the GUI thread.
+        # Marked pending now so no other action starts meanwhile.
+        self._pending_action = "delete"
+        worker = Worker(controller.plan_delete, associations)
+        worker.signals.result.connect(
+            lambda plan: self._continue_delete(selected_rects, associations, plan)
+        )
+        worker.signals.error.connect(self._on_delete_plan_failed)
+        QtCore.QThreadPool.globalInstance().start(worker)
 
+    def _on_delete_plan_failed(self, err: tuple) -> None:
+        self.clear_pending()
+        message = str(err[1]) if len(err) > 1 else "Unknown error"
+        QtWidgets.QMessageBox.critical(
+            self._parent,
+            "Delete Planning Failed",
+            f"Could not inspect parent observations before delete:\n\n{message}",
+        )
+
+    def _continue_delete(self, selected_rects, associations, delete_plan) -> None:
+        controller = self._controller()
+        if controller is None:
+            self.clear_pending()
+            return
         delete_dangling_observations = False
         if delete_plan.dangling_count > 0:
             confirm = QtWidgets.QMessageBox.question(
@@ -133,7 +163,7 @@ class AnnotationActionCoordinator:
                 (
                     "This operation would leave "
                     f"{delete_plan.dangling_count} observations with no "
-                    "bounding box associations. Delete those observations too?"
+                    "associations at all. Delete those observations too?"
                 ),
             )
             delete_dangling_observations = (
@@ -145,6 +175,7 @@ class AnnotationActionCoordinator:
         controller.delete_selected(
             associations,
             delete_dangling_observations=delete_dangling_observations,
+            plan=delete_plan,
         )
 
     def label_selected(self, concept: str, part: str) -> None:
@@ -251,7 +282,7 @@ class AnnotationActionCoordinator:
         )
 
     def delete_selected(self) -> None:
-        if not self._ensure_annotation_ready():
+        if not self._ensure_annotation_ready() or self._busy():
             return
 
         to_delete = self._image_mosaic.get_selected()
@@ -353,8 +384,31 @@ class AnnotationActionCoordinator:
         )
         return part
 
+    def delete_from_tile(self, rect_widget: RectWidget) -> None:
+        """A tile's right-click "Delete...": the whole selection if that tile
+        is part of it (as in a file browser), otherwise just that tile."""
+        if not self._ensure_annotation_ready() or self._busy():
+            return
+        selected = self._image_mosaic.get_selected()
+        if rect_widget in selected:
+            targets = list(selected)
+        else:
+            self._image_mosaic.select(rect_widget)
+            targets = [rect_widget]
+        count = len(targets)
+        what = "this localization" if count == 1 else f"{count} localizations"
+        confirm = QtWidgets.QMessageBox.question(
+            self._parent,
+            "Confirm Deletion",
+            f"Delete {what}?\nThis operation cannot be undone.",
+            defaultButton=QtWidgets.QMessageBox.StandardButton.No,
+        )
+        if confirm != QtWidgets.QMessageBox.StandardButton.Yes:
+            return
+        self._dispatch_delete(targets)
+
     def delete_from_box(self, rect_widget: RectWidget) -> None:
-        if not self._ensure_annotation_ready():
+        if not self._ensure_annotation_ready() or self._busy():
             return
         self._image_mosaic.select(rect_widget)
         confirm = QtWidgets.QMessageBox.question(
@@ -367,50 +421,97 @@ class AnnotationActionCoordinator:
             return
         self._dispatch_delete([rect_widget])
 
+    def _tile_targets(self, rect_widget: RectWidget) -> list[RectWidget]:
+        """What a tile's right-click action applies to: the whole selection
+        when the clicked tile is part of it (as in a file browser), otherwise
+        just that tile, which then becomes the selection."""
+        selected = self._image_mosaic.get_selected()
+        if rect_widget in selected:
+            return list(selected)
+        self._image_mosaic.select(rect_widget)
+        return [rect_widget]
+
+    def _run_tile_action(
+        self,
+        rect_widget: RectWidget,
+        *,
+        action_key: str,
+        confirm_title: str,
+        confirm_message: str,
+        run_action: Callable[[AnnotationController, list], None],
+    ) -> None:
+        if not self._ensure_annotation_ready() or self._busy():
+            return
+        controller = self._controller()
+        if controller is None:
+            return
+        targets = self._tile_targets(rect_widget)
+        if not self._confirm_count_action(
+            self._parent, confirm_title, confirm_message, len(targets)
+        ):
+            return
+        self._pending_action = action_key
+        run_action(controller, [rw.association for rw in targets])
+
     def label_single_from_tile(
         self,
         rect_widget: RectWidget,
         concept: str,
         part: str,
     ) -> None:
-        if not self._ensure_annotation_ready():
-            return
-        controller = self._controller()
-        if controller is None:
-            return
-        self._image_mosaic.select(rect_widget)
-        self._pending_action = "label"
-        controller.label_selected(
-            [rect_widget.association],
-            concept,
-            part,
-            self._settings.username.value,
+        """Right-click "Label": the selection if the tile is in it, else the tile."""
+        self._run_tile_action(
+            rect_widget,
+            action_key="label",
+            confirm_title="Confirm Label",
+            confirm_message=(
+                "Label {count} localizations as "
+                + f"'{concept}'"
+                + (f" with part '{part}'" if part != "self" else "")
+                + "?"
+            ),
+            run_action=lambda controller, associations: controller.label_selected(
+                associations, concept, part, self._settings.username.value
+            ),
         )
 
     def verify_single_from_tile(self, rect_widget: RectWidget) -> None:
-        if not self._ensure_annotation_ready():
-            return
-        controller = self._controller()
-        if controller is None:
-            return
-        self._image_mosaic.select(rect_widget)
-        self._pending_action = "verify"
-        controller.verify_selected(
-            [rect_widget.association],
-            True,
-            self._settings.username.value,
+        """Right-click "Verify": the selection if the tile is in it, else the tile."""
+        self._run_tile_action(
+            rect_widget,
+            action_key="verify",
+            confirm_title="Confirm Verification",
+            confirm_message="Verify {count} localizations?",
+            run_action=lambda controller, associations: controller.verify_selected(
+                associations, True, self._settings.username.value
+            ),
         )
 
     def mark_training_single_from_tile(self, rect_widget: RectWidget) -> None:
-        if not self._ensure_annotation_ready():
-            return
-        controller = self._controller()
-        if controller is None:
-            return
-        self._image_mosaic.select(rect_widget)
-        self._pending_action = "mark_training"
-        controller.mark_training_selected(
-            [rect_widget.association],
-            True,
-            self._settings.username.value,
+        """Right-click "Mark Training": the selection if the tile is in it."""
+        self._run_tile_action(
+            rect_widget,
+            action_key="mark_training",
+            confirm_title="Confirm Mark Training",
+            confirm_message="Mark {count} localizations for training?",
+            run_action=lambda controller, associations: (
+                controller.mark_training_selected(
+                    associations, True, self._settings.username.value
+                )
+            ),
+        )
+
+    def verify_and_mark_training_from_tile(self, rect_widget: RectWidget) -> None:
+        """Right-click "Verify + Mark Training", as one operation (it used to
+        start two, and the second was refused while the first ran)."""
+        self._run_tile_action(
+            rect_widget,
+            action_key="verify",
+            confirm_title="Confirm Verify + Mark Training",
+            confirm_message="Verify and mark {count} localizations for training?",
+            run_action=lambda controller, associations: (
+                controller.verify_and_mark_training_selected(
+                    associations, self._settings.username.value
+                )
+            ),
         )

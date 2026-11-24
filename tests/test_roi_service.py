@@ -6,6 +6,20 @@ import requests
 from vars_gridview.services.roi_service import RoiService
 
 
+def _png(width: int = 8, height: int = 8) -> bytes:
+    """A real PNG whose pixel (x, y) is (x, y, 7) in BGR, so crops are checkable."""
+    import cv2
+    import numpy as np
+
+    img = np.zeros((height, width, 3), np.uint8)
+    img[..., 0] = np.arange(width)[None, :]
+    img[..., 1] = np.arange(height)[:, None]
+    img[..., 2] = 7
+    ok, buf = cv2.imencode(".png", img)
+    assert ok
+    return buf.tobytes()
+
+
 def _httpx_status_error(
     status_code: int, headers: dict | None = None
 ) -> httpx.HTTPStatusError:
@@ -105,26 +119,47 @@ def test_fetch_roi_uses_skimmer_for_static_images(monkeypatch) -> None:
     assert result == "decoded"
 
 
-def test_fetch_roi_uses_beholder_for_video_frames(monkeypatch) -> None:
-    beholder = _FakeBeholder()
+def test_fetch_roi_uses_beholder_for_video_frames() -> None:
+    beholder = _FakeBeholder(payload=_png())
     service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
-
-    fake_image = _FakeArray()
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.np.frombuffer",
-        lambda *_args, **_kwargs: b"arr",
-    )
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.cv2.imdecode",
-        lambda *_args, **_kwargs: fake_image,
-    )
 
     result = service.fetch_roi(
         _FakeAssoc(), "https://example/video.mp4", elapsed_time_millis=123
     )
 
     assert beholder.calls == [("https://example/video.mp4", 123)]
-    assert result == "roi-slice"
+    # Box (1, 1, 3, 3): columns 1-2, rows 1-2.
+    assert result.shape == (2, 2, 3)
+    assert result[0, 0].tolist() == [1, 1, 7]
+
+
+def test_fetch_roi_scales_boxes_onto_proxy_frames() -> None:
+    """Boxes are in source-video pixels; a proxy frame half the size must be
+    cropped at half the coordinates, not at the source ones."""
+    beholder = _FakeBeholder(payload=_png(8, 8))
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
+
+    assoc = _FakeAssoc()
+    assoc.box = (4, 2, 12, 10)  # source coords; the proxy is 2x smaller
+
+    result = service.fetch_roi(
+        assoc, "https://example/video.mp4", 123, scale_x=2.0, scale_y=2.0
+    )
+
+    assert result.shape == (4, 4, 3)
+    assert result[0, 0].tolist() == [2, 1, 7]
+
+
+def test_fetch_roi_captures_each_video_frame_once() -> None:
+    """Several boxes on one frame share a single Beholder capture."""
+    beholder = _FakeBeholder(payload=_png())
+    service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
+
+    for _ in range(3):
+        service.fetch_roi(_FakeAssoc(), "https://example/video.mp4", 123)
+    service.fetch_full_image("https://example/video.mp4", 123)
+
+    assert beholder.calls == [("https://example/video.mp4", 123)]
 
 
 def test_fetch_roi_returns_none_on_skimmer_http_error() -> None:
@@ -141,21 +176,12 @@ def test_fetch_full_image_uses_requests_for_static_images(monkeypatch) -> None:
     service = RoiService(skimmer=_FakeSkimmer(), beholder=_FakeBeholder())
 
     monkeypatch.setattr(
-        "vars_gridview.services.roi_service.requests.get",
-        lambda *_args, **_kwargs: _FakeResponse(b"img"),
-    )
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.np.frombuffer",
-        lambda *_args, **_kwargs: b"arr",
-    )
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.cv2.imdecode",
-        lambda *_args, **_kwargs: "decoded-full",
+        service._session, "get", lambda *_args, **_kwargs: _FakeResponse(_png())
     )
 
     result = service.fetch_full_image("https://example/image.jpg")
 
-    assert result == "decoded-full"
+    assert result.shape == (8, 8, 3)
 
 
 def test_fetch_full_image_returns_none_on_unexpected_error(monkeypatch) -> None:
@@ -282,20 +308,11 @@ def test_fetch_roi_retries_beholder_503_then_succeeds(monkeypatch) -> None:
     monkeypatch.setattr(
         "vars_gridview.services.roi_service.time.sleep", lambda s: sleeps.append(s)
     )
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.np.frombuffer",
-        lambda *_args, **_kwargs: b"arr",
-    )
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.cv2.imdecode",
-        lambda *_args, **_kwargs: _FakeArray(),
-    )
-
     beholder = _FakeBeholder(
         responses=[
             _httpx_status_error(503, headers={"Retry-After": "0.5"}),
             _httpx_status_error(503, headers={"Retry-After": "0.5"}),
-            b"frame",
+            _png(),
         ]
     )
     service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
@@ -304,7 +321,7 @@ def test_fetch_roi_retries_beholder_503_then_succeeds(monkeypatch) -> None:
         _FakeAssoc(), "https://example/video.mp4", elapsed_time_millis=123
     )
 
-    assert result == "roi-slice"
+    assert result.shape == (2, 2, 3)
     assert len(beholder.calls) == 3
     assert sleeps == [0.5, 0.5]
 
@@ -342,19 +359,11 @@ def test_fetch_full_image_retries_beholder_503_past_the_bulk_retry_budget(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr("vars_gridview.services.roi_service.time.sleep", lambda s: None)
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.np.frombuffer",
-        lambda *_args, **_kwargs: b"arr",
-    )
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.cv2.imdecode",
-        lambda *_args, **_kwargs: "decoded",
-    )
 
     # More failures than fetch_roi's small retry budget would tolerate --
     # the interactive full-image path should keep going regardless.
     beholder = _FakeBeholder(
-        responses=[_httpx_status_error(503) for _ in range(5)] + [b"frame"]
+        responses=[_httpx_status_error(503) for _ in range(5)] + [_png()]
     )
     service = RoiService(skimmer=_FakeSkimmer(), beholder=beholder)
 
@@ -362,7 +371,7 @@ def test_fetch_full_image_retries_beholder_503_past_the_bulk_retry_budget(
         "https://example/video.mp4", elapsed_time_millis=123
     )
 
-    assert result == "decoded"
+    assert result.shape == (8, 8, 3)
     assert len(beholder.calls) == 6
 
 
@@ -409,27 +418,17 @@ def test_fetch_full_image_gives_up_once_deadline_passes(monkeypatch) -> None:
 
 def test_fetch_full_image_retries_static_image_503(monkeypatch) -> None:
     monkeypatch.setattr("vars_gridview.services.roi_service.time.sleep", lambda s: None)
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.np.frombuffer",
-        lambda *_args, **_kwargs: b"arr",
-    )
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.cv2.imdecode",
-        lambda *_args, **_kwargs: "decoded",
-    )
 
     responses = [
         _FakeResponse(status_code=503),
         _FakeResponse(status_code=503),
-        _FakeResponse(b"img", status_code=200),
+        _FakeResponse(_png(), status_code=200),
     ]
-    monkeypatch.setattr(
-        "vars_gridview.services.roi_service.requests.get",
-        lambda *_args, **_kwargs: responses.pop(0),
-    )
-
     service = RoiService(skimmer=_FakeSkimmer(), beholder=_FakeBeholder())
+    monkeypatch.setattr(
+        service._session, "get", lambda *_args, **_kwargs: responses.pop(0)
+    )
     result = service.fetch_full_image("https://example/image.jpg")
 
-    assert result == "decoded"
+    assert result.shape == (8, 8, 3)
     assert responses == []

@@ -21,12 +21,14 @@ from collections.abc import Sequence
 from PyQt6.QtCore import QObject, QThreadPool, pyqtSignal
 
 from vars_gridview.lib.common.tsv import parse_tsv
+from vars_gridview.lib.m3 import split_query
 from vars_gridview.lib.m3.clients import AnnosaurusClient
 from vars_gridview.lib.m3.query import (
     QueryConstraint,
     QueryRequest,
     merge_constraints,
 )
+from vars_gridview.lib.m3.split_query import SplitPlan
 from vars_gridview.lib.runtime.runnables import Worker
 
 _LOG = logging.getLogger(__name__)
@@ -63,6 +65,8 @@ class QueryController(QObject):
         self._request_generation: int = 0
         self._annosaurus_client: AnnosaurusClient | None = None
         self._cancel_event: threading.Event = threading.Event()
+        # Reused by the pages of a split query; see _fetch_count.
+        self._split_plan: SplitPlan | None = None
 
     @property
     def cancel_event(self) -> threading.Event:
@@ -120,6 +124,7 @@ class QueryController(QObject):
             limit: Maximum number of rows per page.
             offset: Row offset for the first page (default ``0``).
         """
+        self._split_plan = None  # a new query is counted afresh
         merged = merge_constraints(list(constraints))
         request = QueryRequest(
             select=[
@@ -158,11 +163,28 @@ class QueryController(QObject):
                 "observation_group",
             ],
             where=[QueryConstraint("link_name", equals="bounding box"), *merged],
-            order_by=["index_recorded_timestamp"],
+            # Tie-breakers: many rows share a timestamp, and OFFSET/FETCH paging
+            # over a non-unique order can repeat or skip rows between pages.
+            order_by=[
+                "index_recorded_timestamp",
+                "association_uuid",
+                "image_reference_uuid",
+            ],
             limit=limit,
             offset=offset,
         )
         self._dispatch(request)
+
+    def has_next_page(self) -> bool:
+        """True when a later page of the last query exists."""
+        if self._last_request is None:
+            return False
+        limit = max(1, self._last_request.limit or 1)
+        return self._last_request.offset + limit < self._total_rows
+
+    def has_previous_page(self) -> bool:
+        """True when an earlier page of the last query exists."""
+        return self._last_request is not None and (self._last_request.offset or 0) > 0
 
     def next_page(self) -> None:
         """Fetch the next page of the last query.
@@ -220,9 +242,17 @@ class QueryController(QObject):
         self.query_started.emit()
         self.query_stage_started.emit("count")
 
-        worker = Worker(self._fetch_count, self._annosaurus_client, request, generation)
+        worker = Worker(
+            self._fetch_count,
+            self._annosaurus_client,
+            request,
+            generation,
+            self._split_plan,
+        )
         worker.signals.result.connect(self._on_count_result)
-        worker.signals.error.connect(self._on_error)
+        worker.signals.error.connect(
+            lambda error, generation=generation: self._on_error(error, generation)
+        )
         QThreadPool.globalInstance().start(worker)
 
     @staticmethod
@@ -230,23 +260,34 @@ class QueryController(QObject):
         client: AnnosaurusClient,
         request: QueryRequest,
         generation: int,
-    ) -> tuple[QueryRequest, int, int]:
+        cached: SplitPlan | None = None,
+    ) -> tuple[QueryRequest, int, int, SplitPlan | None]:
         """Count matching rows in a worker thread.
+
+        A query whose ``in`` list is too long for one database statement is
+        planned as a split query (see :mod:`~vars_gridview.lib.m3.split_query`)
+        when it's first run; its later pages reuse that plan.
 
         Args:
             request: Query parameters.
             generation: Request generation token.
+            cached: The plan of the last split query, if any.
 
         Returns:
-            A tuple ``(request, total_rows, generation)``.
+            A tuple ``(request, total_rows, generation, plan)``; *plan* is
+            ``None`` unless the query is split.
 
         Raises:
             Exception: Any network error.
         """
+        if cached is not None and cached.where == request.where:
+            return request, cached.total, generation, cached
+        split = split_query.plan(client, request)
+        if split is not None:
+            return request, split.total, generation, split
         response = client.query_count(request)
         response.raise_for_status()
-        total = response.json()["count"]
-        return request, total, generation
+        return request, response.json()["count"], generation, None
 
     @staticmethod
     def _fetch_download(
@@ -254,6 +295,7 @@ class QueryController(QObject):
         request: QueryRequest,
         total_rows: int,
         generation: int,
+        split: SplitPlan | None = None,
     ) -> tuple[QueryRequest, int, int, str]:
         """Download raw TSV payload in a worker thread.
 
@@ -261,6 +303,7 @@ class QueryController(QObject):
             request: Query parameters.
             total_rows: Precomputed total row count.
             generation: Request generation token.
+            split: The plan of a split query, from :meth:`_fetch_count`.
 
         Returns:
             A tuple ``(request, total_rows, generation, raw_tsv)``.
@@ -268,9 +311,12 @@ class QueryController(QObject):
         Raises:
             Exception: Any network error.
         """
-        response = client.query_download(request)
-        response.raise_for_status()
-        raw = response.text
+        if split is not None:
+            raw = split_query.fetch_page(client, request, split)
+        else:
+            response = client.query_download(request)
+            response.raise_for_status()
+            raw = response.text
         return request, total_rows, generation, raw
 
     @staticmethod
@@ -298,9 +344,10 @@ class QueryController(QObject):
         return request, total_rows, generation, headers, rows
 
     def _on_count_result(self, payload: tuple) -> None:
-        request, total_rows, generation = payload
+        request, total_rows, generation, split = payload
         if generation != self._request_generation:
             return
+        self._split_plan = split
         if self._cancel_event.is_set():
             self.query_cancelled.emit()
             return
@@ -315,9 +362,12 @@ class QueryController(QObject):
             request,
             total_rows,
             generation,
+            split,
         )
         worker.signals.result.connect(self._on_download_result)
-        worker.signals.error.connect(self._on_error)
+        worker.signals.error.connect(
+            lambda error, generation=generation: self._on_error(error, generation)
+        )
         QThreadPool.globalInstance().start(worker)
 
     def _on_download_result(self, payload: tuple) -> None:
@@ -337,7 +387,9 @@ class QueryController(QObject):
             raw_tsv,
         )
         worker.signals.result.connect(self._on_result)
-        worker.signals.error.connect(self._on_error)
+        worker.signals.error.connect(
+            lambda error, generation=generation: self._on_error(error, generation)
+        )
         QThreadPool.globalInstance().start(worker)
 
     def _on_result(self, payload: tuple) -> None:
@@ -355,17 +407,22 @@ class QueryController(QObject):
 
         self._last_request = request
         self._total_rows = total
-        page = 1 + request.offset // request.limit
-        total_pages = total // request.limit + (1 if total % request.limit else 0)
+        limit = max(1, request.limit or 1)
+        page = 1 + request.offset // limit
+        total_pages = total // limit + (1 if total % limit else 0)
         _LOG.info("Query complete: %d total rows, page %d/%d", total, page, total_pages)
         self.results_ready.emit(headers, rows, page, total_pages, total)
 
-    def _on_error(self, error: tuple) -> None:
+    def _on_error(self, error: tuple, generation: int | None = None) -> None:
         """Handle a query failure.
 
         Args:
             error: ``(exc_type, exc_value, traceback)`` from the worker.
+            generation: Request generation the failing worker belonged to;
+                failures of superseded queries are ignored.
         """
+        if generation is not None and generation != self._request_generation:
+            return
         exc_type, exc_value, _tb = error
         msg = f"{exc_type.__name__}: {exc_value}"
         _LOG.error("Query failed: %s", msg)
