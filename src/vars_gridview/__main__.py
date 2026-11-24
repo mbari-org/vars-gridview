@@ -62,6 +62,11 @@ def install_exception_hook() -> None:
     """
     showing = False
     quitting = False
+    dialogs: set[QtWidgets.QMessageBox] = set()  # keep open dialogs alive
+
+    def on_dialog_closed(*_args) -> None:
+        nonlocal showing
+        showing = False
 
     def on_about_to_quit() -> None:
         nonlocal quitting
@@ -97,8 +102,16 @@ def install_exception_hook() -> None:
                 "want to save your work and restart.",
             )
             box.setDetailedText(text)
-            box.exec()
-        finally:
+            box.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+            box.finished.connect(on_dialog_closed)
+            # show(), not exec(): exec() runs a nested event loop inside the
+            # failing slot, and when that slot was a QTimer.singleShot
+            # callback the loop deleted the callback while PyQt was still
+            # reporting its exception -- a segfault.
+            box.show()
+            dialogs.add(box)
+            box.destroyed.connect(lambda *_: dialogs.discard(box))
+        except Exception:  # noqa: BLE001 -- the hook itself must never raise
             showing = False
 
     sys.excepthook = hook

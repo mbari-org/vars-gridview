@@ -1030,6 +1030,9 @@ class ImageMosaic(QtCore.QObject):
         ]
 
         self.n_localizations = len(self._rect_widgets)
+        # Before they're deleted: a retry sweep or the load queue must not
+        # touch them afterwards.
+        self._roi_loading.forget(removed)
         self.render_mosaic()
         # After the listeners below have dropped their references.
         QtCore.QTimer.singleShot(0, lambda: self._mosaic_view.dispose(removed))
