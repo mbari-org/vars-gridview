@@ -1093,6 +1093,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.image_mosaic.select_all()
 
+    @QtCore.pyqtSlot()
     def clear_selected(self):
         if not self.loaded:
             return
