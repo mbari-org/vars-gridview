@@ -76,7 +76,7 @@ def test_on_count_result_ignores_stale_generation() -> None:
     ctrl.query_stage_started.connect(lambda key: stage_calls.append(key))
 
     ctrl._request_generation = 2
-    ctrl._on_count_result((request, 100, 1))
+    ctrl._on_count_result((request, 100, 1, None))
 
     assert stage_calls == []
 
@@ -102,7 +102,7 @@ def test_on_count_result_stops_when_cancelled() -> None:
     ctrl.query_cancelled.connect(lambda: cancelled_calls.append(True))
 
     ctrl.cancel()
-    ctrl._on_count_result((request, 100, ctrl._request_generation))
+    ctrl._on_count_result((request, 100, ctrl._request_generation, None))
 
     assert stage_calls == []
     assert cancelled_calls == [True]
