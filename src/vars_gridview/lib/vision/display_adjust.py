@@ -283,11 +283,27 @@ def sharpen(thumb: np.ndarray, enlargement: float) -> np.ndarray:
 def brightness_contrast(
     bgr: np.ndarray, brightness: int, contrast: float
 ) -> np.ndarray:
-    """Contrast about mid-grey, then an additive brightness offset (0-255 units)."""
+    """Contrast and brightness on lightness only (Lab L, 0-255 units).
+
+    Contrast pivots on the image's own mean lightness, so it spreads light
+    and dark apart without making the image as a whole darker or brighter;
+    brightness is then added. Colour (a*, b*) is left alone.
+
+    It used to scale each of B, G and R about 128. That stretches the
+    differences between channels too, so contrast also raised saturation
+    (~40% at 1.5x) and pushed dim, warm areas toward red; channels clipping at
+    different levels shifted hue; and with most footage far darker than 128,
+    more contrast mainly darkened it (and turned black borders grey).
+    """
     if brightness == 0 and contrast == 1.0:
         return bgr
-    beta = 128.0 * (1.0 - contrast) + brightness
-    return cv2.convertScaleAbs(bgr, alpha=contrast, beta=beta)
+    lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)
+    light = lab[:, :, 0].astype(np.float32)
+    pivot = float(light.mean())
+    lab[:, :, 0] = np.clip(
+        (light - pivot) * contrast + pivot + brightness + 0.5, 0, 255
+    ).astype(np.uint8)
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
 
 
 @dataclass(frozen=True)
