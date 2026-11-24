@@ -119,6 +119,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self._settings.gui_style.valueChanged.connect(self._on_gui_style_changed)
 
         self.last_selected_rect = None  # Last selected ROI
+        # Edited boxes being saved before a new page / query; the latest
+        # navigation asked for meanwhile runs once the save is done.
+        self._dirty_save_running = False
+        self._after_dirty_save = None
 
         # Last query request and total row count
         self._shutdown_save = ShutdownSaveCoordinator(parent=self, dialog_parent=self)
@@ -634,24 +638,38 @@ class MainWindow(QtWidgets.QMainWindow):
         """Save edited-but-unsaved boxes before the current results are
         dropped (a new query or page), then call *proceed*. If the save
         fails the results stay up -- nothing is discarded -- and the error
-        is shown, so the edits can be retried."""
+        is shown, so the edits can be retried.
+
+        While a save runs, another request (a double-click on Next, or a new
+        query) replaces the waiting one instead of saving the same boxes
+        again and loading twice; only the latest runs after the save."""
+        if self._dirty_save_running:
+            self._after_dirty_save = proceed
+            return
         box_handler = self.box_handler
         dirty = box_handler.get_dirty_associations() if box_handler is not None else []
         if not dirty:
             proceed()
             return
         self.statusBar().showMessage(f"Saving {len(dirty)} edited boxes...")
+        self._dirty_save_running = True
+        self._after_dirty_save = proceed
         worker = Worker(
             self._dirty_association_save.save_dirty_associations_worker, dirty
         )
 
         def saved(saved_uuids) -> None:
+            self._dirty_save_running = False
             if self.box_handler is box_handler and isinstance(saved_uuids, set):
                 box_handler.clear_dirty_for(saved_uuids)
             self.statusBar().clearMessage()
-            proceed()
+            after, self._after_dirty_save = self._after_dirty_save, None
+            if after is not None:
+                after()
 
         def failed(err: tuple) -> None:
+            self._dirty_save_running = False
+            self._after_dirty_save = None  # keep the results and the edits
             self.statusBar().clearMessage()
             message = str(err[1]) if len(err) > 1 else "Unknown error"
             self._notify_error(

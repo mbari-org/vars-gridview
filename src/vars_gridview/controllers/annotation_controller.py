@@ -319,7 +319,7 @@ class AnnotationController(QObject):
         _LOG.error("Annotation operation failed: %s", msg)
         self.operation_failed.emit(msg)
 
-    # ── Worker functions (run off-thread) ──────────────────────────────────────
+    # ── Bulk partial label ─────────────────────────────────────────────────────
 
     def label_selected_partial(
         self,
@@ -367,6 +367,8 @@ class AnnotationController(QObject):
         self._dispatch(
             desc, self._apply_labels, list(associations), canonical, part, observer
         )
+
+    # ── Worker functions (run off-thread) ──────────────────────────────────────
 
     def _apply_labels(
         self,

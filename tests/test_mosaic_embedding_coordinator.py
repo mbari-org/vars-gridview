@@ -68,3 +68,30 @@ def test_compute_embeddings_payload_returns_empty_when_no_candidates() -> None:
 
     assert generation == 3
     assert rows == []
+
+
+def test_queued_restart_reads_the_current_tiles(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    tiles = [SimpleNamespace(has_cached_embedding=False) for _ in range(4)]
+    current = {"tiles": tiles}
+    coordinator = MosaicEmbeddingCoordinator(parent=None)
+    snapshotted: list = []
+    monkeypatch.setattr(
+        coordinator, "snapshot", lambda targets: snapshotted.append(targets) or []
+    )
+
+    coordinator._in_progress = True  # a precompute is running
+    coordinator.request_precompute(
+        rect_widgets=lambda: current["tiles"],
+        embedding_model=_EmbeddingModel(),
+        generation=1,
+        on_result=lambda _payload: None,
+        on_unavailable=lambda _message: None,
+    )
+    assert coordinator._pending  # restart queued
+
+    current["tiles"] = tiles[2:]  # two tiles deleted meanwhile (a new list)
+    coordinator._on_finished()
+
+    assert snapshotted == [tiles[2:]]

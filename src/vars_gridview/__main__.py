@@ -3,6 +3,7 @@ VARS GridView application entrypoint.
 """
 
 import argparse
+import functools
 import logging
 import sys
 import traceback
@@ -110,7 +111,10 @@ def install_exception_hook() -> None:
             # reporting its exception -- a segfault.
             box.show()
             dialogs.add(box)
-            box.destroyed.connect(lambda *_: dialogs.discard(box))
+            # partial, not a lambda: a lambda reads `dialogs` from this
+            # closure, which may already be gone when a dialog still open at
+            # shutdown is destroyed (NameError).
+            box.destroyed.connect(functools.partial(dialogs.discard, box))
         except Exception:  # noqa: BLE001 -- the hook itself must never raise
             showing = False
 

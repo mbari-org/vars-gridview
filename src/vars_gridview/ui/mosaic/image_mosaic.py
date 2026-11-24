@@ -842,7 +842,9 @@ class ImageMosaic(QtCore.QObject):
         if self._stored_fetch_pending:
             return
         self._embedding.request_precompute(
-            rect_widgets=self._rect_widgets,
+            # A getter: delete replaces the list, and a queued restart must
+            # not embed tiles deleted since.
+            rect_widgets=lambda: self._rect_widgets,
             embedding_model=self._embedding_model,
             generation=self._embedding_generation,
             on_result=self._on_embeddings_precomputed,

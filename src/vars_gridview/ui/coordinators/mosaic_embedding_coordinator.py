@@ -47,7 +47,7 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
         self._pending = False
         self._latest_request: (
             tuple[
-                list[RectWidget],
+                list[RectWidget] | Callable[[], list[RectWidget]],
                 Embedding | None,
                 int,
                 Callable[[tuple], None],
@@ -67,13 +67,17 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
     def request_precompute(
         self,
         *,
-        rect_widgets: list[RectWidget],
+        rect_widgets: list[RectWidget] | Callable[[], list[RectWidget]],
         embedding_model: Embedding | None,
         generation: int,
         on_result: Callable[[tuple], None],
         on_unavailable: Callable[[str], None],
     ) -> None:
-        """Start precompute, or queue a restart if one is already running."""
+        """Start precompute, or queue a restart if one is already running.
+
+        *rect_widgets* may be a getter: a queued restart then reads the tiles
+        as they are when it runs, not a list kept from the request (which,
+        after a delete, still held the deleted tiles)."""
         self._latest_request = (
             rect_widgets,
             embedding_model,
@@ -81,6 +85,8 @@ class MosaicEmbeddingCoordinator(QtCore.QObject):
             on_result,
             on_unavailable,
         )
+        if callable(rect_widgets):
+            rect_widgets = rect_widgets()
 
         if embedding_model is None or not rect_widgets:
             return
