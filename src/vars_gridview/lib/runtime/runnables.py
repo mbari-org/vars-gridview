@@ -110,7 +110,7 @@ class Worker(QRunnable):
             # the runnable, here on the pool thread.
             payload = (self._fn, self._args, self._kwargs, signals)
             self._fn, self._args, self._kwargs = None, (), {}
-            self.signals = None
+            del self.signals  # (not "= None": that would type it Optional everywhere)
             signals.release.emit(payload)
             del payload, signals
 
