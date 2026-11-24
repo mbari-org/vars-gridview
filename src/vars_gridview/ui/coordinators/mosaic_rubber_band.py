@@ -11,6 +11,10 @@ reaches it as an ordinary click (select / Ctrl-toggle, and the image view
 updates), and only once the mouse moves past the platform drag distance does
 it become a drag. Shift is left alone for Shift-click range selection.
 Dragging past the top or bottom edge scrolls the grid.
+
+Hit-testing uses the scene's spatial index (``QGraphicsScene.items``), not a
+pass over every tile, and the selection is only replaced when the set of
+tiles under the band changes -- so dragging stays smooth on large pages.
 """
 
 from __future__ import annotations
@@ -55,6 +59,11 @@ class MosaicRubberBandSelector(QtCore.QObject):
         self._base: list = []
         self._deselect = False
         self._dragging = False
+        # Shown tiles by id -> grid position, taken at the press (they don't
+        # change during a drag); and the ids under the band at the last move.
+        self._order: dict[int, int] = {}
+        self._shown: dict[int, object] = {}
+        self._last_hit: frozenset[int] | None = None
         if viewport is not None:
             viewport.installEventFilter(self)
 
@@ -73,14 +82,11 @@ class MosaicRubberBandSelector(QtCore.QObject):
                 return False
             self._press_pos = event.position().toPoint()
             self._origin_scene = self._view.mapToScene(self._press_pos)
-            pressed = next(
-                (
-                    w
-                    for w in self._visible_widgets_getter()
-                    if w.sceneBoundingRect().contains(self._origin_scene)
-                ),
-                None,
-            )
+            shown = self._visible_widgets_getter()
+            self._order = {id(w): i for i, w in enumerate(shown)}
+            self._shown = {id(w): w for w in shown}
+            self._last_hit = None
+            pressed = next(iter(self._tiles_at(self._origin_scene)), None)
             self._deselect = pressed is not None and self._selection_model.is_selected(
                 pressed
             )
@@ -128,11 +134,11 @@ class MosaicRubberBandSelector(QtCore.QObject):
             self._band.setGeometry(band.intersected(viewport.rect()))
         self._band.show()
         scene_rect = self._view.mapToScene(band).boundingRect()
-        hit = [
-            w
-            for w in self._visible_widgets_getter()
-            if w.sceneBoundingRect().intersects(scene_rect)
-        ]
+        hit = self._tiles_in(scene_rect)
+        hit_ids = frozenset(id(w) for w in hit)
+        if hit_ids == self._last_hit:
+            return  # same tiles as the last move: nothing to change
+        self._last_hit = hit_ids
         if self._deselect:
             gone = {id(w) for w in hit}
             self._selection_model.set_selection(
@@ -141,11 +147,42 @@ class MosaicRubberBandSelector(QtCore.QObject):
         else:
             self._selection_model.set_selection(list(dict.fromkeys(self._base + hit)))
 
+    def _tiles_in(self, scene_rect: QtCore.QRectF) -> list:
+        """Shown tiles touching *scene_rect*, in grid order."""
+        scene = self._view.scene()
+        if scene is None:
+            return []
+        return self._shown_in_order(
+            scene.items(
+                scene_rect, QtCore.Qt.ItemSelectionMode.IntersectsItemBoundingRect
+            )
+        )
+
+    def _tiles_at(self, scene_pos: QtCore.QPointF) -> list:
+        """Shown tiles under *scene_pos*."""
+        scene = self._view.scene()
+        if scene is None:
+            return []
+        return self._shown_in_order(
+            scene.items(
+                scene_pos, QtCore.Qt.ItemSelectionMode.IntersectsItemBoundingRect
+            )
+        )
+
+    def _shown_in_order(self, items: list) -> list:
+        # The scene also holds the grid's container widget; keep shown tiles.
+        hit = [self._shown[id(i)] for i in items if id(i) in self._shown]
+        hit.sort(key=lambda w: self._order[id(w)])
+        return hit
+
     def _finish(self) -> None:
         self._band.hide()
         self._press_pos = None
         self._origin_scene = None
         self._base = []  # no tile references kept past the drag
+        self._order = {}
+        self._shown = {}
+        self._last_hit = None
         self._deselect = False
         self._dragging = False
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import itertools
+from collections import OrderedDict
 from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -9,7 +11,7 @@ from uuid import UUID
 
 import cv2
 import numpy as np
-from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets, sip
 from PyQt6.QtCore import QThreadPool
 from requests import HTTPError
 from scipy.spatial.distance import cosine
@@ -33,6 +35,26 @@ if TYPE_CHECKING:
     from vars_gridview.lib.vision.embedding import Embedding
 
 
+# Crops whose source step (fringes / colour) is kept, so a brightness,
+# contrast or sharpen change only redoes the cheap thumbnail step. ~170 KB
+# each (240 x 240 BGR): ~90 MB at the cap, a few screenfuls of tiles.
+MAX_CACHED_SOURCES = 512
+_TILE_IDS = itertools.count()
+_TILE_RENDER_POOL: QThreadPool | None = None
+
+
+def _tile_render_pool() -> QThreadPool:
+    """Pool for building adjusted tile pictures, apart from the global pool so
+    they don't queue behind image downloads."""
+    global _TILE_RENDER_POOL
+    if _TILE_RENDER_POOL is None:
+        _TILE_RENDER_POOL = QThreadPool()
+        _TILE_RENDER_POOL.setMaxThreadCount(
+            max(2, QtCore.QThread.idealThreadCount() // 2)
+        )
+    return _TILE_RENDER_POOL
+
+
 class DisplayContext:
     """How tiles are drawn, shared by every tile of a mosaic.
 
@@ -40,13 +62,46 @@ class DisplayContext:
     older version rebuilds it the next time it is *painted*. Qt only paints
     tiles that are on screen, so turning on colour correction for a page of
     thousands of tiles costs only the visible ones, and the rest are done as
-    they're scrolled to.
+    they're scrolled to. With any adjustment on, the rebuild runs on a worker
+    thread and the tile keeps its old picture until the new one is ready.
     """
 
     def __init__(self) -> None:
         self.adjustment = DisplayAdjustment()
         self.corrector = ColourCorrector()
         self.version = 0
+        # tile id -> SourceEntry; touched only on the GUI thread.
+        self._sources: OrderedDict[int, SourceEntry] = OrderedDict()
+
+    def source_key(self, frame_key: object) -> tuple:
+        """What the source step's result depends on, besides the crop."""
+        a = self.adjustment
+        if not a.needs_source_pixels:
+            return ()
+        return (
+            a.fix_fringes,
+            a.colour_correct,
+            a.local_contrast if a.colour_correct else 0.0,
+            a.colour_correct and self.corrector.has_frame(frame_key),
+        )
+
+    def cached_source(
+        self, tile_id: int, roi: np.ndarray, key: tuple
+    ) -> SourceEntry | None:
+        entry = self._sources.get(tile_id)
+        if entry is None or entry.roi is not roi or entry.key != key:
+            return None
+        self._sources.move_to_end(tile_id)
+        return entry
+
+    def store_source(self, tile_id: int, entry: SourceEntry) -> None:
+        self._sources[tile_id] = entry
+        self._sources.move_to_end(tile_id)
+        while len(self._sources) > MAX_CACHED_SOURCES:
+            self._sources.popitem(last=False)
+
+    def forget_source(self, tile_id: int) -> None:
+        self._sources.pop(tile_id, None)
 
     def set_adjustment(self, adjustment: DisplayAdjustment) -> bool:
         """Apply *adjustment*; True if anything changed."""
@@ -90,6 +145,114 @@ def _checkmark_pixmap(width: int, height: int) -> QtGui.QPixmap:
         )
         _CHECKMARK_PIXMAPS[key] = pixmap
     return pixmap
+
+
+class SourceEntry:
+    """A crop after the source step: scaled to fit the tile (or to the tile's
+    resolution, for a large crop), with fringes / colour applied."""
+
+    __slots__ = ("key", "roi", "scale", "thumb")
+
+    def __init__(self, roi: np.ndarray, key: tuple, thumb: np.ndarray, scale: float):
+        self.roi = roi  # the crop it was made from (compared by identity)
+        self.key = key
+        self.thumb = thumb
+        self.scale = scale
+
+
+def _normalise_roi(roi: np.ndarray | None, width: int, height: int) -> np.ndarray:
+    """A 3-channel BGR image; a black one for an empty or missing crop."""
+    # Some backends can return an empty ROI for tiny/degenerate boxes while zooming.
+    # Fallback to a blank image so we do not divide by zero when computing scale.
+    if roi is None or roi.ndim < 2 or roi.shape[0] <= 0 or roi.shape[1] <= 0:
+        return np.zeros((height, width, 3), dtype=np.uint8)
+    if roi.ndim == 2:
+        return cv2.cvtColor(roi, cv2.COLOR_GRAY2BGR)
+    if roi.ndim == 3 and roi.shape[2] == 4:
+        return cv2.cvtColor(roi, cv2.COLOR_BGRA2BGR)
+    return roi
+
+
+def _source_step(
+    roi: np.ndarray,
+    adjustment: DisplayAdjustment,
+    corrector: ColourCorrector | None,
+    frame_key: object,
+    width: int,
+    height: int,
+) -> tuple[np.ndarray, float]:
+    """Scale *roi* to fit (width, height), applying fringes / colour on the
+    way. Returns the scaled crop and the scale factor."""
+    roi = _normalise_roi(roi, width, height)
+    roi_height, roi_width = roi.shape[:2]
+    scale = min(width / roi_width, height / roi_height)
+    if adjustment.needs_source_pixels:
+        # Colour / fringes work on the crop at no more than the tile's
+        # resolution: full detail for a small crop, and a large crop is
+        # shrunk first so the work stays per-tile cheap.
+        if scale < 1:
+            roi = cv2.resize(
+                roi, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA
+            )
+            upscale = 1.0
+        else:
+            upscale = scale
+        roi = adjust_source(np.ascontiguousarray(roi), adjustment, corrector, frame_key)
+        if upscale != 1.0:
+            roi = cv2.resize(roi, (0, 0), fx=upscale, fy=upscale)
+    elif scale < 1:
+        roi = cv2.resize(roi, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    else:
+        roi = cv2.resize(roi, (0, 0), fx=scale, fy=scale)
+    return roi, scale
+
+
+def _finish_step(
+    thumb: np.ndarray,
+    adjustment: DisplayAdjustment,
+    scale: float,
+    width: int,
+    height: int,
+) -> QtGui.QImage:
+    """Sharpen / brightness / contrast, pad to (width, height), as a QImage
+    (safe to build off the GUI thread; only QPixmap isn't)."""
+    if not adjustment.is_neutral:
+        thumb = adjust_thumbnail(thumb, adjustment, enlargement=max(scale, 1.0))
+    pad_x = (width - thumb.shape[1]) // 2
+    pad_y = (height - thumb.shape[0]) // 2
+    padded = cv2.copyMakeBorder(
+        thumb, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_CONSTANT, value=(45, 35, 25)
+    )
+    rgb = np.ascontiguousarray(cv2.cvtColor(padded, cv2.COLOR_BGR2RGB))
+    rows, cols = rgb.shape[:2]
+    return QtGui.QImage(
+        rgb.data, cols, rows, 3 * cols, QtGui.QImage.Format.Format_RGB888
+    ).copy()  # own the pixels; rgb is freed on return
+
+
+def render_tile(
+    roi: np.ndarray,
+    adjustment: DisplayAdjustment,
+    corrector: ColourCorrector | None,
+    frame_key: object,
+    width: int,
+    height: int,
+    source: SourceEntry | None = None,
+    source_key: tuple = (),
+) -> tuple[QtGui.QImage, SourceEntry | None]:
+    """A tile's picture for *adjustment*. Reuses *source* (the crop after the
+    expensive source step) when given; returns the image and, when the source
+    step ran with adjustments, its result for caching. Thread-safe."""
+    new_source = None
+    if source is not None:
+        thumb, scale = source.thumb, source.scale
+    else:
+        thumb, scale = _source_step(
+            roi, adjustment, corrector, frame_key, width, height
+        )
+        if adjustment.needs_source_pixels:
+            new_source = SourceEntry(roi, source_key, thumb, scale)
+    return _finish_step(thumb, adjustment, scale, width, height), new_source
 
 
 class RectWidget(QtWidgets.QGraphicsWidget):
@@ -164,10 +327,17 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.roi = None
         self.pic = None
         self._display = _DEFAULT_DISPLAY_CONTEXT
+        self._tile_id = next(_TILE_IDS)
         # Pixmap needs (re)building from self.roi at the next paint; and the
         # display version it was built for.
         self._pic_dirty = False
         self._pic_version = -1
+        # Bumped whenever the picture must be rebuilt for a reason other than
+        # the display version (new crop, new display context): with the
+        # display version it identifies the picture wanted now.
+        self._pic_generation = 0
+        # The (version, generation) a worker is building, if any.
+        self._render_token: tuple[int, int] | None = None
         self._roi_loaded = False
         self._embedding = None
         self._embedding_box: tuple | None = None  # box the embedding was made for
@@ -276,6 +446,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         """
         self._deleted = value
         self.association.deleted = value
+        if value:
+            self._display.forget_source(self._tile_id)
 
     def delete(self, observation: bool = False) -> bool:
         """
@@ -447,8 +619,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
     def set_display_context(self, context: DisplayContext) -> None:
         """Share *context* (see :class:`DisplayContext`) with this tile."""
         self._display = context
-        self._pic_dirty = True
-        self.update()
+        self._mark_pic_dirty()
 
     @property
     def frame_key(self) -> tuple:
@@ -458,6 +629,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
 
     def _mark_pic_dirty(self) -> None:
         self._pic_dirty = True
+        self._pic_generation += 1
         self.update()
 
     def update_roi_pic(self):
@@ -543,6 +715,8 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         self.roi = placeholder
         self._roi_loaded = False
         self._pic_dirty = False
+        self._pic_generation += 1  # drop any adjusted picture still being built
+        self._display.forget_source(self._tile_id)
         self.pic = self.getpic(placeholder, adjust=False)
         # A stored (vector database) embedding doesn't need the image; keep it.
         self._invalidate_embedding_if_box_changed()
@@ -659,16 +833,6 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         return get_timestamp(
             video_start_datetime, recorded_timestamp, elapsed_time_millis, timecode
         )
-
-    def toqimage(self, img):
-        height, width, bytesPerComponent = img.shape
-        bytesPerLine = bytesPerComponent * width
-        cv2.cvtColor(img, cv2.COLOR_BGR2RGB, img)
-        qimg = QtGui.QImage(
-            img.copy(), width, height, bytesPerLine, QtGui.QImage.Format.Format_RGB888
-        )
-
-        return qimg
 
     def update_zoom(self, zoom: float):
         self._zoom = max(float(zoom), 0.01)
@@ -832,71 +996,89 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         Returns:
             The scaled and padded pixmap.
         """
-        # Get relevant dimensions
-        max_width = self.pic_width
-        max_height = self.pic_height
-
-        # Some backends can return an empty ROI for tiny/degenerate boxes while zooming.
-        # Fallback to a blank image so we do not divide by zero when computing scale.
-        if roi is None or roi.ndim < 2 or roi.shape[0] <= 0 or roi.shape[1] <= 0:
-            roi = np.zeros((max_height, max_width, 3), dtype=np.uint8)
-
-        # Ensure we always hand a 3-channel image to the Qt conversion path.
-        if roi.ndim == 2:
-            roi = cv2.cvtColor(roi, cv2.COLOR_GRAY2BGR)
-        elif roi.ndim == 3 and roi.shape[2] == 4:
-            roi = cv2.cvtColor(roi, cv2.COLOR_BGRA2BGR)
-
-        roi_height, roi_width = roi.shape[:2]
-
-        # Scale the ROI to fit the square
-        scale = min(max_width / roi_width, max_height / roi_height)
         adjustment = self._display.adjustment if adjust else DisplayAdjustment()
-        if adjustment.needs_source_pixels:
-            # Colour / fringes work on the crop at no more than the tile's
-            # resolution: full detail for a small crop, and a large crop is
-            # shrunk first so the work stays per-tile cheap.
-            if scale < 1:
-                roi = cv2.resize(
-                    roi, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA
-                )
-                upscale = 1.0
-            else:
-                upscale = scale
-            roi = adjust_source(
-                np.ascontiguousarray(roi),
-                adjustment,
-                self._display.corrector,
-                self.frame_key,
-            )
-            if upscale != 1.0:
-                roi = cv2.resize(roi, (0, 0), fx=upscale, fy=upscale)
-        elif scale < 1:
-            roi = cv2.resize(
-                roi, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_AREA
-            )
-        else:
-            roi = cv2.resize(roi, (0, 0), fx=scale, fy=scale)
-        if not adjustment.is_neutral:
-            roi = adjust_thumbnail(roi, adjustment, enlargement=max(scale, 1.0))
-
-        # Pad the image with a border
-        pad_x = (max_width - roi.shape[1]) // 2
-        pad_y = (max_height - roi.shape[0]) // 2
-        roi_padded = cv2.copyMakeBorder(
+        image, _source = render_tile(
             roi,
-            pad_y,
-            pad_y,
-            pad_x,
-            pad_x,
-            cv2.BORDER_CONSTANT,
-            value=(45, 35, 25),
+            adjustment,
+            self._display.corrector,
+            self.frame_key,
+            self.pic_width,
+            self.pic_height,
         )
+        return QtGui.QPixmap.fromImage(image)
 
-        # Convert to Qt pixmap
-        qimg = self.toqimage(roi_padded)
-        orpixmap = QtGui.QPixmap.fromImage(qimg)
-        return orpixmap
+    def _refresh_pic(self) -> None:
+        """Bring :attr:`pic` up to date with the crop and display settings.
+
+        With no adjustments it's a resize and pad, done right here. Otherwise
+        the work (up to ~25 ms a tile with fringes) runs on a worker and the
+        tile shows its old picture until the new one arrives; the result of
+        the expensive source step is cached, so a brightness / contrast /
+        sharpen change only redoes the cheap last step.
+        """
+        adjustment = self._display.adjustment
+        token = (self._display.version, self._pic_generation)
+        if adjustment.is_neutral:
+            try:
+                self.pic = self.getpic(self.roi)
+            except Exception as exc:  # noqa: BLE001 -- never fail a paint
+                LOGGER.error(f"Could not render tile {self.association.uuid}: {exc}")
+                self.pic = _blank_pixmap(self.pic_width, self.pic_height)
+            self._pic_dirty = False
+            self._pic_version = token[0]
+            self._render_token = None
+            return
+        if self._render_token == token:
+            return  # already being built
+        self._render_token = token
+        source_key = self._display.source_key(self.frame_key)
+        worker = Worker(
+            self._render_with_token,
+            token,
+            self.roi,
+            adjustment,
+            self._display.corrector,
+            self.frame_key,
+            self.pic_width,
+            self.pic_height,
+            self._display.cached_source(self._tile_id, self.roi, source_key),
+            source_key,
+        )
+        worker.signals.result.connect(self._on_render_result)
+        _tile_render_pool().start(worker)
+
+    @staticmethod
+    def _render_with_token(token: tuple[int, int], roi: np.ndarray, *args):
+        # Failures come back as a result too, so they carry their token.
+        try:
+            image, source = render_tile(roi, *args)
+            return token, roi, image, source, None
+        except Exception as exc:  # noqa: BLE001
+            return token, roi, None, None, exc
+
+    @QtCore.pyqtSlot(object)
+    def _on_render_result(self, payload) -> None:
+        if sip.isdeleted(self) or self._deleted:
+            return
+        token, roi, image, source, error = payload
+        if self._render_token == token:
+            self._render_token = None
+        if source is not None and roi is self.roi:
+            self._display.store_source(self._tile_id, source)
+        if token != (self._display.version, self._pic_generation):
+            self.update()  # superseded; the next paint asks for the current one
+            return
+        if error is not None:
+            LOGGER.error(f"Could not render tile {self.association.uuid}: {error}")
+            try:
+                self.pic = self.getpic(self.roi, adjust=False)
+            except Exception:  # noqa: BLE001
+                self.pic = _blank_pixmap(self.pic_width, self.pic_height)
+        else:
+            self.pic = QtGui.QPixmap.fromImage(image)
+        self._pic_dirty = False
+        self._pic_version = token[0]
+        self.update()
 
     def _make_placeholder_roi(self) -> np.ndarray:
         """Build a fallback ROI image when loading fails."""
@@ -954,13 +1136,7 @@ class RectWidget(QtWidgets.QGraphicsWidget):
         if self._roi_loaded and (
             self._pic_dirty or self._pic_version != self._display.version
         ):
-            try:
-                self.pic = self.getpic(self.roi)
-            except Exception as exc:  # noqa: BLE001 -- never fail a paint
-                LOGGER.error(f"Could not render tile {self.association.uuid}: {exc}")
-                self.pic = self.getpic(self.roi, adjust=False)
-            self._pic_dirty = False
-            self._pic_version = self._display.version
+            self._refresh_pic()
 
         # Draw image
         painter.setBackgroundMode(QtCore.Qt.BGMode.TransparentMode)

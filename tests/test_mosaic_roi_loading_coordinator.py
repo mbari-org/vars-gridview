@@ -257,3 +257,10 @@ def test_sweep_skips_qt_tile_deleted_without_forget() -> None:
     scheduled[0]()  # used to raise RuntimeError: ... has been deleted
     assert tiles[1].refresh_calls == 2
     assert done == [True, True]
+
+
+def test_has_pending_reflects_the_queue() -> None:
+    coordinator = mrc.MosaicRoiLoadingCoordinator(parent=None)
+    assert not coordinator.has_pending
+    coordinator._pending = [object()]
+    assert coordinator.has_pending

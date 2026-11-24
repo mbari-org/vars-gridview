@@ -250,6 +250,15 @@ class ImageMosaic(QtCore.QObject):
             visible_widgets_getter=lambda: self._visible_widgets,
         )
 
+        # Several settings (and a model change) each ask for stored vectors;
+        # one fetch serves them all, and none starts while the same one runs.
+        self._stored_fetch_timer = QtCore.QTimer(self)
+        self._stored_fetch_timer.setSingleShot(True)
+        self._stored_fetch_timer.setInterval(50)
+        self._stored_fetch_timer.timeout.connect(self._fetch_stored_embeddings_now)
+        # (generations, model, url, collection) of the fetch running, if any.
+        self._stored_fetch_running: tuple | None = None
+
         # Embeddings of tiles whose box was edited: recomputed in one batch.
         self._recompute_timer = QtCore.QTimer(self)
         self._recompute_timer.setSingleShot(True)
@@ -693,7 +702,26 @@ class ImageMosaic(QtCore.QObject):
     def fetch_stored_embeddings(self) -> None:
         """Give tiles the embeddings the VARS vector database already holds
         for them (see :mod:`vars_gridview.lib.vision.vector_store`); the rest
-        are computed by the embedding service as before."""
+        are computed by the embedding service as before.
+
+        Calls made close together are served by one fetch (see
+        :meth:`_fetch_stored_embeddings_now`), and computing embeddings waits
+        for it (see :meth:`precompute_embeddings_async`)."""
+        self._stored_fetch_timer.start()
+
+    @property
+    def _stored_fetch_pending(self) -> bool:
+        return self._stored_fetch_timer.isActive() or (
+            self._stored_fetch_running is not None
+        )
+
+    def _fetch_stored_embeddings_now(self) -> None:
+        if not self._start_stored_fetch():
+            # Nothing to wait for: compute whatever is still missing.
+            self._precompute_if_ready()
+
+    def _start_stored_fetch(self) -> bool:
+        """Start fetching stored vectors; True if one is (now) running."""
         from vars_gridview.lib.vision.vector_store import BoxQuery
 
         settings = self._settings
@@ -701,13 +729,22 @@ class ImageMosaic(QtCore.QObject):
         # embeddings with the embedding service: stored ones need no service,
         # so they're used whenever the vector database option is on.
         if not settings.vector_db_enabled.value:
-            return
+            return False
         name = settings.embedding_model_name.value.strip()
         url = settings.vector_db_url.value.strip()
         collection = settings.vector_db_collection.value.strip()
         if not (name and url and collection):
-            return
+            return False
         self._set_embedding_space(name)
+        key = (
+            self._embedding_generation,
+            self._results_generation,
+            name,
+            url,
+            collection,
+        )
+        if key == self._stored_fetch_running:
+            return True  # the same fetch is already running
         queries = []
         boxes: dict[UUID, tuple] = {}
         for rect_widget in self._rect_widgets:
@@ -725,34 +762,45 @@ class ImageMosaic(QtCore.QObject):
                 )
             )
         if not queries:
-            return
+            return False
         store = self._vector_store_for(url, collection)
-        stamp = (self._embedding_generation, self._results_generation)
         asked = len(queries)
+        self._stored_fetch_running = key
         worker = Worker(store.fetch, queries, name)  # plain data only
         worker.signals.result.connect(
-            lambda result, stamp=stamp, asked=asked: self._on_stored_embeddings(
-                result, stamp, asked, store.description, boxes, name
+            lambda result, key=key, asked=asked: self._on_stored_embeddings(
+                result, key, asked, store.description, boxes, name
             )
         )
         worker.signals.error.connect(
-            lambda err, where=store.description: self._on_stored_embeddings_failed(
-                err, where
+            lambda err, key=key, where=store.description: (
+                self._on_stored_embeddings_failed(err, where, key)
             )
         )
         QtCore.QThreadPool.globalInstance().start(worker)
+        return True
+
+    def _stored_fetch_finished(self, key: tuple) -> bool:
+        """Note that the fetch for *key* ended; True if it's the latest."""
+        if key != self._stored_fetch_running:
+            return False  # superseded; the newer fetch reports
+        self._stored_fetch_running = None
+        return True
 
     def _on_stored_embeddings(
         self,
         result: tuple,
-        stamp: tuple[int, int],
+        key: tuple,
         asked: int,
         where: str,
         boxes: dict[UUID, tuple] | None = None,
         name: str | None = None,
     ) -> None:
-        if stamp != (self._embedding_generation, self._results_generation):
-            return  # another page or model since
+        if not self._stored_fetch_finished(key):
+            return
+        if key[:2] != (self._embedding_generation, self._results_generation):
+            self._precompute_if_ready()  # another page or model since
+            return
         vectors, stale = result
         used = 0
         for rect_widget in self._rect_widgets:
@@ -768,16 +816,31 @@ class ImageMosaic(QtCore.QObject):
             f"tiles ({stale:,} skipped: box edited since it was stored)"
         )
         self.stats_changed.emit({"Stored embeddings": f"{used:,} / {asked:,}"})
-        if self._all_rois_loaded and self._embedding_model is not None:
-            self.precompute_embeddings_async()  # only the ones still missing
+        self._precompute_if_ready()  # only the ones still missing
 
-    def _on_stored_embeddings_failed(self, err: tuple, where: str) -> None:
+    def _on_stored_embeddings_failed(
+        self, err: tuple, where: str, key: tuple | None = None
+    ) -> None:
+        if key is not None and not self._stored_fetch_finished(key):
+            return
         message = str(err[1]) if len(err) > 1 else "Unknown error"
         LOGGER.warning(f"VARS vector database {where} unavailable: {message}")
         self.stats_changed.emit({"Stored embeddings": "unavailable"})
+        self._precompute_if_ready()  # the service computes them all instead
+
+    def _precompute_if_ready(self) -> None:
+        if self._all_rois_loaded and self._embedding_model is not None:
+            self.precompute_embeddings_async()
 
     def precompute_embeddings_async(self) -> None:
-        """Warm tile embeddings in the background to avoid on-demand UI stalls."""
+        """Warm tile embeddings in the background to avoid on-demand UI stalls.
+
+        Waits while stored vectors are being fetched: the fetch's end starts
+        it, for only the tiles the vector database didn't have. Otherwise the
+        service would be asked for every tile, and a running precompute can't
+        be stopped when the stored vectors arrive."""
+        if self._stored_fetch_pending:
+            return
         self._embedding.request_precompute(
             rect_widgets=self._rect_widgets,
             embedding_model=self._embedding_model,
@@ -952,14 +1015,15 @@ class ImageMosaic(QtCore.QObject):
                 viewport.update()
 
     def remember_frame_colour(
-        self, rect_widget: RectWidget, full_image: np.ndarray
+        self, rect_widget: RectWidget, frame_params: np.ndarray
     ) -> None:
-        """Measure colour correction on a whole frame (just loaded for the
-        image view) and redraw every tile cropped from it with that."""
+        """Keep a whole frame's colour measurement (made by the image view's
+        loader, off the GUI thread) and redraw every tile cropped from it
+        with that."""
         key = rect_widget.frame_key
         if self._display_context.corrector.has_frame(key):
             return
-        self._display_context.corrector.remember_frame(key, full_image)
+        self._display_context.corrector.store_frame(key, frame_params)
         if self._display_context.adjustment.colour_correct:
             for other in self._rect_widgets:
                 if other.frame_key == key:
@@ -993,6 +1057,8 @@ class ImageMosaic(QtCore.QObject):
         self._prioritize_timer.start()
 
     def _prioritize_visible_loading(self) -> None:
+        if not self._roi_loading.has_pending:
+            return  # all loaded or loading: don't scan the grid after every scroll
         near = self._mosaic_view.widgets_near_viewport(self._visible_widgets, 1.0)
         self._roi_loading.prioritize(near)
 

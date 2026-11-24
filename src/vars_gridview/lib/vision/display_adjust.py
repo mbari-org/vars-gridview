@@ -57,6 +57,8 @@ TOP = 0.92  # where the brightest 0.5% lands after the contrast stretch
 MAX_CONTRAST_GAIN = 3.0
 SATURATION = 1.15
 MAX_REMEMBERED_FRAMES = 20_000  # (7,) float32 each: ~1 MB at the cap
+# Lookup tables per measurement (~66 KB each); tiles from one frame share one.
+MAX_CACHED_LUTS = 256
 _LUMA = np.array([0.114, 0.587, 0.299], np.float32)  # BGR
 
 
@@ -115,6 +117,7 @@ class ColourCorrector:
 
     def __init__(self) -> None:
         self._frames: OrderedDict[object, np.ndarray] = OrderedDict()
+        self._luts: OrderedDict[bytes, tuple] = OrderedDict()
         self._lock = threading.Lock()
         self._clahe_clip = 0.0
 
@@ -131,7 +134,13 @@ class ColourCorrector:
         correction instead of each crop being measured on its own."""
         if frame_key is None or full_frame_bgr is None or full_frame_bgr.size == 0:
             return
-        params = measure_pixels(full_frame_bgr)
+        self.store_frame(frame_key, measure_pixels(full_frame_bgr))
+
+    def store_frame(self, frame_key: object, params: np.ndarray) -> None:
+        """Keep *params* (from :func:`measure_pixels` on the whole frame, e.g.
+        measured on a worker thread) for every tile cropped from that frame."""
+        if frame_key is None or params is None:
+            return
         with self._lock:
             self._frames[frame_key] = params
             self._frames.move_to_end(frame_key)
@@ -142,15 +151,36 @@ class ColourCorrector:
         with self._lock:
             return frame_key in self._frames
 
-    def apply(self, bgr: np.ndarray, frame_key: object = None) -> np.ndarray:
-        """Return a colour-corrected copy of *bgr* (BGR uint8)."""
+    def _cached_luts(self, params: np.ndarray) -> tuple:
+        key = np.asarray(params, np.float32).tobytes()
+        with self._lock:
+            luts = self._luts.get(key)
+            if luts is not None:
+                self._luts.move_to_end(key)
+                return luts
+        luts = _luts(params)
+        with self._lock:
+            self._luts[key] = luts
+            while len(self._luts) > MAX_CACHED_LUTS:
+                self._luts.popitem(last=False)
+        return luts
+
+    def apply(
+        self,
+        bgr: np.ndarray,
+        frame_key: object = None,
+        params: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Return a colour-corrected copy of *bgr* (BGR uint8), using *params*
+        if given, else the remembered frame's, else *bgr*'s own."""
         if bgr is None or bgr.size == 0 or bgr.ndim != 3 or bgr.shape[2] != 3:
             return bgr
-        with self._lock:
-            params = self._frames.get(frame_key) if frame_key is not None else None
+        if params is None and frame_key is not None:
+            with self._lock:
+                params = self._frames.get(frame_key)
         if params is None:
             params = measure_pixels(bgr)
-        lut_b, lut_g, lut_r = _luts(params)
+        lut_b, lut_g, lut_r = self._cached_luts(params)
         b, g, r = cv2.split(bgr)
         red = np.take(lut_r, (r.astype(np.intp) << 8) | g)
         out = cv2.merge([cv2.LUT(b, lut_b), cv2.LUT(g, lut_g), red])

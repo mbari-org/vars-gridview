@@ -124,6 +124,11 @@ class MosaicRoiLoadingCoordinator(QtCore.QObject):
         ):
             self._finish_pass()
 
+    @property
+    def has_pending(self) -> bool:
+        """Tiles are still waiting to start loading."""
+        return bool(self._pending)
+
     def prioritize(self, rect_widgets: list[RectWidget]) -> None:
         """Load *rect_widgets* (still waiting) next, in the given order --
         e.g. the tiles now on screen, so they fill in before ones far away."""
