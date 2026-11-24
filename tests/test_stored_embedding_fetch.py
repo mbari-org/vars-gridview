@@ -82,9 +82,12 @@ def mosaic(tmp_path, monkeypatch):
     monkeypatch.setattr(
         m._embedding, "request_precompute", lambda **kw: precomputes.append(kw)
     )
-    return SimpleNamespace(
+    yield SimpleNamespace(
         m=m, store=store, pool=pool, precomputes=precomputes, settings=settings
     )
+    # Otherwise the view outlives the mosaic's Python side and hands it
+    # events in later tests.
+    view.removeEventFilter(m)
 
 
 def _fire(m: ImageMosaic) -> None:
