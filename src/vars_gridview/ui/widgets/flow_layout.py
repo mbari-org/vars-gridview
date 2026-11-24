@@ -10,11 +10,18 @@ class FlowLayout(QLayout):
     Widgets are placed in a row until the row width is exhausted, then
     a new row starts.  Unlike ``QHBoxLayout``, no stretching occurs —
     each widget keeps its ``sizeHint``.
+
+    Items are top-aligned in their line unless *center_vertically* is set, in
+    which case each is centred on its line -- so a checkbox doesn't ride high
+    next to a taller button.
     """
 
-    def __init__(self, parent=None, spacing: int = 6) -> None:
+    def __init__(
+        self, parent=None, spacing: int = 6, *, center_vertically: bool = False
+    ) -> None:
         super().__init__(parent)
         self._items: list = []
+        self._center_vertically = center_vertically
         self.setSpacing(spacing)
 
     # ── QLayout protocol ───────────────────────────────────────────────────────
@@ -63,21 +70,35 @@ class FlowLayout(QLayout):
         x, y = eff.x(), eff.y()
         line_height = 0
         spacing = self.spacing()
+        # Placed once each line is complete, when its height is known.
+        line: list[tuple] = []
+
+        def place_line() -> None:
+            for item, left, hint in line:
+                offset = 0
+                if self._center_vertically:
+                    offset = (line_height - hint.height()) // 2
+                item.setGeometry(QRect(QPoint(left, y + offset), hint))
+            line.clear()
 
         for item in self._items:
             hint = item.sizeHint()
             w, h = hint.width(), hint.height()
             next_x = x + w
             if next_x > eff.right() and line_height > 0:
+                if apply:
+                    place_line()
                 x = eff.x()
                 y += line_height + spacing
                 next_x = x + w
                 line_height = 0
             if apply:
-                item.setGeometry(QRect(QPoint(x, y), hint))
+                line.append((item, x, hint))
             x = next_x + spacing
             line_height = max(line_height, h)
 
+        if apply:
+            place_line()
         return y + line_height - rect.y() + m.bottom()
 
 

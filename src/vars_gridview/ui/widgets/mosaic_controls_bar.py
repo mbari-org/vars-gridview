@@ -61,9 +61,11 @@ def _group(*widgets: QtWidgets.QWidget) -> QtWidgets.QWidget:
 
 def _flow_row(*widgets: QtWidgets.QWidget) -> QtWidgets.QWidget:
     """A row that wraps onto more lines when the pane is narrow, instead of
-    forcing the grid's pane to be at least as wide as all of its controls."""
+    forcing the grid's pane to be at least as wide as all of its controls.
+    Items are centred on their line so checkboxes, sliders and buttons of
+    different heights share one baseline."""
     row = QtWidgets.QWidget()
-    flow = FlowLayout(row, spacing=10)
+    flow = FlowLayout(row, spacing=10, center_vertically=True)
     flow.setContentsMargins(0, 0, 0, 0)
     for widget in widgets:
         flow.addWidget(widget)
